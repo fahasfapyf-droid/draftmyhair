@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IdentityComparisonSlider } from "@/components/ui/identity-comparison-slider";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { cn } from "@/lib/utils";
@@ -24,8 +25,8 @@ const previewCategories: Record<
     headline: "See Your Next Hairstyle Before You Commit.",
     copy:
       "Photorealistic hairstyle previews that preserve your facial identity, lighting and proportions so you can choose with confidence.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-hairstyle.jpg",
+    original: "/portfolio/bob/french-bob-before.webp",
+preview: "/portfolio/bob/french-bob-after.webp",
   },
 
   hairColour: {
@@ -33,8 +34,8 @@ const previewCategories: Record<
     headline: "Preview Your Next Hair Color Before You Dye It.",
     copy:
       "Experiment with realistic hair colors while keeping your face, skin tone and lighting exactly the same.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-colour.jpg",
+    original: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-before.webp",
+preview: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
   },
 
   buzzCut: {
@@ -42,8 +43,8 @@ const previewCategories: Record<
     headline: "See Your Buzz Cut Before You Shave.",
     copy:
       "Preview a realistic buzz cut before making the change. No guessing, no surprises.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-buzz.jpg",
+    original: "/portfolio/buzzcut/0mm-buzz-before.webp",
+preview: "/portfolio/buzzcut/0mm-buzz-after.webp",
   },
 
   bald: {
@@ -51,8 +52,8 @@ const previewCategories: Record<
     headline: "See Yourself Bald Before You Commit.",
     copy:
       "Thinking about shaving your head? Preview a natural bald look before making the decision.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-bald.jpg",
+    original: "/portfolio/bald/clean-bald-before.webp",
+preview: "/portfolio/bald/clean-bald-after.webp",
   },
 
   beard: {
@@ -60,8 +61,8 @@ const previewCategories: Record<
     headline: "Find the Beard Style That Fits You.",
     copy:
       "Try different beard styles while preserving your natural facial features and proportions.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-beard.jpg",
+    original: "/portfolio/beard/full-beard-before.webp",
+preview: "/portfolio/beard/full-beard-after.webp",
   },
 
   beardRemoval: {
@@ -69,8 +70,8 @@ const previewCategories: Record<
     headline: "See Yourself Clean Shaven Before You Shave.",
     copy:
       "Preview a clean-shaven look with realistic identity preservation before picking up the razor.",
-    original: "/images/placeholder-original.jpg",
-    preview: "/images/placeholder-preview-nobeard.jpg",
+    original: "/portfolio/beard/clean-shave-before.webp",
+preview: "/portfolio/beard/clean-shave-after.webp",
   },
 };
 
@@ -172,14 +173,32 @@ export const Hero = () => {
               </div>
             </motion.div>
 
-            <motion.div variants={textVariants} className="flex flex-col sm:flex-row items-center gap-4">
-              <Button variant="primary" size="lg" className="w-full sm:w-auto">
-                Start Your Preview
-              </Button>
-              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                View Gallery
-              </Button>
-            </motion.div>
+            <motion.div
+  variants={textVariants}
+  className="flex flex-col sm:flex-row items-center gap-4"
+>
+  <Button
+    asChild
+    variant="primary"
+    size="lg"
+    className="w-full sm:w-auto"
+  >
+    <Link href="/gallery">
+      View Gallery
+    </Link>
+  </Button>
+
+  <Button
+    asChild
+    variant="secondary"
+    size="lg"
+    className="w-full sm:w-auto"
+  >
+    <Link href="/contact">
+      Contact Us
+    </Link>
+  </Button>
+</motion.div>
 
             <motion.div variants={textVariants}>
               <p className="mt-8 text-[10px] uppercase tracking-widest font-medium text-brand-muted">

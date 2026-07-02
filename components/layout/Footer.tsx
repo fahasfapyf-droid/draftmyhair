@@ -1,41 +1,108 @@
 
-import * as React from "react";
+"use client";
+
+import Link from "next/link";
 import { Container } from "@/components/ui/container";
 
-export const Footer = () => {
-  const currentYear = new Date().getFullYear();
+const productLinks = [
+  {
+    label: "Hairstyles",
+    href: "/gallery",
+  },
+  {
+    label: "For Salons",
+    href: "/salons",
+  },
+  {
+    label: "FAQ",
+    href: "/faq",
+  },
+  {
+    label: "Contact",
+    href: "/contact",
+  },
+];
 
+const legalLinks = [
+  {
+    label: "Privacy Policy",
+    href: "/privacy",
+  },
+  {
+    label: "Terms of Service",
+    href: "/terms",
+  },
+];
+
+export function Footer() {
   return (
-    <footer className="border-t border-brand-border dark:border-neutral-800 bg-brand-canvas">
+    <footer className="border-t border-brand-border bg-brand-canvas">
       <Container>
-        <div className="py-12 md:py-16 flex flex-col md:flex-row justify-between items-start gap-8">
-          <div className="flex flex-col max-w-xs">
-            <span className="text-lg font-semibold tracking-tight mb-4">Draft My Hair</span>
-            <p className="text-brand-muted">
-              Photorealistic hairstyle, beard and hair color previews that preserve your identity before you make a real-world change.. 
+        <div className="py-16 grid gap-12 md:grid-cols-3">
+
+          <div>
+            <h3 className="text-xl font-semibold text-brand-ink">
+              Draft My Hair
+            </h3>
+
+            <p className="mt-4 text-sm leading-7 text-brand-muted">
+              Photorealistic hairstyle, beard and hair colour previews built
+              around identity preservation and realism.
             </p>
           </div>
-          
-          <div className="flex gap-12 sm:gap-24">
-            <div className="flex flex-col gap-3">
-              <span className="font-medium text-sm">Platform</span>
-              <a href="#" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-50 transition-colors">Gallery</a>
-              <a href="#" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-50 transition-colors">For Salons</a>
-              <a href="#" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-50 transition-colors">How It Works</a>
-            </div>
-            <div className="flex flex-col gap-3">
-              <span className="font-medium text-sm">Legal</span>
-              <a href="#" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-50 transition-colors">Privacy</a>
-              <a href="#" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-50 transition-colors">Terms</a>
-            </div>
+
+          <div>
+            <h4 className="font-semibold text-brand-ink">
+              Explore
+            </h4>
+
+            <ul className="mt-5 space-y-3">
+              {productLinks.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-brand-muted hover:text-brand-ink transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
+
+          <div>
+            <h4 className="font-semibold text-brand-ink">
+              Legal
+            </h4>
+
+            <ul className="mt-5 space-y-3">
+              {legalLinks.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-brand-muted hover:text-brand-ink transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
         </div>
-        
-        <div className="border-t border-brand-border dark:border-neutral-800 py-6 flex items-center justify-between text-xs text-neutral-500">
-          <span>&copy; {currentYear} Draft My Hair. All rights reserved.</span>
-          <span>Same Face. New Hair.</span>
+
+        <div className="border-t border-brand-border py-6 flex flex-col md:flex-row items-center justify-between gap-4">
+
+          <p className="text-sm text-brand-muted">
+            © 2026 Draft My Hair. All rights reserved.
+          </p>
+
+          <p className="text-sm text-brand-muted">
+            Same Face. Different Hair.
+          </p>
+
         </div>
       </Container>
     </footer>
   );
-};
+}

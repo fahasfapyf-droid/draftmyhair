@@ -13,42 +13,42 @@ const categories = [
     id: "hairstyle",
     title: "Hairstyle Preview",
     description: "Explore new lengths, layers, and volumes tailored to your face shape.",
-    image: "/images/categories/hairstyle-placeholder.jpg",
+    image: "/portfolio/bob/old-money-bob-after.webp",
     href: "/preview/hairstyle"
   },
-  {
-    id: "hair-colour",
-    title: "Hair Colour Preview",
-    description: "Test subtle highlights or complete colour transformations instantly.",
-    image: "/images/categories/hair-colour-placeholder.jpg",
-    href: "/preview/hair-colour"
-  },
+ {
+  id: "hair-colour",
+  title: "Hair Colour Preview",
+  description: "Test subtle highlights or complete colour transformations instantly.",
+  image: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
+  href: "/preview/hair-colour",
+},
   {
     id: "buzz-cut",
     title: "Buzz Cut Preview",
     description: "See your face with a precision buzz cut before committing to the clippers.",
-    image: "/images/categories/buzz-cut-placeholder.jpg",
+   image: "/portfolio/buzzcut/0mm-buzz-after.webp",
     href: "/preview/buzz-cut"
   },
   {
     id: "bald",
     title: "Bald Preview",
     description: "Visualize a completely clean-shaven head with perfect skin integration.",
-    image: "/images/categories/bald-placeholder.jpg",
+    image: "/portfolio/bald/clean-bald-after.webp",
     href: "/preview/bald"
   },
   {
     id: "beard-style",
     title: "Beard Style Preview",
     description: "Discover the perfect beard length and shape for your jawline.",
-    image: "/images/categories/beard-style-placeholder.jpg",
+    image: "/portfolio/beard/full-beard-after.webp",
     href: "/preview/beard-style"
   },
   {
     id: "beard-removal",
     title: "Beard Removal Preview",
     description: "Reveal your clean-shaven face with accurate skin tone and chin structure.",
-    image: "/images/categories/beard-removal-placeholder.jpg",
+    image: "/portfolio/beard/clean-shave-after.webp",
     href: "/preview/beard-removal"
   }
 ];
@@ -110,7 +110,7 @@ export const PreviewCategories = () => {
                     alt={category.title}
                     fill
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    className="object-cover object-center transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
+                    className="object-cover object-top transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-brand-ink/0 transition-colors duration-700 group-hover:bg-brand-ink/5" />
                 </div>

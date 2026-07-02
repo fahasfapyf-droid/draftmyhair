@@ -13,6 +13,7 @@ export interface IdentityComparisonSliderProps {
   imageContainerClassName?: string;
   priority?: boolean;
   quality?: number;
+  showTrustRow?: boolean;
 }
 
 export const IdentityComparisonSlider: React.FC<IdentityComparisonSliderProps> = ({
@@ -22,7 +23,8 @@ export const IdentityComparisonSlider: React.FC<IdentityComparisonSliderProps> =
   className,
   imageContainerClassName,
   priority = false,
-  quality = 90,
+    quality = 90,
+  showTrustRow = true,
 }) => {
   const [position, setPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -164,7 +166,7 @@ imageContainerClassName
         {/* Draggable Divider & Handle */}
         <div
           className={cn(
-            "absolute top-0 bottom-0 w-[1px] z-20 pointer-events-none transition-all duration-300",
+            "absolute top-0 bottom-0 w-[1px] z-20 pointer-events-none transition-shadow transition-colors duration-300",
             isDragging
               ? "bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.35)]"
               : "shadow-[0_0_6px_rgba(255,255,255,0.25)]"
@@ -182,7 +184,7 @@ imageContainerClassName
               aria-label="Drag to compare images"
               onKeyDown={handleKeyDown}
               className={cn(
-                "w-14 h-14 bg-brand-surface rounded-full flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-brand-ink/20 pointer-events-auto transition-all duration-300",
+                "w-14 h-14 bg-brand-surface rounded-full flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-brand-ink/20 pointer-events-auto transition-shadow transition-colors duration-300",
                 isDragging
                   ? "cursor-grabbing scale-[1.08] shadow-[0_8px_24px_rgba(0,0,0,.16)]"
                   : "cursor-grab shadow-[0_4px_16px_rgba(0,0,0,0.1),0_1px_4px_rgba(0,0,0,0.05)] hover:scale-[1.03] hover:shadow-[0_6px_18px_rgba(0,0,0,0.12)]"
@@ -197,8 +199,10 @@ imageContainerClassName
         </div>
       </div>
 
-      {/* Trust Row */}
-      <motion.div
+      {showTrustRow && (
+  <>
+    {/* Trust Row */}
+    <motion.div
         variants={trustContainerVariants}
         initial="hidden"
         animate="visible"
@@ -212,6 +216,8 @@ imageContainerClassName
         <motion.span variants={trustItemVariants} className="w-1 h-1 rounded-full bg-brand-border" />
         <motion.span variants={trustItemVariants} className="text-brand-ink font-semibold">Hair Transformed</motion.span>
       </motion.div>
+  </>
+)}
     </div>
   );
 };
