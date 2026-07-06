@@ -29,24 +29,18 @@ const benefits: SalonBenefit[] = [
   {
     id: "benefit-uncertainty",
     order: 2,
-    title: "Reduce Uncertainty",
+    title: "Reduce Consultation Regret",
     description: "Previewing styles helps clients feel more confident before committing.",
     image: "/images/salons/uncertainty-placeholder.jpg",
   },
   {
     id: "benefit-experience",
     order: 3,
-    title: "Enhance Client Experience",
+    title: "Increase Client Confidence",
     description: "A more informed consultation creates a better salon experience.",
     image: "/images/salons/experience-placeholder.jpg",
   },
-  {
-    id: "benefit-future",
-    order: 4,
-    title: "Built for Future Integration",
-    description: "Draft My Hair is designed to evolve into tools for salons, clinics and beauty professionals.",
-    image: "/images/salons/future-placeholder.jpg",
-  },
+  
 ];
 
 export const ForSalons = () => {
@@ -97,7 +91,7 @@ export const ForSalons = () => {
           >
             <motion.div variants={fadeUpVariants} className="mb-12 md:mb-16">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-editorial text-brand-ink mb-6 text-balance leading-[1.1]">
-                Built for Modern Salons
+                Show Clients Their New Hair Before You Cut It
               </h2>
               <p className="text-lg text-brand-muted leading-relaxed max-w-md">
                 Help clients make confident decisions before the first cut.
@@ -128,7 +122,7 @@ export const ForSalons = () => {
               className="flex flex-col sm:flex-row items-start sm:items-center gap-6"
             >
               <Button variant="primary" size="lg">
-                Partner With Draft My Hair
+                Request Early Access
               </Button>
               
               <Link 
@@ -136,7 +130,7 @@ export const ForSalons = () => {
                 className="group flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-brand-ink"
               >
                 <span className="relative overflow-hidden">
-                  Learn More About Salon Partnerships
+                  Learn More →
                   <span className="absolute -bottom-1 left-0 w-full h-[1px] bg-brand-ink origin-left scale-x-0 transition-transform duration-500 ease-[0.16,1,0.3,1] group-hover:scale-x-100" />
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 transition-transform duration-500 ease-[0.16,1,0.3,1] group-hover:translate-x-1" />
@@ -154,7 +148,7 @@ export const ForSalons = () => {
           >
             <div className="relative w-full aspect-[4/5] overflow-hidden rounded-editorial bg-brand-border/30 border border-brand-border/50 shadow-sm">
               <Image
-                src="/images/salons/consultation-placeholder.jpg"
+                src="/images/salons/consultation.jpg"
                 alt="A stylist consulting with a client viewing a hairstyle preview on a tablet"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"
