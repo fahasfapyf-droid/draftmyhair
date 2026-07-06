@@ -52,7 +52,7 @@ const transformations: Transformation[] = [
     category: "Short Hair",
     title: "Pixie Cut",
     description: "",
-    image: "/portfolio/pixie/classic-pixie-after.webp",
+    image: "/portfolio/pixie/side-fringe-pixie-after.webp",
     href: "/gallery",
     featured: true,
   },

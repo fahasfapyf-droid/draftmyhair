@@ -1,7 +1,6 @@
 import { Hero } from "@/components/home/Hero";
 import { PreviewCategories } from "@/components/home/PreviewCategories";
 import { ProofSection } from "@/components/home/ProofSection";
-import { WhyDifferent } from "@/components/home/WhyDifferent";
 import { RealTransformations } from "@/components/home/RealTransformations";
 import { HowItWorks } from "@/components/home/HowItWorks";
 import { Testimonials } from "@/components/home/Testimonials";
@@ -13,7 +12,6 @@ export default function HomePage() {
       <Hero />
       <PreviewCategories />
       <ProofSection />
-      <WhyDifferent />
       <RealTransformations />
       <HowItWorks />
       <ForSalons />
