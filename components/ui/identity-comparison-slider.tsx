@@ -64,25 +64,32 @@ export const IdentityComparisonSlider: React.FC<IdentityComparisonSliderProps> =
     setPosition((x / rect.width) * 100);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-  e.preventDefault();
-switch (e.key) {
-case "ArrowLeft":
-setPosition((p) => Math.max(0, p - 5));
-break;
+const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  switch (e.key) {
+    case "ArrowLeft":
+      e.preventDefault();
+      setPosition((p) => Math.max(0, p - 5));
+      break;
 
-case "ArrowRight":
-setPosition((p) => Math.min(100, p + 5));
-break;
+    case "ArrowRight":
+      e.preventDefault();
+      setPosition((p) => Math.min(100, p + 5));
+      break;
 
-case "Home":
-setPosition(0);
-break;
+    case "Home":
+      e.preventDefault();
+      setPosition(0);
+      break;
 
-case "End":
-setPosition(100);
-break;
-}
+    case "End":
+      e.preventDefault();
+      setPosition(100);
+      break;
+
+    default:
+      // Allow all other keys (Tab, Space, Shift, etc.) to behave normally.
+      break;
+  }
 };
   // Trust Row Animation Variants
   const trustContainerVariants = {

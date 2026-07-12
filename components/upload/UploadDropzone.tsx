@@ -1,7 +1,6 @@
-// components/upload/UploadDropzone.tsx
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -9,11 +8,43 @@ export interface UploadDropzoneProps {
   onFileSelect: (file: File) => void;
 }
 
-export const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onFileSelect }) => {
+export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
+  onFileSelect,
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const validateAndSelectFile = (file: File) => {
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png"];
+    const maxSize = 10 * 1024 * 1024; // 10 MB
+
+    if (!allowedTypes.includes(file.type)) {
+      alert("Please upload a JPG or PNG image.");
+      return;
+    }
+
+    if (file.size > maxSize) {
+      alert("Maximum file size is 10 MB.");
+      return;
+    }
+
+    onFileSelect(file);
+  };
+
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+
+    if (file) {
+      validateAndSelectFile(file);
+    }
+
+    e.target.value = "";
   };
 
   const handleKeyDown = (
@@ -25,53 +56,76 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({ onFileSelect }) 
     }
   };
 
-  const handleFileChange = (
-  e: React.ChangeEvent<HTMLInputElement>
-) => {
-  const file = e.target.files?.[0];
+  const handleDragOver = (
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
 
-  if (file) {
-    onFileSelect(file);
+  const handleDragLeave = (
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
 
-    // Allow selecting the same file again
-    e.target.value = "";
-  }
-};
+  const handleDrop = (
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+
+    if (file) {
+      validateAndSelectFile(file);
+    }
+  };
 
   return (
-    <div 
+    <div
       className="relative w-full min-h-[420px] group cursor-pointer"
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       role="button"
       tabIndex={0}
       aria-label="Upload your photo"
-      onKeyDown={handleKeyDown}
     >
       <input
-  type="file"
-  aria-label="Choose a photo to upload"
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="image/jpeg, image/png, image/jpg" 
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept="image/jpeg,image/jpg,image/png"
         onChange={handleFileChange}
       />
 
-      <div className="absolute inset-0 bg-brand-surface rounded-editorial shadow-sm transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:shadow-editorial group-hover:border-brand-ink/20 border border-brand-border" />
-      
-      <div className="relative min-h-[420px] py-20 px-6 flex flex-col items-center justify-center text-center border border-dashed border-transparent transition-colors duration-700 group-hover:border-brand-border/80 rounded-editorial m-2">
-        <div className="w-16 h-16 mb-6 rounded-full bg-brand-canvas flex items-center justify-center border border-brand-border shadow-sm transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-105 group-hover:bg-brand-surface">
+      <div
+        className={`absolute inset-0 rounded-editorial border transition-all duration-300 ${
+          isDragging
+            ? "bg-brand-canvas border-brand-ink shadow-editorial scale-[1.01]"
+            : "bg-brand-surface border-brand-border group-hover:border-brand-ink/20 group-hover:shadow-editorial"
+        }`}
+      />
+
+      <div className="relative min-h-[420px] py-20 px-6 flex flex-col items-center justify-center text-center border border-dashed border-transparent rounded-editorial m-2 transition-colors duration-300">
+        <div className="w-16 h-16 mb-6 rounded-full bg-brand-canvas flex items-center justify-center border border-brand-border shadow-sm">
           <UploadCloud className="w-6 h-6 text-brand-ink opacity-70" />
         </div>
-        
+
         <h3 className="text-xl md:text-2xl font-medium tracking-tight text-brand-ink mb-2">
           Drag and drop your photo here
         </h3>
+
         <p className="text-brand-muted mb-8">
           or click to browse your files
         </p>
 
-        <Button 
-          variant="secondary" 
+        <Button
+          variant="secondary"
           onClick={(e) => {
             e.stopPropagation();
             handleClick();

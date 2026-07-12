@@ -121,9 +121,11 @@ export const ForSalons = () => {
               variants={fadeUpVariants}
               className="flex flex-col sm:flex-row items-start sm:items-center gap-6"
             >
-              <Button variant="primary" size="lg">
-                Request Early Access
-              </Button>
+              <Button asChild variant="primary" size="lg">
+  <Link href="/contact">
+    Request Early Access
+  </Link>
+</Button>
               
               <Link 
                 href="/salons" 
@@ -171,7 +173,7 @@ export const ForSalons = () => {
             Growing With Professionals
           </span>
           <p className="text-base md:text-lg text-brand-muted font-medium tracking-tight text-balance leading-relaxed">
-            Today's consultation tool. Tomorrow's salon platform.
+            Today&apos;s consultation tool. Tomorrow&apos;s salon platform.
           </p>
         </motion.div>
 

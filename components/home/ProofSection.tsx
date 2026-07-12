@@ -3,36 +3,36 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Container } from "@/components/ui/container";
-import { SynchronizedComparison } from "@/components/ui/SynchronizedComparison_OLD";
+import { SynchronizedComparison } from "@/components/ui/SynchronizedComparison";
 
 const proofCards = [
   {
     id: "face",
     title: "Face",
     description: "Your facial structure remains unchanged.",
-    originalImage: "/images/proof/face-original.jpg",
-    previewImage: "/images/proof/face-preview.jpg",
+    originalImage: "/images/proof/face-original.webp",
+    previewImage: "/images/proof/face-preview.webp",
   },
   {
     id: "skin",
     title: "Skin",
     description: "Natural skin texture and tone are preserved.",
-    originalImage: "/images/proof/skin-original.jpg",
-    previewImage: "/images/proof/skin-preview.jpg",
+    originalImage: "/images/proof/skin-original.webp",
+    previewImage: "/images/proof/skin-preview.webp",
   },
   {
     id: "expression",
     title: "Expression",
     description: "Your expression stays exactly the same.",
-    originalImage: "/images/proof/expression-original.jpg",
-    previewImage: "/images/proof/expression-preview.jpg",
+    originalImage: "/images/proof/expression-original.webp",
+    previewImage: "/images/proof/expression-preview.webp",
   },
   {
     id: "lighting",
     title: "Lighting",
     description: "Original lighting and shadows are maintained.",
-    originalImage: "/images/proof/lighting-original.jpg",
-    previewImage: "/images/proof/lighting-preview.jpg",
+    originalImage: "/images/proof/lighting-original.webp",
+    previewImage: "/images/proof/lighting-preview.webp",
   },
 ];
 
@@ -72,7 +72,7 @@ export const ProofSection = () => {
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-editorial text-brand-ink mb-4">
-            See What Doesn't Change
+            See What Doesn&apos;t Change
           </h2>
 
           <p className="text-lg text-brand-muted leading-relaxed">

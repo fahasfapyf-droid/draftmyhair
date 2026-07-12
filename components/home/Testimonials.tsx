@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
@@ -144,7 +145,7 @@ export const Testimonials = () => {
       </div>
 
       <p className="text-base leading-relaxed text-brand-muted mb-8">
-        "{review.review}"
+        &quot;{review.review}&quot;
       </p>
 
       <div className="mt-auto pt-6 border-t border-brand-border/50 flex items-center justify-between gap-4">
@@ -236,9 +237,11 @@ export const Testimonials = () => {
           viewport={{ once: true }}
           variants={headerVariants}
         >
-          <Button variant="secondary" size="lg">
-            View More Reviews
-          </Button>
+          <Button asChild variant="secondary" size="lg">
+  <Link href="/gallery">
+    View More Reviews
+  </Link>
+</Button>
         </motion.div>
       </Container>
     </section>

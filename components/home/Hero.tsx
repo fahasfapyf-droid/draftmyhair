@@ -57,13 +57,13 @@ preview: "/portfolio/bald/clean-bald-after.webp",
   },
 
   beard: {
-    label: "Beards",
-    headline: "Find the Beard Style That Fits You.",
-    copy:
-      "Try different beard styles while preserving your natural facial features and proportions.",
-    original: "/portfolio/beard/full-beard-before.webp",
-preview: "/portfolio/beard/full-beard-after.webp",
-  },
+  label: "Beards",
+  headline: "Find the Beard Style That Fits You.",
+  copy:
+    "Try different beard styles while preserving your natural facial features and proportions.",
+  original: "/portfolio/beard/full-beard-before.webp",
+  preview: "/portfolio/beard/full-beard-after.webp",
+},
 
   beardRemoval: {
     label: "Clean Shave",
@@ -215,7 +215,7 @@ export const Hero = () => {
             animate="visible"
           >
             {/* Absolute positioning container to support true crossfading */}
-            <div className="relative w-full max-w-[720px] lg:max-w-none min-h-[700px]">
+            <div className="relative w-full max-w-[720px] lg:max-w-none aspect-[4/5] min-h-[420px] sm:min-h-[520px] md:min-h-[620px] lg:min-h-[700px]">
               <AnimatePresence>
                 <motion.div
                   key={activeCategory}

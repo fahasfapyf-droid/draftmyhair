@@ -40,7 +40,7 @@ export default function ResultContent() {
           </h1>
 
           <p className="text-lg text-brand-muted max-w-2xl mx-auto leading-relaxed">
-            Here's how <strong>{formattedStyle}</strong> could look on you.
+            Here&apos;s how <strong>{formattedStyle}</strong> could look on you.
           </p>
         </motion.div>
 
@@ -88,13 +88,14 @@ export default function ResultContent() {
           className="mt-12 flex justify-center"
         >
           <Button
-            variant="primary"
-            size="lg"
-            className="min-w-[280px]"
-          >
-            <Download className="mr-2 h-5 w-5" />
-            Download Image
-          </Button>
+  variant="primary"
+  size="lg"
+  disabled
+  className="min-w-[280px]"
+>
+  <Download className="mr-2 h-5 w-5" />
+  Download Image (Coming Soon)
+</Button>
         </motion.div>
 
         {/* Secondary Actions */}

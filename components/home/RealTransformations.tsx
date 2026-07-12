@@ -148,7 +148,7 @@ export const RealTransformations = () => {
             Real Transformations
           </h2>
           <p className="text-lg text-brand-muted leading-relaxed">
-            Every preview below was created while preserving the person's identity. Only the hair changes.
+            Every preview below was created while preserving the person&apos;s identity. Only the hair changes.
           </p>
         </motion.div>
 
@@ -243,9 +243,11 @@ export const RealTransformations = () => {
           viewport={{ once: true }}
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Button variant="secondary" size="lg">
-           View 150+ Transformations
-          </Button>
+          <Button asChild variant="secondary">
+  <Link href="/gallery">
+    View 150+ Transformations
+  </Link>
+</Button>
         </motion.div>
 
       </Container>

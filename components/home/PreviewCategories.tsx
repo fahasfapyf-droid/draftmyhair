@@ -14,43 +14,43 @@ const categories = [
     title: "Hairstyle Preview",
     description: "Explore new lengths, layers, and volumes tailored to your face shape.",
     image: "/portfolio/bob/old-money-bob-after.webp",
-    href: "/preview/hairstyle"
+    href: "/upload?category=hairstyle",
   },
- {
-  id: "hair-colour",
-  title: "Hair Colour Preview",
-  description: "Test subtle highlights or complete colour transformations instantly.",
-  image: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
-  href: "/preview/hair-colour",
-},
+  {
+    id: "hair-colour",
+    title: "Hair Colour Preview",
+    description: "Test subtle highlights or complete colour transformations instantly.",
+    image: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
+    href: "/upload?category=hair-colour",
+  },
   {
     id: "buzz-cut",
     title: "Buzz Cut Preview",
     description: "See your face with a precision buzz cut before committing to the clippers.",
-   image: "/portfolio/buzzcut/0mm-buzz-after.webp",
-    href: "/preview/buzz-cut"
+    image: "/portfolio/buzzcut/0mm-buzz-after.webp",
+    href: "/upload?category=buzz-cut",
   },
   {
     id: "bald",
     title: "Bald Preview",
     description: "Visualize a completely clean-shaven head with perfect skin integration.",
     image: "/portfolio/bald/clean-bald-after.webp",
-    href: "/preview/bald"
+    href: "/upload?category=bald",
   },
   {
     id: "beard-style",
     title: "Beard Style Preview",
     description: "Discover the perfect beard length and shape for your jawline.",
     image: "/portfolio/beard/full-beard-after.webp",
-    href: "/preview/beard-style"
+    href: "/upload?category=beard-style",
   },
   {
     id: "beard-removal",
     title: "Beard Removal Preview",
     description: "Reveal your clean-shaven face with accurate skin tone and chin structure.",
     image: "/portfolio/beard/clean-shave-after.webp",
-    href: "/preview/beard-removal"
-  }
+    href: "/upload?category=beard-removal",
+  },
 ];
 
 export const PreviewCategories = () => {
@@ -89,7 +89,7 @@ export const PreviewCategories = () => {
             Explore Preview Categories
           </h2>
           <p className="text-lg text-brand-muted max-w-xl">
-            Choose what you'd like to preview.
+            Choose what you&apos;d like to preview.
           </p>
         </motion.div>
 

@@ -109,7 +109,7 @@ export const WhyDifferent = () => {
               Why Draft My Hair Looks Different
             </h2>
             <p className="text-lg text-brand-muted leading-relaxed max-w-md">
-              Every preview is created against the same quality standard. If it doesn't look like a real photograph, it doesn't meet ours.
+              Every preview is created against the same quality standard. If it doesn&apos;t look like a real photograph, it doesn&apos;t meet ours.
             </p>
           </motion.div>
 
@@ -170,7 +170,7 @@ export const WhyDifferent = () => {
             Our Promise
           </span>
           <p className="text-base md:text-lg text-brand-muted font-medium tracking-tight text-balance leading-relaxed">
-            If your preview changes anything beyond the requested hairstyle or beard, it doesn't meet our quality standard.
+            If your preview changes anything beyond the requested hairstyle or beard, it doesn&apos;t meet our quality standard.
           </p>
         </motion.div>
       </Container>

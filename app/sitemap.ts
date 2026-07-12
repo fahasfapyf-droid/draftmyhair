@@ -1,34 +1,62 @@
-import { MetadataRoute } from "next";
+import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = "https://www.draftmyhair.com";
+
   return [
     {
-      url: "https://www.draftmyhair.com",
+      url: baseUrl,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: "https://www.draftmyhair.com/gallery",
+      url: `${baseUrl}/gallery`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
       priority: 0.9,
     },
     {
-      url: "https://www.draftmyhair.com/salons",
+      url: `${baseUrl}/upload`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/style-selection`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
       priority: 0.8,
     },
     {
-      url: "https://www.draftmyhair.com/contact",
+      url: `${baseUrl}/salons`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/faq`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
       priority: 0.7,
     },
     {
-      url: "https://www.draftmyhair.com/faq",
-      priority: 0.7,
+      url: `${baseUrl}/contact`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6,
     },
     {
-      url: "https://www.draftmyhair.com/privacy",
-      priority: 0.5,
+      url: `${baseUrl}/privacy`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
     {
-      url: "https://www.draftmyhair.com/terms",
-      priority: 0.5,
+      url: `${baseUrl}/terms`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
   ];
 }
