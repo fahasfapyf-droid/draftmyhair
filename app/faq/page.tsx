@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
+import { createPageMetadata } from "../metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Frequently Asked Questions",
+  description:
+    "Find answers about Draft My Hair previews, photo requirements and identity-preserving AI hairstyle results.",
+  path: "/faq",
+});
 
 export default function FAQPage() {
   return (

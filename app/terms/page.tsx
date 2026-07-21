@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
+import { createPageMetadata } from "../metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Terms of Service",
+  description:
+    "Read the Draft My Hair terms of service for using AI-powered hairstyle previews.",
+  path: "/terms",
+});
 
 export default function TermsPage() {
   return (

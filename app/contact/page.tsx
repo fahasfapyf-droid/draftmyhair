@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
+import { createPageMetadata } from "../metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Contact Draft My Hair",
+  description:
+    "Contact Draft My Hair for preview support, feature suggestions, partnership enquiries or general questions.",
+  path: "/contact",
+});
 
 export default function ContactPage() {
   return (
@@ -12,7 +21,7 @@ export default function ContactPage() {
         <p className="mt-6 text-lg leading-8 text-brand-muted">
           Whether you have a question about a hairstyle preview, want to suggest
           a new feature, report an issue, or discuss a business partnership,
-          we'd love to hear from you.
+          We&apos;d love to hear from you.
         </p>
 
         <div className="mt-16 rounded-editorial border border-brand-border bg-brand-surface shadow-editorial p-8 md:p-12">

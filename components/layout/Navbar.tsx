@@ -65,12 +65,13 @@ export const Navbar = () => {
             </Button>
 
             <button
-  onClick={() => setMobileOpen(!mobileOpen)}
-  className="md:hidden flex items-center justify-center p-2 -mr-2 rounded-editorial"
-  aria-label={mobileOpen ? "Close Menu" : "Open Menu"}
-  aria-expanded={mobileOpen}
-  aria-controls="mobile-navigation"
->
+              type="button"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="-mr-2 flex items-center justify-center rounded-editorial p-2 transition-colors hover:bg-brand-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-2 focus-visible:ring-offset-brand-canvas md:hidden"
+              aria-label={mobileOpen ? "Close Menu" : "Open Menu"}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-navigation"
+            >
               {mobileOpen ? (
                 <X className="w-5 h-5" />
               ) : (

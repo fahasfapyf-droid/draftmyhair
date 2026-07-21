@@ -92,7 +92,8 @@ const StepCard: React.FC<{ step: StepData }> = ({ step }) => {
                   src={step.imageUrl}
                   alt={`Illustration for ${step.title}`}
                   fill
-                  quality={100}
+                  quality={75
+                  }
                   className="object-cover object-top"
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 25vw"
                 />

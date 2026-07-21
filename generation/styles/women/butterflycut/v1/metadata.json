@@ -1,0 +1,11 @@
+{
+  "id": "wolf_cut",
+  "name": "Wolf Cut",
+  "version": "1.0",
+  "category": "haircut",
+  "gender": "women",
+  "length": "medium",
+  "supportsHairColorOverride": true,
+  "supportsLengthOverride": false,
+  "status": "development"
+}

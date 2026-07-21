@@ -14,6 +14,7 @@ export interface IdentityComparisonSliderProps {
   priority?: boolean;
   quality?: number;
   showTrustRow?: boolean;
+  sizes?: string;
 }
 
 export const IdentityComparisonSlider: React.FC<IdentityComparisonSliderProps> = ({
@@ -23,8 +24,9 @@ export const IdentityComparisonSlider: React.FC<IdentityComparisonSliderProps> =
   className,
   imageContainerClassName,
   priority = false,
-    quality = 90,
+  quality = 90,
   showTrustRow = true,
+  sizes = "(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw",
 }) => {
   const [position, setPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -130,7 +132,7 @@ imageContainerClassName
           src={originalImage}
           alt={`Original - ${alt}`}
           fill
-          sizes="100vw"
+          sizes={sizes}
           priority={priority}
           quality={quality}
           className="object-cover pointer-events-none"
@@ -154,7 +156,7 @@ imageContainerClassName
             src={previewImage}
             alt={`Preview - ${alt}`}
             fill
-            sizes="100vw"
+            sizes={sizes}
             priority={priority}
             quality={quality}
             className="object-cover"

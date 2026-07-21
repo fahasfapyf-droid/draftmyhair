@@ -1,16 +1,17 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+
 import { GenerationStatus } from "./GenerationStatus";
+import { useGenerationSession } from "@/lib/context/GenerationSession";
 
 export default function PreviewContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  const style = searchParams.get("style");
+  const { session } = useGenerationSession();
 
   const handleComplete = () => {
-    router.push(`/result?style=${style}`);
+    router.push("/result");
   };
 
   return (
@@ -25,9 +26,13 @@ export default function PreviewContent() {
         </h1>
 
         <p className="text-lg text-brand-muted max-w-xl mx-auto leading-relaxed">
+          Creating a{" "}
+          <strong>{session.selectedStyle ?? "selected"}</strong>{" "}
+          hairstyle preview.
+          <br />
           Only your hairstyle is changing.
           <br />
-          Your face, identity, lighting, and expression remain exactly the same.
+          Your face, identity, lighting and expression remain exactly the same.
         </p>
 
         <GenerationStatus onComplete={handleComplete} />

@@ -98,7 +98,7 @@ export function Footer() {
           </p>
 
           <p className="text-sm text-brand-muted">
-            Same Face. Different Hair.
+            Same Face. New Hair.
           </p>
 
         </div>

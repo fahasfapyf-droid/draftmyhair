@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
+import { createPageMetadata } from "../metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Privacy Policy",
+  description:
+    "Read the Draft My Hair privacy policy and learn how uploaded photos and personal information are handled.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   return (

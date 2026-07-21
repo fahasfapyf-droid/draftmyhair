@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Hairstyle {
+  id               String            @id @default(uuid())
+  slug             String            @unique
+  name             String
+  category         HairstyleCategory
+  description      String?
+  displayOrder     Int               @default(0)
+  status           HairstyleStatus   @default(DRAFT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  fullDescription  String?
+  gender           GenderTarget      @default(UNISEX)
+  heroImage        String?
+  isFeatured       Boolean           @default(false)
+  promptKey        String?
+  shortDescription String?
+  thumbnailImage   String?
+
+  feedbacks Feedback[]
+
+  @@index([category])
+  @@index([status])
+  @@index([gender])
+  @@index([isFeatured])
+}
+
+model Feedback {
+  id String @id @default(cuid())
+
+  hairstyleId String
+  hairstyle   Hairstyle @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+
+  overallRating Int
+
+  identityRating Int
+
+  decisionConfidence DecisionConfidence
+
+  issues FeedbackIssue[]
+
+  comment String?
+
+  createdAt DateTime @default(now())
+
+  @@index([hairstyleId])
+  @@index([createdAt])
+  @@index([decisionConfidence])
+}
+
+enum HairstyleCategory {
+  LONG_HAIR
+  MEDIUM_HAIR
+  SHORT_HAIR
+  BOB
+  PIXIE
+  BUZZ
+  BALD
+  BEARD
+  HAIR_COLOR
+}
+
+enum HairstyleStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum GenderTarget {
+  FEMALE
+  MALE
+  UNISEX
+}
+
+enum DecisionConfidence {
+  YES
+  MAYBE
+  NO
+}
+
+enum FeedbackIssue {
+  IDENTITY
+  WRONG_STYLE
+  TOO_LONG
+  TOO_SHORT
+  WRONG_COLOR
+  ARTIFICIAL_TEXTURE
+  HAIR_DENSITY
+  HAIRLINE
+  NOT_REALISTIC
+  LIGHTING
+  BACKGROUND
+  OTHER
+}

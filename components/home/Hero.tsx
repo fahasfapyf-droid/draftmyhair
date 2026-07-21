@@ -231,6 +231,7 @@ export const Hero = () => {
                     alt={`${current.label} preview comparison showing exact identity preservation`}
                     priority={true}
                     quality={75}
+                    sizes="(max-width: 1024px) 100vw, 60vw"
                     // Parent container enforces aspect ratio, component takes full space
                     imageContainerClassName="w-full h-full shadow-editorial"
                   />

@@ -1,20 +1,21 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { GenerationSessionProvider } from "@/lib/session";
+import { GenerationSessionProvider } from "@/lib/context/GenerationSession";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { siteName, siteUrl } from "./metadata";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.draftmyhair.com"),
+  metadataBase: new URL(siteUrl),
 
   title: {
-    default: "Draft My Hair | Photorealistic AI Hairstyle Previews",
+    default: "Draft My Hair | See Your Next Hairstyle Before You Cut It.",
     template: "%s | Draft My Hair",
   },
 
   description:
-    "See your next hairstyle before you cut it. Photorealistic AI hairstyle, beard, bald and hair colour previews with exact identity preservation.",
+    "See Your Next Hairstyle Before You Cut It. Same Face. New Hair. Create realistic hairstyle previews while preserving your identity.",
 
   keywords: [
     "AI hairstyle",
@@ -26,44 +27,67 @@ export const metadata: Metadata = {
     "buzz cut preview",
     "bald preview",
     "beard preview",
-    "Draft My Hair",
+    "identity-preserving AI",
+    siteName,
   ],
 
   authors: [
     {
-      name: "Draft My Hair",
+      name: siteName,
     },
   ],
 
-  creator: "Draft My Hair",
-  publisher: "Draft My Hair",
+  creator: siteName,
+  publisher: siteName,
 
   alternates: {
-    canonical: "https://www.draftmyhair.com",
+    canonical: "/",
   },
+
+  icons: {
+    icon: [{ url: "/icon", type: "image/png" }],
+    apple: [{ url: "/icon", type: "image/png" }],
+    shortcut: [{ url: "/icon", type: "image/png" }],
+  },
+
+  manifest: "/manifest.webmanifest",
 
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.draftmyhair.com",
-    siteName: "Draft My Hair",
-    title: "Draft My Hair | Photorealistic AI Hairstyle Previews",
+    url: "/",
+    siteName,
+    title: "Draft My Hair | See Your Next Hairstyle Before You Cut It.",
     description:
-      "Preview hairstyles, beard styles, bald looks and hair colours before making a permanent change.",
-    
+      "See Your Next Hairstyle Before You Cut It. Same Face. New Hair.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Draft My Hair - See Your Next Hairstyle Before You Cut It.",
+      },
+    ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Draft My Hair | Photorealistic AI Hairstyle Previews",
+    title: "Draft My Hair | See Your Next Hairstyle Before You Cut It.",
     description:
-      "See yourself with a new hairstyle before you commit.",
-    
+      "See Your Next Hairstyle Before You Cut It. Same Face. New Hair.",
+    images: ["/opengraph-image"],
   },
 
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
 };
 

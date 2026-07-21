@@ -2,6 +2,7 @@
 
 import React from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import Image from "next/image";
 
 export interface SynchronizedComparisonProps {
   before: string;
@@ -84,12 +85,18 @@ export const SynchronizedComparison: React.FC<SynchronizedComparisonProps> = ({
     >
       {/* BEFORE PANE */}
       <div className="relative w-1/2 h-full overflow-hidden border-r border-neutral-200/50 z-10 pointer-events-none">
-        <motion.img
-          src={before}
-          alt="Original portrait before changes"
+        <motion.div
+          className="absolute inset-0 origin-center will-change-transform"
           style={{ x, y, scale }}
-          className="w-full h-full object-cover origin-center will-change-transform"
-        />
+        >
+          <Image
+            src={before}
+            alt="Original portrait before changes"
+            fill
+            sizes="(max-width: 768px) 50vw, 50vw"
+            className="object-cover"
+          />
+        </motion.div>
         {beforeLabel && (
           <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-white/95 text-neutral-900 text-[10px] font-bold uppercase tracking-widest rounded shadow-sm select-none backdrop-blur-sm">
             {beforeLabel}
@@ -99,12 +106,18 @@ export const SynchronizedComparison: React.FC<SynchronizedComparisonProps> = ({
 
       {/* AFTER PANE */}
       <div className="relative w-1/2 h-full overflow-hidden z-10 pointer-events-none">
-        <motion.img
-          src={after}
-          alt="Preview portrait after changes"
+        <motion.div
+          className="absolute inset-0 origin-center will-change-transform"
           style={{ x, y, scale }}
-          className="w-full h-full object-cover origin-center will-change-transform"
-        />
+        >
+          <Image
+            src={after}
+            alt="Preview portrait after changes"
+            fill
+            sizes="(max-width: 768px) 50vw, 50vw"
+            className="object-cover"
+          />
+        </motion.div>
         {afterLabel && (
           <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-neutral-900/95 text-white text-[10px] font-bold uppercase tracking-widest rounded shadow-sm select-none backdrop-blur-sm">
             {afterLabel}

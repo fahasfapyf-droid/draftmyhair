@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { HairStyle } from "./data";
+import type { HairStyle } from "@/lib/api/hairstyles";
 
 interface StyleCardProps {
   style: HairStyle;
@@ -17,7 +17,7 @@ export const StyleCard: React.FC<StyleCardProps> = ({ style, isSelected, onClick
     <motion.button
       type="button"
       onClick={onClick}
-      className="group relative flex flex-col w-full text-left focus:outline-none"
+      className="group relative flex w-full flex-col rounded-editorial text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-4 focus-visible:ring-offset-brand-canvas"
       whileTap={{ scale: 0.98 }}
       animate={{
         y: isSelected ? -6 : 0,
@@ -30,11 +30,11 @@ export const StyleCard: React.FC<StyleCardProps> = ({ style, isSelected, onClick
           "relative w-full aspect-[3/4] rounded-editorial overflow-hidden mb-4 transition-all duration-500 ease-[0.16,1,0.3,1] bg-brand-border/20",
           isSelected
             ? "ring-2 ring-brand-ink ring-offset-4 ring-offset-brand-canvas shadow-editorial border-transparent"
-            : "border border-brand-border/40 group-hover:border-brand-border group-hover:shadow-sm focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-4 focus-visible:ring-offset-brand-canvas"
+            : "border border-brand-border/40 group-hover:border-brand-border group-hover:shadow-sm"
         )}
       >
         <Image
-          src={style.imageUrl}
+          src={style.thumbnailImage || "/images/styles/french-bob.jpg"}
           alt={`Preview of ${style.name}`}
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"

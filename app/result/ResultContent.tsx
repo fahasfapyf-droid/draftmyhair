@@ -1,23 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useGenerationSession } from "@/lib/context/GenerationSession";
 import { motion } from "framer-motion";
 import { Download, RefreshCcw, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FeedbackForm } from "./FeedbackForm";
 
 export default function ResultContent() {
-  const searchParams = useSearchParams();
+  const { session } = useGenerationSession();
 
-  const style = searchParams.get("style");
-
-  const formattedStyle = style
-    ? style
-        .split("-")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ")
-    : "Your Hairstyle";
+const formattedStyle = session.selectedStyle
+  ? session.selectedStyle
+      .split("-")
+      .map(
+        (word) => word.charAt(0).toUpperCase() + word.slice(1)
+      )
+      .join(" ")
+  : "Your Hairstyle";
 
   return (
     <main className="min-h-screen bg-brand-canvas px-6 py-20">
@@ -97,6 +98,8 @@ export default function ResultContent() {
   Download Image (Coming Soon)
 </Button>
         </motion.div>
+
+        <FeedbackForm hairstyleId={session.selectedStyle} />
 
         {/* Secondary Actions */}
 

@@ -13,6 +13,7 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleClick = () => {
     fileInputRef.current?.click();
@@ -23,15 +24,16 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
     const maxSize = 10 * 1024 * 1024; // 10 MB
 
     if (!allowedTypes.includes(file.type)) {
-      alert("Please upload a JPG or PNG image.");
+      setError("Please upload a JPG or PNG image.");
       return;
     }
 
     if (file.size > maxSize) {
-      alert("Maximum file size is 10 MB.");
+      setError("Maximum file size is 10 MB.");
       return;
     }
 
+    setError(null);
     onFileSelect(file);
   };
 
@@ -85,7 +87,7 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
 
   return (
     <div
-      className="relative w-full min-h-[420px] group cursor-pointer"
+      className="relative min-h-[420px] w-full cursor-pointer rounded-editorial focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-4 focus-visible:ring-offset-brand-canvas group"
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onDragOver={handleDragOver}
@@ -94,6 +96,7 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
       role="button"
       tabIndex={0}
       aria-label="Upload your photo"
+      aria-describedby={error ? "upload-error" : undefined}
     >
       <input
         ref={fileInputRef}
@@ -124,15 +127,15 @@ export const UploadDropzone: React.FC<UploadDropzoneProps> = ({
           or click to browse your files
         </p>
 
-        <Button
-          variant="secondary"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClick();
-          }}
-        >
-          Browse Files
+        <Button asChild variant="secondary">
+          <span>Browse Files</span>
         </Button>
+
+        {error && (
+          <p id="upload-error" className="mt-4 text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
 
         <div className="mt-8 flex items-center gap-2 text-[11px] uppercase tracking-widest font-semibold text-brand-muted">
           <span>JPG, JPEG, PNG</span>

@@ -1,7 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
+import { createPageMetadata } from "../metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Draft My Hair for Salons",
+  description:
+    "Give salon clients realistic hairstyle previews before the first cut and make consultations more confident.",
+  path: "/salons",
+});
 
 export default function SalonsPage() {
   return (
