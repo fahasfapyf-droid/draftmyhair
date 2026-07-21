@@ -7,6 +7,7 @@ import { HowItWorks } from "@/components/home/HowItWorks";
 import { Testimonials } from "@/components/home/Testimonials";
 import { ForSalons } from "@/components/home/ForSalons";
 import { createPageMetadata } from "./metadata";
+import { PricingSection } from "@/components/home/PricingSection";
 
 export const metadata: Metadata = createPageMetadata({
   title: "See Your Next Hairstyle Before You Cut It.",
@@ -23,6 +24,7 @@ export default function HomePage() {
       <ProofSection />
       <RealTransformations />
       <HowItWorks />
+      <PricingSection />
       <ForSalons />
     </main>
   );
