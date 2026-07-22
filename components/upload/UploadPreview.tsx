@@ -2,8 +2,8 @@
 
 import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { motion } from "framer-motion";
+
 import { Button } from "@/components/ui/button";
 
 export interface UploadPreviewProps {
@@ -41,12 +41,10 @@ export const UploadPreview: React.FC<UploadPreviewProps> = ({
     >
       {/* Image Preview */}
       <div className="relative w-full aspect-[3/4] sm:aspect-[4/5] overflow-hidden rounded-editorial border border-brand-border bg-brand-canvas shadow-sm">
-        <Image
+        <img
           src={imageUrl}
           alt="Uploaded portrait preview"
-          fill
-          sizes="(max-width: 768px) 100vw, 42rem"
-          className="object-cover"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       </div>
 
@@ -58,7 +56,9 @@ export const UploadPreview: React.FC<UploadPreviewProps> = ({
         <span className="w-1 h-1 rounded-full bg-brand-border" />
         <span>Expression Preserved</span>
         <span className="w-1 h-1 rounded-full bg-brand-border" />
-        <span className="text-brand-ink font-bold">Hair Transformed</span>
+        <span className="text-brand-ink font-bold">
+          Hair Transformed
+        </span>
       </div>
 
       {/* Buttons */}

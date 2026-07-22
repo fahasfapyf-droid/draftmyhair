@@ -17,24 +17,33 @@ export default function PreviewContent() {
   } = useGenerationSession();
 
   useEffect(() => {
-    async function generate() {
-      if (
-        !session.uploadedFile ||
-        !session.selectedStyle ||
-        session.generationStatus === "generating"
-      ) {
-        return;
-      }
+    if (!session.uploadedFile) {
+      router.replace("/upload");
+      return;
+    }
 
+    if (!session.selectedStyle) {
+      router.replace("/style-selection");
+      return;
+    }
+
+    const uploadedFile = session.uploadedFile;
+    const selectedStyle = session.selectedStyle;
+
+    if (session.generationStatus === "generating") {
+      return;
+    }
+
+    async function generate() {
       setGenerationStatus("generating");
 
       try {
         const formData = new FormData();
 
-        formData.append("image", session.uploadedFile);
+        formData.append("image", uploadedFile);
         formData.append(
           "promptKey",
-          session.selectedStyle.promptKey
+          selectedStyle.promptKey
         );
 
         const response = await fetch("/api/generate", {
@@ -89,8 +98,7 @@ export default function PreviewContent() {
 
         <p className="text-lg text-brand-muted max-w-xl mx-auto leading-relaxed">
           Creating a{" "}
-          <strong>{session.selectedStyle?.name ?? "selected"}</strong>{" "}
-          hairstyle preview.
+          <strong>{session.selectedStyle?.name ?? "selected"}</strong> hairstyle preview.
           <br />
           Only your hairstyle is changing.
           <br />
@@ -98,9 +106,9 @@ export default function PreviewContent() {
         </p>
 
         <GenerationStatus
-  status={session.generationStatus}
-  error={session.generationError}
-/>
+          status={session.generationStatus}
+          error={session.generationError}
+        />
       </div>
     </main>
   );

@@ -98,17 +98,14 @@ export async function generatePreview(
     return {
       success: true,
       imageUrl,
-      jobId: generationId,
+      generationId,
     };
   } catch (error) {
     console.error("Generation pipeline failed:", error);
 
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unexpected generation error.",
+      error: "Internal generation error.",
     };
   }
 }

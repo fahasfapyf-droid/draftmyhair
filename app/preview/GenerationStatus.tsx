@@ -28,19 +28,14 @@ const STEP_DURATION = 800;
 export const GenerationStatus: React.FC<
   GenerationStatusProps
 > = ({ status, error }) => {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(
+    status === "generating" ? 0 : -1
+  );
 
   useEffect(() => {
-    if (status === "idle") {
-      setCurrentStep(0);
-      return;
-    }
-
     if (status !== "generating") {
       return;
     }
-
-    setCurrentStep(0);
 
     let step = 0;
 
@@ -58,6 +53,9 @@ export const GenerationStatus: React.FC<
     return () => clearInterval(timer);
   }, [status]);
 
+  const displayedStep =
+    status === "idle" ? -1 : currentStep;
+
   return (
     <div className="w-full max-w-lg mx-auto mt-14">
       <div className="space-y-6">
@@ -65,11 +63,11 @@ export const GenerationStatus: React.FC<
           const completed =
             status === "success" ||
             (status === "generating" &&
-              index < currentStep);
+              index < displayedStep);
 
           const active =
             status === "generating" &&
-            index === currentStep;
+            index === displayedStep;
 
           return (
             <motion.div

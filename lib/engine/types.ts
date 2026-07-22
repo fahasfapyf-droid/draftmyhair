@@ -59,9 +59,9 @@ export interface GenerationResult {
   imageUrl?: string;
 
   /**
-   * Optional job identifier.
+   * Unique generation identifier.
    */
-  jobId?: string;
+  generationId?: string;
 
   /**
    * Error message.
