@@ -11,14 +11,7 @@ import { FeedbackForm } from "./FeedbackForm";
 export default function ResultContent() {
   const { session } = useGenerationSession();
 
-const formattedStyle = session.selectedStyle
-  ? session.selectedStyle
-      .split("-")
-      .map(
-        (word) => word.charAt(0).toUpperCase() + word.slice(1)
-      )
-      .join(" ")
-  : "Your Hairstyle";
+  const formattedStyle = session.selectedStyle?.name ?? "Your Hairstyle";
 
   return (
     <main className="min-h-screen bg-brand-canvas px-6 py-20">
@@ -57,24 +50,31 @@ const formattedStyle = session.selectedStyle
           }}
           className="max-w-2xl mx-auto rounded-editorial overflow-hidden border border-brand-border bg-brand-surface shadow-editorial"
         >
-          <div className="aspect-[3/4] min-h-[720px] flex items-center justify-center bg-brand-border/15">
+          <div className="aspect-[3/4] bg-brand-border/15">
 
-            {/* Placeholder until Gemini is connected */}
+  {session.generatedImageUrl ? (
+    <img
+      src={session.generatedImageUrl}
+      alt={formattedStyle}
+      className="w-full h-full object-cover"
+    />
+  ) : (
+    <div className="flex h-full min-h-[720px] items-center justify-center px-10 text-center">
 
-            <div className="text-center px-10">
+      <div>
+        <h2 className="text-3xl font-semibold text-brand-ink mb-4">
+          {formattedStyle}
+        </h2>
 
-              <h2 className="text-3xl font-semibold text-brand-ink mb-4">
-                {formattedStyle}
-              </h2>
+        <p className="text-brand-muted leading-relaxed">
+          No generated preview is available.
+        </p>
+      </div>
 
-              <p className="text-brand-muted leading-relaxed">
-                Your generated hairstyle preview will appear here once the
-                Draft My Hair Engine is connected.
-              </p>
+    </div>
+  )}
 
-            </div>
-
-          </div>
+</div>
         </motion.div>
 
         {/* Download Button */}
@@ -91,7 +91,7 @@ const formattedStyle = session.selectedStyle
           <Button
   variant="primary"
   size="lg"
-  disabled
+  disabled={!session.generatedImageUrl}
   className="min-w-[280px]"
 >
   <Download className="mr-2 h-5 w-5" />
@@ -99,7 +99,7 @@ const formattedStyle = session.selectedStyle
 </Button>
         </motion.div>
 
-        <FeedbackForm hairstyleId={session.selectedStyle} />
+        <FeedbackForm hairstyleId={session.selectedStyle?.id ?? null} />
 
         {/* Secondary Actions */}
 

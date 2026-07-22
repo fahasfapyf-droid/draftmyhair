@@ -12,10 +12,16 @@ import { PhotoRequirements } from "./PhotoRequirements";
 import { useGenerationSession } from "@/lib/context/GenerationSession";
 
 export const UploadPage: React.FC = () => {
-  const { setUploadedPhoto } = useGenerationSession();
+  const {
+    setUploadedPhoto,
+    clearGenerationResult,
+  } = useGenerationSession();
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] =
+    useState<File | null>(null);
+
+  const [previewUrl, setPreviewUrl] =
+    useState<string | null>(null);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -35,7 +41,10 @@ export const UploadPage: React.FC = () => {
     setSelectedFile(file);
     setPreviewUrl(objectUrl);
 
-    // Save into the Generation Session
+    // New upload invalidates any previous generation.
+    clearGenerationResult();
+
+    // Save into the Generation Session.
     setUploadedPhoto(file, objectUrl);
   };
 
@@ -47,7 +56,10 @@ export const UploadPage: React.FC = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
 
-    // Clear the Generation Session
+    // Remove any previous generation.
+    clearGenerationResult();
+
+    // Clear the Generation Session.
     setUploadedPhoto(null, null);
   };
 

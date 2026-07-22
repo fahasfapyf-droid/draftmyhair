@@ -46,7 +46,7 @@ export function PricingCard({
 
         <div className="mt-6 flex items-end">
           <span className="text-5xl font-semibold tracking-tight text-brand-ink">
-            ${plan.price.amount}
+            ${plan.price}
           </span>
 
           <span className="mb-1 ml-2 text-sm text-brand-muted">

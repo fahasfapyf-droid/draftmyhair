@@ -23,11 +23,11 @@ import {
 export function buildPrompt(
   request: PromptBuildRequest
 ): PromptBuildResult {
-  const style = STYLE_PROMPTS[request.styleId];
+  const style = STYLE_PROMPTS[request.promptKey];
 
   if (!style) {
     throw new Error(
-      `Unknown hairstyle: ${request.styleId}`
+      `Unknown hairstyle prompt key: ${request.promptKey}`
     );
   }
 

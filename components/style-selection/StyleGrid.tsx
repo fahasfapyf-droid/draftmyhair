@@ -9,8 +9,8 @@ import { StyleCard } from "./StyleCard";
 
 interface StyleGridProps {
   styles: HairStyle[];
-  selectedId: string |null;
-  onSelect: (slug: string) => void;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }
 
 export const StyleGrid: React.FC<StyleGridProps> = ({
@@ -52,8 +52,8 @@ export const StyleGrid: React.FC<StyleGridProps> = ({
         <motion.div key={style.id} variants={itemVariants}>
           <StyleCard
             style={style}
-            isSelected={selectedId === style.slug}
-            onClick={() => onSelect(style.slug)}
+            isSelected={selectedId === style.id}
+            onClick={() => onSelect(style.id)}
           />
         </motion.div>
       ))}

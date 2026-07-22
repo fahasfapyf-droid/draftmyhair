@@ -17,6 +17,24 @@ export interface StylePrompt {
 }
 
 export const STYLE_PROMPTS: Record<string, StylePrompt> = {
+  "butterfly-cut": {
+    id: "butterfly-cut",
+    name: "Butterfly Cut",
+    prompt: `
+Create a modern Butterfly Cut.
+
+Characteristics:
+
+- long, cascading layers
+- face-framing pieces
+- soft crown volume
+- airy movement through the lengths
+- a polished, natural salon finish
+
+Preserve the original natural hair color unless instructed otherwise.
+`,
+  },
+
   "french-bob": {
     id: "french-bob",
     name: "French Bob",
@@ -106,6 +124,58 @@ Characteristics:
 - elegant modern appearance
 
 Preserve the original natural hair color unless instructed otherwise.
+`,
+  },
+
+  "wolf-cut": {
+    id: "wolf-cut",
+    name: "Wolf Cut",
+    prompt: `
+Create a modern Wolf Cut.
+
+Characteristics:
+
+- textured, layered silhouette
+- shorter volume through the crown
+- soft face-framing fringe
+- longer, feathered lengths
+- natural movement with an editorial finish
+
+Preserve the original natural hair color unless instructed otherwise.
+`,
+  },
+
+  "buzz-cut": {
+    id: "buzz-cut",
+    name: "Buzz Cut",
+    prompt: `
+Create a close-cropped Buzz Cut.
+
+Characteristics:
+
+- even, short clipper length
+- clean, natural hairline
+- realistic scalp visibility
+- precise, low-maintenance silhouette
+
+Preserve the original natural hair color unless instructed otherwise.
+`,
+  },
+
+  bald: {
+    id: "bald",
+    name: "Bald",
+    prompt: `
+Create a clean shaved-head look.
+
+Characteristics:
+
+- fully shaved scalp
+- natural scalp texture and tone
+- realistic hairline transition
+- clean, even finish
+
+Preserve the subject's facial identity, lighting, and background.
 `,
   },
 };

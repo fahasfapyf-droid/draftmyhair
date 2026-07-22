@@ -8,10 +8,27 @@ import {
   ReactNode,
 } from "react";
 
+export interface SelectedHairstyle {
+  id: string;
+  name: string;
+  promptKey: string;
+}
+
+export type GenerationStatus =
+  | "idle"
+  | "generating"
+  | "success"
+  | "failed";
+
 export interface GenerationSessionData {
   uploadedFile: File | null;
   uploadedPreview: string | null;
-  selectedStyle: string | null;
+  selectedStyle: SelectedHairstyle | null;
+
+  generatedImageUrl: string | null;
+  generationId: string | null;
+  generationStatus: GenerationStatus;
+  generationError: string | null;
 }
 
 interface GenerationSessionContextType {
@@ -23,8 +40,23 @@ interface GenerationSessionContextType {
   ) => void;
 
   setSelectedStyle: (
-    style: string | null
+    style: SelectedHairstyle | null
   ) => void;
+
+  setGenerationStatus: (
+    status: GenerationStatus
+  ) => void;
+
+  setGenerationResult: (
+    imageUrl: string,
+    generationId: string
+  ) => void;
+
+  setGenerationFailed: (
+    error: string
+  ) => void;
+
+  clearGenerationResult: () => void;
 
   resetSession: () => void;
 }
@@ -44,24 +76,77 @@ export function GenerationSessionProvider({
     useState<string | null>(null);
 
   const [selectedStyle, setSelectedStyleState] =
+    useState<SelectedHairstyle | null>(null);
+
+  const [generatedImageUrl, setGeneratedImageUrl] =
+    useState<string | null>(null);
+
+  const [generationId, setGenerationId] =
+    useState<string | null>(null);
+
+  const [generationStatus, setGenerationStatusState] =
+    useState<GenerationStatus>("idle");
+
+  const [generationError, setGenerationError] =
     useState<string | null>(null);
 
   function setUploadedPhoto(
-    file: File | null,
-    preview: string | null
+  file: File | null,
+  preview: string | null
+) {
+  clearGenerationResult();
+
+  setUploadedFile(file);
+  setUploadedPreview(preview);
+}
+
+  function setSelectedStyle(
+  style: SelectedHairstyle | null
+) {
+  clearGenerationResult();
+
+  setSelectedStyleState(style);
+}
+
+  function setGenerationStatus(
+    status: GenerationStatus
   ) {
-    setUploadedFile(file);
-    setUploadedPreview(preview);
+    setGenerationStatusState(status);
   }
 
-  function setSelectedStyle(style: string | null) {
-    setSelectedStyleState(style);
+  function setGenerationResult(
+    imageUrl: string,
+    id: string
+  ) {
+    setGeneratedImageUrl(imageUrl);
+    setGenerationId(id);
+    setGenerationStatusState("success");
+    setGenerationError(null);
+  }
+
+ function setGenerationFailed(
+  error: string
+) {
+  setGeneratedImageUrl(null);
+  setGenerationId(null);
+
+  setGenerationStatusState("failed");
+  setGenerationError(error);
+}
+
+  function clearGenerationResult() {
+    setGeneratedImageUrl(null);
+    setGenerationId(null);
+    setGenerationStatusState("idle");
+    setGenerationError(null);
   }
 
   function resetSession() {
     setUploadedFile(null);
     setUploadedPreview(null);
     setSelectedStyleState(null);
+
+    clearGenerationResult();
   }
 
   const value = useMemo(
@@ -70,15 +155,32 @@ export function GenerationSessionProvider({
         uploadedFile,
         uploadedPreview,
         selectedStyle,
+
+        generatedImageUrl,
+        generationId,
+        generationStatus,
+        generationError,
       },
+
       setUploadedPhoto,
       setSelectedStyle,
+
+      setGenerationStatus,
+      setGenerationResult,
+      setGenerationFailed,
+      clearGenerationResult,
+
       resetSession,
     }),
     [
       uploadedFile,
       uploadedPreview,
       selectedStyle,
+
+      generatedImageUrl,
+      generationId,
+      generationStatus,
+      generationError,
     ]
   );
 

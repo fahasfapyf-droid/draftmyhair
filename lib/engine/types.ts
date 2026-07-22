@@ -11,9 +11,9 @@
 
 export interface GenerateRequestDTO {
   /**
-   * Selected hairstyle identifier.
+   * Selected hairstyle prompt key.
    */
-  styleId: string;
+  promptKey: string;
 
   /**
    * Optional user identifier.
@@ -37,9 +37,9 @@ export interface GenerationContext {
   mimeType: string;
 
   /**
-   * Selected hairstyle.
+   * Selected hairstyle prompt key.
    */
-  styleId: string;
+  promptKey: string;
 
   /**
    * Optional user identifier.
@@ -74,7 +74,7 @@ export interface GenerationResult {
 ============================================================ */
 
 export interface PromptBuildRequest {
-  styleId: string;
+  promptKey: string;
 }
 
 export interface PromptBuildResult {
