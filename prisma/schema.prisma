@@ -7,71 +7,339 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Hairstyle {
-  id               String            @id @default(uuid())
-  slug             String            @unique
-  name             String
-  category         HairstyleCategory
-  description      String?
-  displayOrder     Int               @default(0)
-  status           HairstyleStatus   @default(DRAFT)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  fullDescription  String?
-  gender           GenderTarget      @default(UNISEX)
-  heroImage        String?
-  isFeatured       Boolean           @default(false)
-  promptKey        String?
-  shortDescription String?
-  thumbnailImage   String?
+model User {
+  id                  String          @id @default(cuid())
+  name                String?
+  email               String?         @unique
+  emailVerified       DateTime?
+  image               String?
+  role                UserRole        @default(USER)
+  passwordHash        String?
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int             @default(0)
+  isActive            Boolean         @default(true)
+  isDeleted           Boolean         @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  accounts            Account[]
+  feedbacks           Feedback[]
+  generations         Generation[]
+  payments            Payment[]
+  sessions            Session[]
+  preference          UserPreference?
+  wallet              Wallet?
 
-  feedbacks Feedback[]
+  @@index([email])
+  @@index([role])
+  @@index([isDeleted])
+  @@index([createdAt])
+}
 
-  @@index([category])
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@index([expires])
+}
+
+model Wallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  balance      Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  transactions CreditTransaction[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([balance])
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  walletId      String
+  type          WalletTransactionType
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  description   String?
+  generationId  String?
+  paymentId     String?
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+  generation    Generation?           @relation(fields: [generationId], references: [id])
+  payment       Payment?              @relation(fields: [paymentId], references: [id])
+  wallet        Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([paymentId])
+  @@index([generationId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Payment {
+  id                 String              @id @default(cuid())
+  userId             String
+  provider           PaymentProvider
+  type               PaymentType
+  status             PaymentStatus       @default(PENDING)
+  amount             Decimal             @db.Decimal(10, 2)
+  currency           String              @default("USD")
+  providerPaymentId  String?             @unique
+  providerCustomerId String?
+  providerSessionId  String?
+  creditsPurchased   Int                 @default(0)
+  metadata           Json?
+  refundedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  creditTransactions CreditTransaction[]
+  generations        Generation[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([status])
+  @@index([provider])
+  @@index([createdAt])
+}
+
+model Generation {
+  id                  String              @id @default(cuid())
+  userId              String
+  hairstyleId         String
+  paymentId           String?
+  status              GenerationStatus    @default(QUEUED)
+  promptKey           String
+  promptVersion       String
+  provider            String
+  providerModel       String
+  inputImageUrl       String
+  outputImageUrl      String?
+  sourceStorageKey    String?
+  resultStorageKey    String?
+  errorMessage        String?
+  creditsUsed         Int                 @default(1)
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  processingTimeMs    Int?
+  metadata            Json?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  transactions        CreditTransaction[]
+  hairstyle           Hairstyle           @relation(fields: [hairstyleId], references: [id])
+  payment             Payment?            @relation(fields: [paymentId], references: [id])
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([hairstyleId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([provider])
+  @@index([providerModel])
+  @@index([createdAt])
+}
+
+model UserPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  preferredGender     String?
+  preferredHairLength String?
+  preferredHairColor  String?
+  preferredLanguage   String?
+  marketingEmails     Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContactMessage {
+  id         String        @id @default(cuid())
+  name       String
+  email      String
+  subject    String?
+  message    String
+  status     ContactStatus @default(NEW)
+  resolvedAt DateTime?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Hairstyle {
+  id           String             @id @default(cuid())
+  name         String
+  slug         String             @unique
+  serviceType  ServiceType        @default(HAIRSTYLE)
+  category     HairstyleCategory?
+  gender       GenderTarget
+  description  String?
+  thumbnailUrl String?
+  displayOrder Int                @default(0)
+  promptKey    String             @unique
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  feedbacks    Feedback[]
+  generations  Generation[]
+
+  @@index([slug])
+  @@index([promptKey])
+  @@index([serviceType])
+  @@index([category])
   @@index([gender])
-  @@index([isFeatured])
+  @@index([isActive])
 }
 
 model Feedback {
-  id String @id @default(cuid())
-
-  hairstyleId String
-  hairstyle   Hairstyle @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
-
-  overallRating Int
-
-  identityRating Int
-
+  id                 String             @id @default(cuid())
+  userId             String?
+  hairstyleId        String?
+  overallRating      Int
+  identityRating     Int
+  realismRating      Int
   decisionConfidence DecisionConfidence
+  issues             FeedbackIssue[]
+  comment            String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  hairstyle          Hairstyle?         @relation(fields: [hairstyleId], references: [id])
+  user               User?              @relation(fields: [userId], references: [id])
 
-  issues FeedbackIssue[]
-
-  comment String?
-
-  createdAt DateTime @default(now())
-
+  @@index([userId])
   @@index([hairstyleId])
-  @@index([createdAt])
+  @@index([overallRating])
   @@index([decisionConfidence])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  REFUND
+  BONUS
+  PURCHASE
+  ADJUSTMENT
+}
+
+enum GenerationStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  LEMONSQUEEZY
+  MANUAL
+}
+
+enum PaymentType {
+  CREDIT_PURCHASE
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+enum ContactStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }
 
 enum HairstyleCategory {
-  LONG_HAIR
-  MEDIUM_HAIR
-  SHORT_HAIR
   BOB
+  LOB
   PIXIE
-  BUZZ
-  BALD
-  BEARD
-  HAIR_COLOR
+  BIXIE
+  LAYERS
+  SHAG
+  WOLF
+  MULLET
+  FADE
+  TAPER
+  UNDERCUT
+  CROP
+  CREW
+  QUIFF
+  POMPADOUR
+  SIDE_PART
+  COMB_OVER
+  MOHAWK
+  MAN_BUN
+  BRAIDS
+  LOCS
+  AFRO
+  CURLY
+  BANGS
+  UPDO
 }
 
-enum HairstyleStatus {
-  DRAFT
-  ACTIVE
-  RETIRED
+enum ServiceType {
+  HAIRSTYLE
+  HAIR_COLOR
+  BUZZ_CUT
+  BALD
+  BEARD
+  BEARD_REMOVAL
 }
 
 enum GenderTarget {
@@ -81,22 +349,20 @@ enum GenderTarget {
 }
 
 enum DecisionConfidence {
-  YES
-  MAYBE
-  NO
+  DEFINITELY_NOT
+  PROBABLY_NOT
+  UNSURE
+  PROBABLY_YES
+  DEFINITELY_YES
 }
 
 enum FeedbackIssue {
-  IDENTITY
-  WRONG_STYLE
-  TOO_LONG
-  TOO_SHORT
-  WRONG_COLOR
-  ARTIFICIAL_TEXTURE
-  HAIR_DENSITY
+  IDENTITY_DRIFT
   HAIRLINE
-  NOT_REALISTIC
   LIGHTING
+  HAIR_COLOR
+  TEXTURE
+  BLENDING
   BACKGROUND
   OTHER
 }
