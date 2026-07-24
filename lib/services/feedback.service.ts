@@ -9,6 +9,7 @@ export interface CreateFeedbackInput {
   hairstyleId: string;
   overallRating: number;
   identityRating: number;
+  realismRating: number;
   decisionConfidence: DecisionConfidence;
   issues: FeedbackIssue[];
   comment?: string;
@@ -72,6 +73,7 @@ export function validateFeedbackInput(
   const hairstyleId = value.hairstyleId;
   const overallRating = value.overallRating;
   const identityRating = value.identityRating;
+  const realismRating = value.realismRating;
   const decisionConfidence = value.decisionConfidence;
   const issues = value.issues;
   const comment = value.comment;
@@ -85,6 +87,9 @@ export function validateFeedbackInput(
   }
 
   if (!isRating(identityRating)) {
+    if (!isRating(realismRating)) {
+  errors.push("realismRating must be an integer from 1 to 5.");
+}
     errors.push("identityRating must be an integer from 1 to 5.");
   }
 
@@ -128,13 +133,14 @@ export function validateFeedbackInput(
   return {
     valid: true,
     data: {
-      hairstyleId: (hairstyleId as string).trim(),
-      overallRating: overallRating as number,
-      identityRating: identityRating as number,
-      decisionConfidence: decisionConfidence as DecisionConfidence,
-      issues: (issues ?? []) as FeedbackIssue[],
-      comment: normalizedComment,
-    },
+  hairstyleId: (hairstyleId as string).trim(),
+  overallRating: overallRating as number,
+  identityRating: identityRating as number,
+  realismRating: realismRating as number,
+  decisionConfidence: decisionConfidence as DecisionConfidence,
+  issues: (issues ?? []) as FeedbackIssue[],
+  comment: normalizedComment,
+},
   };
 }
 
@@ -157,15 +163,16 @@ export async function createFeedback(
   }
 
   const feedback = await prisma.feedback.create({
-    data: {
-      hairstyleId: input.hairstyleId,
-      overallRating: input.overallRating,
-      identityRating: input.identityRating,
-      decisionConfidence: input.decisionConfidence,
-      issues: input.issues,
-      comment: input.comment,
-    },
-  });
+  data: {
+    hairstyleId: input.hairstyleId,
+    overallRating: input.overallRating,
+    identityRating: input.identityRating,
+    realismRating: input.realismRating,
+    decisionConfidence: input.decisionConfidence,
+    issues: input.issues,
+    comment: input.comment,
+  },
+});
 
   return {
     created: true,

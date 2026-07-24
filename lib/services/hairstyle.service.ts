@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 export async function getActiveHairstyles() {
   return prisma.hairstyle.findMany({
     where: {
-      status: "ACTIVE",
+      isActive: true,
     },
     orderBy: {
       displayOrder: "asc",
@@ -13,12 +13,10 @@ export async function getActiveHairstyles() {
       slug: true,
       name: true,
       category: true,
-      shortDescription: true,
-      thumbnailImage: true,
-      heroImage: true,
+      description: true,
+      thumbnailUrl: true,
       promptKey: true,
       gender: true,
-      isFeatured: true,
       displayOrder: true,
     },
   });
