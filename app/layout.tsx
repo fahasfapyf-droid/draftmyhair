@@ -1,9 +1,9 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import { GenerationSessionProvider } from "@/lib/context/GenerationSession";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { Providers } from "./providers";
 import { siteName, siteUrl } from "./metadata";
 
 export const metadata: Metadata = {
@@ -93,19 +93,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="en">
       <body>
-        <GenerationSessionProvider>
+        <Providers>
           <Navbar />
 
           {children}
 
           <Footer />
-        </GenerationSessionProvider>
+        </Providers>
       </body>
     </html>
   );

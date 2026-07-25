@@ -37,15 +37,9 @@ export default function RegisterPage() {
       if (!response.ok) {
         setMessage(data.error ?? "Registration failed.");
       } else {
-        setMessage("Registration successful. Redirecting to login...");
-
-setName("");
-setEmail("");
-setPassword("");
-
-setTimeout(() => {
-  router.push("/login");
-}, 1200);
+        router.push(
+  `/register-success?email=${encodeURIComponent(email)}`
+);
       }
     } catch {
       setMessage("Something went wrong.");

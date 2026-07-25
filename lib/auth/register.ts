@@ -1,4 +1,6 @@
 import argon2 from "argon2";
+
+import { createEmailVerification } from "@/lib/auth/email-verification";
 import { prisma } from "@/lib/prisma";
 
 export async function registerUser(
@@ -7,7 +9,9 @@ export async function registerUser(
   password: string
 ) {
   const existingUser = await prisma.user.findUnique({
-    where: { email },
+    where: {
+      email,
+    },
   });
 
   if (existingUser) {
@@ -28,6 +32,12 @@ export async function registerUser(
       },
     },
   });
+
+  await createEmailVerification(
+    user.id,
+    email,
+    user.name
+  );
 
   return user;
 }
