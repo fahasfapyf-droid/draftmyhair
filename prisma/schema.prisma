@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -25,12 +26,12 @@ model User {
   accounts            Account[]
   feedbacks           Feedback[]
   generations         Generation[]
+  images              Image[]
+  passwordResetTokens PasswordResetToken[]
   payments            Payment[]
   sessions            Session[]
-  images              Image[]
   preference          UserPreference?
   wallet              Wallet?
-  passwordResetTokens PasswordResetToken[]
 
   @@index([email])
   @@index([role])
@@ -87,9 +88,8 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -180,10 +180,10 @@ model Generation {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   transactions        CreditTransaction[]
-  images              Image[]
   hairstyle           Hairstyle           @relation(fields: [hairstyleId], references: [id])
   payment             Payment?            @relation(fields: [paymentId], references: [id])
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images              Image[]
 
   @@index([userId])
   @@index([hairstyleId])
@@ -252,31 +252,22 @@ model Hairstyle {
 
 model Image {
   id               String      @id @default(cuid())
-
   ownerId          String
-  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
   generationId     String?
-  generation       Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
-
   type             ImageType
   status           ImageStatus @default(ACTIVE)
-
-  storageKey           String         @unique
-  blobUrl              String         @unique
-
+  storageKey       String      @unique
+  blobUrl          String      @unique
   originalFilename String?
-
   mimeType         String
   fileSize         Int
-
   width            Int?
   height           Int?
-
-  sha256         String?
-
+  checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
+  generation       Generation? @relation(fields: [generationId], references: [id])
+  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([generationId])

@@ -91,22 +91,18 @@ export function GenerationSessionProvider({
     useState<string | null>(null);
 
   function setUploadedPhoto(
-  file: File | null,
-  preview: string | null
-) {
-  clearGenerationResult();
-
-  setUploadedFile(file);
-  setUploadedPreview(preview);
-}
+    file: File | null,
+    preview: string | null
+  ) {
+    setUploadedFile(file);
+    setUploadedPreview(preview);
+  }
 
   function setSelectedStyle(
-  style: SelectedHairstyle | null
-) {
-  clearGenerationResult();
-
-  setSelectedStyleState(style);
-}
+    style: SelectedHairstyle | null
+  ) {
+    setSelectedStyleState(style);
+  }
 
   function setGenerationStatus(
     status: GenerationStatus
@@ -124,15 +120,12 @@ export function GenerationSessionProvider({
     setGenerationError(null);
   }
 
- function setGenerationFailed(
-  error: string
-) {
-  setGeneratedImageUrl(null);
-  setGenerationId(null);
-
-  setGenerationStatusState("failed");
-  setGenerationError(error);
-}
+  function setGenerationFailed(
+    error: string
+  ) {
+    setGenerationStatusState("failed");
+    setGenerationError(error);
+  }
 
   function clearGenerationResult() {
     setGeneratedImageUrl(null);

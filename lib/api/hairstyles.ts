@@ -2,13 +2,11 @@ export interface HairStyle {
   id: string;
   slug: string;
   name: string;
-  category: string;
-  shortDescription: string | null;
-  thumbnailImage: string | null;
-  heroImage: string | null;
+  category: string | null;
+  description: string | null;
+  thumbnailUrl: string | null;
   promptKey: string | null;
   gender: string;
-  isFeatured: boolean;
   displayOrder: number;
 }
 

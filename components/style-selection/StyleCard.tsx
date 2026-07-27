@@ -12,7 +12,11 @@ interface StyleCardProps {
   onClick: () => void;
 }
 
-export const StyleCard: React.FC<StyleCardProps> = ({ style, isSelected, onClick }) => {
+export const StyleCard: React.FC<StyleCardProps> = ({
+  style,
+  isSelected,
+  onClick,
+}) => {
   return (
     <motion.button
       type="button"
@@ -22,7 +26,10 @@ export const StyleCard: React.FC<StyleCardProps> = ({ style, isSelected, onClick
       animate={{
         y: isSelected ? -6 : 0,
       }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{
+        duration: 0.4,
+        ease: [0.16, 1, 0.3, 1],
+      }}
       aria-pressed={isSelected}
     >
       <div
@@ -34,39 +41,47 @@ export const StyleCard: React.FC<StyleCardProps> = ({ style, isSelected, onClick
         )}
       >
         <Image
-          src={style.thumbnailImage || "/images/styles/french-bob.jpg"}
+          src={style.thumbnailUrl || "/images/styles/french-bob.jpg"}
           alt={`Preview of ${style.name}`}
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           className={cn(
             "object-cover transition-transform duration-1000 ease-[0.16,1,0.3,1]",
-            isSelected ? "scale-105" : "group-hover:scale-105"
+            isSelected
+              ? "scale-105"
+              : "group-hover:scale-105"
           )}
         />
-        {/* Subtle overlay for unselected state to ensure selected items pop visually */}
+
         <div
           className={cn(
             "absolute inset-0 bg-brand-ink/0 transition-colors duration-500",
-            !isSelected && "group-hover:bg-brand-ink/5"
+            !isSelected &&
+              "group-hover:bg-brand-ink/5"
           )}
         />
       </div>
-      
+
       <div className="flex items-center justify-between px-1 w-full">
         <h3
           className={cn(
             "text-sm tracking-tight transition-colors duration-300",
-            isSelected ? "font-semibold text-brand-ink" : "font-medium text-brand-muted group-hover:text-brand-ink"
+            isSelected
+              ? "font-semibold text-brand-ink"
+              : "font-medium text-brand-muted group-hover:text-brand-ink"
           )}
         >
           {style.name}
         </h3>
-        
+
         {isSelected && (
           <motion.div
             layoutId="selection-indicator"
             className="w-1.5 h-1.5 rounded-full bg-brand-ink shrink-0"
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            transition={{
+              duration: 0.4,
+              ease: [0.16, 1, 0.3, 1],
+            }}
           />
         )}
       </div>

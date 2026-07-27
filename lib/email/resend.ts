@@ -1,11 +1,21 @@
 import { Resend } from "resend";
 
-const apiKey = process.env.RESEND_API_KEY;
+let resendInstance: Resend | null = null;
 
-if (!apiKey) {
-  throw new Error(
-    "Missing RESEND_API_KEY environment variable."
-  );
+export function getResendClient(): Resend {
+  if (resendInstance) {
+    return resendInstance;
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "Missing RESEND_API_KEY environment variable."
+    );
+  }
+
+  resendInstance = new Resend(apiKey);
+
+  return resendInstance;
 }
-
-export const resend = new Resend(apiKey);

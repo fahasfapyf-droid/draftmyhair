@@ -1,6 +1,6 @@
 import { ReactElement } from "react";
 
-import { resend } from "./resend";
+import { getResendClient } from "./resend";
 
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ??
@@ -17,6 +17,8 @@ export async function sendEmail({
   subject,
   react,
 }: SendEmailOptions) {
+  const resend = getResendClient();
+
   const { data, error } =
     await resend.emails.send({
       from: FROM_EMAIL,
@@ -28,9 +30,7 @@ export async function sendEmail({
   if (error) {
     console.error(error);
 
-    throw new Error(
-      "Unable to send email."
-    );
+    throw new Error("Unable to send email.");
   }
 
   return data;
