@@ -27,6 +27,7 @@ model User {
   generations         Generation[]
   payments            Payment[]
   sessions            Session[]
+  images              Image[]
   preference          UserPreference?
   wallet              Wallet?
   passwordResetTokens PasswordResetToken[]
@@ -179,6 +180,7 @@ model Generation {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   transactions        CreditTransaction[]
+  images              Image[]
   hairstyle           Hairstyle           @relation(fields: [hairstyleId], references: [id])
   payment             Payment?            @relation(fields: [paymentId], references: [id])
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -248,6 +250,40 @@ model Hairstyle {
   @@index([isActive])
 }
 
+model Image {
+  id               String      @id @default(cuid())
+
+  ownerId          String
+  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  generationId     String?
+  generation       Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  type             ImageType
+  status           ImageStatus @default(ACTIVE)
+
+  storageKey           String         @unique
+  blobUrl              String         @unique
+
+  originalFilename String?
+
+  mimeType         String
+  fileSize         Int
+
+  width            Int?
+  height           Int?
+
+  sha256         String?
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([ownerId])
+  @@index([generationId])
+  @@index([type])
+  @@index([status])
+}
+
 model Feedback {
   id                 String             @id @default(cuid())
   userId             String?
@@ -268,6 +304,17 @@ model Feedback {
   @@index([overallRating])
   @@index([decisionConfidence])
   @@index([createdAt])
+}
+
+enum ImageType {
+  ORIGINAL
+  GENERATED
+}
+
+enum ImageStatus {
+  ACTIVE
+  FAILED
+  DELETED
 }
 
 enum UserRole {
