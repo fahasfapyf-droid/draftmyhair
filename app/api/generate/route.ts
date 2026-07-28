@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { ImageType } from "@prisma/client";
 
+import { auth } from "@/auth";
 import { generatePreview } from "@/lib/engine";
+import { prisma } from "@/lib/prisma";
+import {
+  deleteFromStorage,
+  uploadBufferToStorage,
+} from "@/lib/storage";
+import type { StorageUploadResult } from "@/lib/storage";
 
 const MAX_UPLOAD_SIZE = 20 * 1024 * 1024; // 20 MB
 
@@ -12,11 +21,22 @@ const ALLOWED_MIME_TYPES = [
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized.",
+        },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
 
     const image = formData.get("image");
     const promptKey = formData.get("promptKey");
-    const userId = formData.get("userId");
 
     // ============================================================
     // Validate Request
@@ -65,6 +85,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (image.size === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Image is empty.",
+        },
+        { status: 400 }
+      );
+    }
+
     // ============================================================
     // Convert File -> Buffer
     // ============================================================
@@ -74,6 +104,64 @@ export async function POST(request: Request) {
     const imageBuffer = Buffer.from(arrayBuffer);
 
     // ============================================================
+    // Persist Original Image
+    // ============================================================
+
+    let uploadedImage: StorageUploadResult;
+
+    try {
+      uploadedImage = await uploadBufferToStorage({
+        buffer: imageBuffer,
+        ownerId: session.user.id,
+        folder: "originals",
+        filename: `${randomUUID()}-${image.name}`,
+        mimeType: image.type,
+      });
+    } catch (error) {
+      console.error("Original image upload failed:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to store the original image.",
+        },
+        { status: 502 }
+      );
+    }
+
+    try {
+      await prisma.image.create({
+        data: {
+          ownerId: session.user.id,
+          type: ImageType.ORIGINAL,
+          storageKey: uploadedImage.storageKey,
+          blobUrl: uploadedImage.blobUrl,
+          originalFilename: image.name || null,
+          mimeType: uploadedImage.mimeType,
+          fileSize: uploadedImage.fileSize,
+        },
+      });
+    } catch (error) {
+      console.error("Original image record creation failed:", error);
+
+      try {
+        await deleteFromStorage({
+          blobUrl: uploadedImage.blobUrl,
+        });
+      } catch (cleanupError) {
+        console.error("Original image cleanup failed:", cleanupError);
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to record the original image.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ============================================================
     // Execute Generation Pipeline
     // ============================================================
 
@@ -81,10 +169,7 @@ export async function POST(request: Request) {
       imageBuffer,
       mimeType: image.type,
       promptKey: promptKey.trim(),
-      userId:
-        typeof userId === "string"
-          ? userId
-          : undefined,
+      userId: session.user.id,
     });
 
     if (!result.success) {
