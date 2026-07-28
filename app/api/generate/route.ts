@@ -178,7 +178,13 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(result, {
+    const {
+      imageBuffer: _imageBuffer,
+      mimeType: _mimeType,
+      ...response
+    } = result;
+
+    return NextResponse.json(response, {
       status: 200,
     });
   } catch (error) {

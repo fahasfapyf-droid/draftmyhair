@@ -51,6 +51,16 @@ export interface GenerationResult {
   success: boolean;
 
   /**
+   * Generated image bytes for server-side persistence.
+   */
+  imageBuffer?: Buffer;
+
+  /**
+   * MIME type of the generated image.
+   */
+  mimeType?: string;
+
+  /**
    * Public URL of the generated image.
    *
    * This is produced AFTER the image has been

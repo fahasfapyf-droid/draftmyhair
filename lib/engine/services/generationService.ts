@@ -97,6 +97,8 @@ export async function generatePreview(
 
     return {
       success: true,
+      imageBuffer: providerResult.imageBuffer,
+      mimeType: providerResult.mimeType,
       imageUrl,
       generationId,
     };
