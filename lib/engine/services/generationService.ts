@@ -7,8 +7,9 @@ import {
 } from "../types";
 
 import { validateGenerationRequest } from "../validators/generationValidator";
+import { PROMPT_VERSION } from "../prompts/master";
+import { generateWithVertex } from "../providers/vertex";
 import { buildPrompt } from "./promptBuilder";
-import { generateWithGemini } from "../providers/gemini";
 
 /**
  * ============================================================
@@ -58,7 +59,7 @@ export async function generatePreview(
     // Step 4 — Generate Image
     // ============================================================
 
-    const providerResult = await generateWithGemini(providerRequest);
+    const providerResult = await generateWithVertex(providerRequest);
 
     if (!providerResult.success) {
       return {
@@ -71,6 +72,13 @@ export async function generatePreview(
       return {
         success: false,
         error: "Provider returned no image.",
+      };
+    }
+
+    if (!providerResult.provider || !providerResult.providerModel) {
+      return {
+        success: false,
+        error: "Provider returned incomplete metadata.",
       };
     }
 
@@ -97,6 +105,9 @@ export async function generatePreview(
 
     return {
       success: true,
+      promptVersion: PROMPT_VERSION,
+      provider: providerResult.provider,
+      providerModel: providerResult.providerModel,
       imageBuffer: providerResult.imageBuffer,
       mimeType: providerResult.mimeType,
       imageUrl,

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { ImageType } from "@prisma/client";
+import {
+  GenerationStatus,
+  ImageType,
+} from "@prisma/client";
 
 import { auth } from "@/auth";
 import { generatePreview } from "@/lib/engine";
@@ -95,6 +98,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedPromptKey = promptKey.trim();
+
+    const hairstyle = await prisma.hairstyle.findUnique({
+      where: {
+        promptKey: normalizedPromptKey,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!hairstyle) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Hairstyle not found.",
+        },
+        { status: 404 }
+      );
+    }
+
     // ============================================================
     // Convert File -> Buffer
     // ============================================================
@@ -129,8 +153,10 @@ export async function POST(request: Request) {
       );
     }
 
+    let originalImage: { id: string };
+
     try {
-      await prisma.image.create({
+      originalImage = await prisma.image.create({
         data: {
           ownerId: session.user.id,
           type: ImageType.ORIGINAL,
@@ -165,12 +191,16 @@ export async function POST(request: Request) {
     // Execute Generation Pipeline
     // ============================================================
 
+    const generationStartedAt = new Date();
+
     const result = await generatePreview({
       imageBuffer,
       mimeType: image.type,
-      promptKey: promptKey.trim(),
+      promptKey: normalizedPromptKey,
       userId: session.user.id,
     });
+
+    const generationCompletedAt = new Date();
 
     if (!result.success) {
       return NextResponse.json(result, {
@@ -178,15 +208,166 @@ export async function POST(request: Request) {
       });
     }
 
+    if (
+      !result.imageBuffer ||
+      !result.mimeType ||
+      !result.generationId ||
+      !result.imageUrl ||
+      !result.promptVersion ||
+      !result.provider ||
+      !result.providerModel
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generation returned incomplete image data.",
+        },
+        { status: 500 }
+      );
+    }
+
     const {
-      imageBuffer: _imageBuffer,
-      mimeType: _mimeType,
-      ...response
+      imageBuffer: generatedImageBuffer,
+      mimeType: generatedImageMimeType,
+      generationId: engineGenerationId,
+      imageUrl: engineImageUrl,
+      promptVersion,
+      provider,
+      providerModel,
     } = result;
 
-    return NextResponse.json(response, {
-      status: 200,
-    });
+    // ============================================================
+    // Persist Generated Image
+    // ============================================================
+
+    let uploadedGeneratedImage: StorageUploadResult;
+
+    try {
+      uploadedGeneratedImage = await uploadBufferToStorage({
+        buffer: generatedImageBuffer,
+        ownerId: session.user.id,
+        folder: "generated-images",
+        filename: engineGenerationId,
+        mimeType: generatedImageMimeType,
+      });
+    } catch (error) {
+      console.error("Generated image upload failed:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to store the generated image.",
+        },
+        { status: 502 }
+      );
+    }
+
+    let generatedImage: { id: string };
+
+    try {
+      generatedImage = await prisma.image.create({
+        data: {
+          ownerId: session.user.id,
+          type: ImageType.GENERATED,
+          storageKey: uploadedGeneratedImage.storageKey,
+          blobUrl: uploadedGeneratedImage.blobUrl,
+          mimeType: uploadedGeneratedImage.mimeType,
+          fileSize: uploadedGeneratedImage.fileSize,
+        },
+      });
+    } catch (error) {
+      console.error("Generated image record creation failed:", error);
+
+      try {
+        await deleteFromStorage({
+          blobUrl: uploadedGeneratedImage.blobUrl,
+        });
+      } catch (cleanupError) {
+        console.error("Generated image cleanup failed:", cleanupError);
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to record the generated image.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ============================================================
+    // Persist Generation and Link Images
+    // ============================================================
+
+    let generation: { id: string };
+
+    try {
+      generation = await prisma.$transaction(async (tx) => {
+        const createdGeneration = await tx.generation.create({
+          data: {
+            userId: session.user.id,
+            hairstyleId: hairstyle.id,
+            status: GenerationStatus.COMPLETED,
+            promptKey: normalizedPromptKey,
+            promptVersion,
+            provider,
+            providerModel,
+            inputImageUrl: uploadedImage.blobUrl,
+            outputImageUrl: uploadedGeneratedImage.blobUrl,
+            sourceStorageKey: uploadedImage.storageKey,
+            resultStorageKey: uploadedGeneratedImage.storageKey,
+            processingStartedAt: generationStartedAt,
+            completedAt: generationCompletedAt,
+            processingTimeMs:
+              generationCompletedAt.getTime() -
+              generationStartedAt.getTime(),
+          },
+        });
+
+        await tx.image.update({
+          where: {
+            id: originalImage.id,
+          },
+          data: {
+            generationId: createdGeneration.id,
+          },
+        });
+
+        await tx.image.update({
+          where: {
+            id: generatedImage.id,
+          },
+          data: {
+            generationId: createdGeneration.id,
+          },
+        });
+
+        return createdGeneration;
+      });
+    } catch (error) {
+      console.error("Generation persistence failed:", error);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to persist the generation.",
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+  {
+    success: true,
+    imageUrl: `/api/blob?pathname=${encodeURIComponent(
+      uploadedGeneratedImage.storageKey
+    )}`,
+    generationId: generation.id,
+  },
+  {
+    status: 200,
+  }
+);
   } catch (error) {
     console.error("Generation API Error:", error);
 

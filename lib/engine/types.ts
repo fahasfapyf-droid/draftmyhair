@@ -51,6 +51,21 @@ export interface GenerationResult {
   success: boolean;
 
   /**
+   * Version of the prompt used for generation.
+   */
+  promptVersion?: string;
+
+  /**
+   * Identifier of the provider used for generation.
+   */
+  provider?: string;
+
+  /**
+   * Model identifier used by the provider.
+   */
+  providerModel?: string;
+
+  /**
    * Generated image bytes for server-side persistence.
    */
   imageBuffer?: Buffer;
@@ -126,6 +141,16 @@ export interface ProviderGenerationRequest {
 
 export interface ProviderGenerationResult {
   success: boolean;
+
+  /**
+   * Identifier of the provider that produced the result.
+   */
+  provider?: string;
+
+  /**
+   * Model identifier used to produce the result.
+   */
+  providerModel?: string;
 
   /**
    * Raw generated image returned by Gemini.

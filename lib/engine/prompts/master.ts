@@ -11,6 +11,8 @@
  * the Prompt Builder.
  */
 
+export const PROMPT_VERSION = "1";
+
 export const MASTER_PROMPT = `
 # ROLE
 

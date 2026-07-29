@@ -13,10 +13,10 @@ export default function ResultContent() {
 
   const formattedStyle = session.selectedStyle?.name ?? "Your Hairstyle";
 
+
   return (
     <main className="min-h-screen bg-brand-canvas px-6 py-20">
       <div className="max-w-6xl mx-auto">
-
         {/* Heading */}
 
         <motion.div
@@ -38,7 +38,7 @@ export default function ResultContent() {
           </p>
         </motion.div>
 
-        {/* Preview Image */}
+        {/* Preview */}
 
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
@@ -51,33 +51,29 @@ export default function ResultContent() {
           className="max-w-2xl mx-auto rounded-editorial overflow-hidden border border-brand-border bg-brand-surface shadow-editorial"
         >
           <div className="aspect-[3/4] bg-brand-border/15">
+            {session.generatedImageUrl ? (
+              <img
+                src={session.generatedImageUrl}
+                alt={formattedStyle}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full min-h-[720px] items-center justify-center px-10 text-center">
+                <div>
+                  <h2 className="text-3xl font-semibold text-brand-ink mb-4">
+                    {formattedStyle}
+                  </h2>
 
-  {session.generatedImageUrl ? (
-    <img
-      src={session.generatedImageUrl}
-      alt={formattedStyle}
-      className="w-full h-full object-cover"
-    />
-  ) : (
-    <div className="flex h-full min-h-[720px] items-center justify-center px-10 text-center">
-
-      <div>
-        <h2 className="text-3xl font-semibold text-brand-ink mb-4">
-          {formattedStyle}
-        </h2>
-
-        <p className="text-brand-muted leading-relaxed">
-          No generated preview is available.
-        </p>
-      </div>
-
-    </div>
-  )}
-
-</div>
+                  <p className="text-brand-muted leading-relaxed">
+                    No generated preview is available.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </motion.div>
 
-        {/* Download Button */}
+        {/* Download */}
 
         <motion.div
           initial={{ opacity: 0 }}
@@ -89,19 +85,19 @@ export default function ResultContent() {
           className="mt-12 flex justify-center"
         >
           <Button
-  variant="primary"
-  size="lg"
-  disabled={!session.generatedImageUrl}
-  className="min-w-[280px]"
->
-  <Download className="mr-2 h-5 w-5" />
-  Download Image (Coming Soon)
-</Button>
+            variant="primary"
+            size="lg"
+            disabled={!session.generatedImageUrl}
+            className="min-w-[280px]"
+          >
+            <Download className="mr-2 h-5 w-5" />
+            Download Image (Coming Soon)
+          </Button>
         </motion.div>
 
         <FeedbackForm hairstyleId={session.selectedStyle?.id ?? null} />
 
-        {/* Secondary Actions */}
+        {/* Actions */}
 
         <motion.div
           initial={{ opacity: 0 }}
@@ -128,7 +124,6 @@ export default function ResultContent() {
             Upload New Photo
           </Link>
         </motion.div>
-
       </div>
     </main>
   );
