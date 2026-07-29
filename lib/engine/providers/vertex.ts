@@ -5,16 +5,41 @@ import {
   ProviderGenerationResult,
 } from "../types";
 
-const ai = new GoogleGenAI({
-  vertexai: true,
-  project: process.env.GOOGLE_CLOUD_PROJECT_ID!,
-  location: process.env.GOOGLE_CLOUD_LOCATION!,
-});
+/**
+ * Lazily create the Vertex AI client.
+ * This prevents initialization during module import,
+ * which can break Next.js builds when credentials are
+ * unavailable at build time.
+ */
+function getVertexClient(): GoogleGenAI {
+  const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
+  const location = process.env.GOOGLE_CLOUD_LOCATION;
+
+  if (!project) {
+    throw new Error(
+      "Missing environment variable: GOOGLE_CLOUD_PROJECT_ID"
+    );
+  }
+
+  if (!location) {
+    throw new Error(
+      "Missing environment variable: GOOGLE_CLOUD_LOCATION"
+    );
+  }
+
+  return new GoogleGenAI({
+    vertexai: true,
+    project,
+    location,
+  });
+}
 
 export async function generateWithVertex(
   request: ProviderGenerationRequest
 ): Promise<ProviderGenerationResult> {
   try {
+    const ai = getVertexClient();
+
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-image",
       contents: [
@@ -38,9 +63,10 @@ export async function generateWithVertex(
       },
     });
 
-    const imagePart = response.candidates?.[0]?.content?.parts?.find(
-      (part: any) => part.inlineData
-    );
+    const imagePart =
+      response.candidates?.[0]?.content?.parts?.find(
+        (part: any) => part.inlineData
+      );
 
     if (!imagePart?.inlineData?.data) {
       return {
@@ -52,8 +78,11 @@ export async function generateWithVertex(
     return {
       success: true,
       provider: "vertex",
-      providerModel: "gemini-3-pro-image-preview",
-      imageBuffer: Buffer.from(imagePart.inlineData.data, "base64"),
+      providerModel: "gemini-3-pro-image",
+      imageBuffer: Buffer.from(
+        imagePart.inlineData.data,
+        "base64"
+      ),
       mimeType: imagePart.inlineData.mimeType ?? "image/png",
     };
   } catch (error) {
@@ -62,7 +91,9 @@ export async function generateWithVertex(
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : "Vertex AI request failed.",
+        error instanceof Error
+          ? error.message
+          : "Vertex AI request failed.",
     };
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 import { GenerationStatus } from "./GenerationStatus";
@@ -8,6 +8,8 @@ import { useGenerationSession } from "@/lib/context/GenerationSession";
 
 export default function PreviewContent() {
   const router = useRouter();
+
+  const hasStartedGeneration = useRef(false);
 
   const {
     session,
@@ -27,12 +29,16 @@ export default function PreviewContent() {
       return;
     }
 
-    const uploadedFile = session.uploadedFile;
-    const selectedStyle = session.selectedStyle;
-
-    if (session.generationStatus === "generating") {
+    // Prevent duplicate generation caused by React Strict Mode
+    // or component remounts during development.
+    if (hasStartedGeneration.current) {
       return;
     }
+
+    hasStartedGeneration.current = true;
+
+    const uploadedFile = session.uploadedFile;
+    const selectedStyle = session.selectedStyle;
 
     async function generate() {
       setGenerationStatus("generating");
@@ -66,6 +72,8 @@ export default function PreviewContent() {
 
         router.push("/result");
       } catch (error) {
+        hasStartedGeneration.current = false;
+
         setGenerationFailed(
           error instanceof Error
             ? error.message
@@ -79,7 +87,6 @@ export default function PreviewContent() {
     router,
     session.uploadedFile,
     session.selectedStyle,
-    session.generationStatus,
     setGenerationStatus,
     setGenerationResult,
     setGenerationFailed,
@@ -98,7 +105,8 @@ export default function PreviewContent() {
 
         <p className="text-lg text-brand-muted max-w-xl mx-auto leading-relaxed">
           Creating a{" "}
-          <strong>{session.selectedStyle?.name ?? "selected"}</strong> hairstyle preview.
+          <strong>{session.selectedStyle?.name ?? "selected"}</strong>{" "}
+          hairstyle preview.
           <br />
           Only your hairstyle is changing.
           <br />
