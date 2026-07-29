@@ -14,6 +14,8 @@ import {
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
   const location = process.env.GOOGLE_CLOUD_LOCATION;
+  const serviceAccountJson =
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
   if (!project) {
     throw new Error(
@@ -27,10 +29,29 @@ function getVertexClient(): GoogleGenAI {
     );
   }
 
+  if (!serviceAccountJson) {
+    throw new Error(
+      "Missing environment variable: GOOGLE_SERVICE_ACCOUNT_JSON"
+    );
+  }
+
+  let credentials: Record<string, unknown>;
+
+  try {
+    credentials = JSON.parse(serviceAccountJson);
+  } catch {
+    throw new Error(
+      "GOOGLE_SERVICE_ACCOUNT_JSON contains invalid JSON."
+    );
+  }
+
   return new GoogleGenAI({
     vertexai: true,
     project,
     location,
+    googleAuthOptions: {
+      credentials,
+    },
   });
 }
 
@@ -86,7 +107,16 @@ export async function generateWithVertex(
       mimeType: imagePart.inlineData.mimeType ?? "image/png",
     };
   } catch (error) {
-    console.error("Vertex Provider Error:", error);
+    console.error("========== VERTEX ERROR ==========");
+    console.error(error);
+
+    if (error instanceof Error) {
+      console.error("Name:", error.name);
+      console.error("Message:", error.message);
+      console.error("Stack:", error.stack);
+    }
+
+    console.error("==================================");
 
     return {
       success: false,
