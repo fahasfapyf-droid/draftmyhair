@@ -202,11 +202,35 @@ export async function POST(request: Request) {
 
     const generationCompletedAt = new Date();
 
-    if (!result.success) {
-      return NextResponse.json(result, {
-        status: 400,
-      });
-    }
+if (!result.success) {
+  try {
+    await prisma.image.delete({
+      where: {
+        id: originalImage.id,
+      },
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete original image record:",
+      cleanupError
+    );
+  }
+
+  try {
+    await deleteFromStorage({
+      blobUrl: uploadedImage.blobUrl,
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete original blob:",
+      cleanupError
+    );
+  }
+
+  return NextResponse.json(result, {
+    status: 400,
+  });
+}
 
     if (
       !result.imageBuffer ||
@@ -345,16 +369,66 @@ export async function POST(request: Request) {
         return createdGeneration;
       });
     } catch (error) {
-      console.error("Generation persistence failed:", error);
+  console.error("Generation persistence failed:", error);
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to persist the generation.",
-        },
-        { status: 500 }
-      );
+  try {
+    await prisma.image.delete({
+      where: {
+        id: generatedImage.id,
+      },
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete generated image record:",
+      cleanupError
+    );
+  }
+
+  try {
+    await prisma.image.delete({
+      where: {
+        id: originalImage.id,
+      },
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete original image record:",
+      cleanupError
+    );
+  }
+
+  try {
+    await deleteFromStorage({
+      blobUrl: uploadedGeneratedImage.blobUrl,
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete generated blob:",
+      cleanupError
+    );
+  }
+
+  try {
+    await deleteFromStorage({
+      blobUrl: uploadedImage.blobUrl,
+    });
+  } catch (cleanupError) {
+    console.error(
+      "Failed to delete original blob:",
+      cleanupError
+    );
+  }
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Unable to persist the generation.",
+    },
+    {
+      status: 500,
     }
+  );
+}
 
     return NextResponse.json(
   {
