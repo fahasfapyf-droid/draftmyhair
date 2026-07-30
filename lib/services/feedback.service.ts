@@ -87,11 +87,12 @@ export function validateFeedbackInput(
   }
 
   if (!isRating(identityRating)) {
-    if (!isRating(realismRating)) {
+  errors.push("identityRating must be an integer from 1 to 5.");
+}
+
+if (!isRating(realismRating)) {
   errors.push("realismRating must be an integer from 1 to 5.");
 }
-    errors.push("identityRating must be an integer from 1 to 5.");
-  }
 
   if (
     typeof decisionConfidence !== "string" ||

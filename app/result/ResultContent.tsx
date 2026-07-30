@@ -86,25 +86,32 @@ export default function ResultContent({
 
         {/* Download */}
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{
-            duration: 0.5,
-            delay: 1.1,
-          }}
-          className="mt-12 flex justify-center"
-        >
-          <Button
-            variant="primary"
-            size="lg"
-            disabled={!generation.imageUrl}
-            className="min-w-[280px]"
-          >
-            <Download className="mr-2 h-5 w-5" />
-            Download Image (Coming Soon)
-          </Button>
-        </motion.div>
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{
+    duration: 0.5,
+    delay: 1.1,
+  }}
+  className="mt-12 flex justify-center"
+>
+  <Button
+    asChild
+    variant="primary"
+    size="lg"
+    className="min-w-[280px]"
+  >
+    <a
+      href={generation.imageUrl}
+      download
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <Download className="mr-2 h-5 w-5" />
+      Download Image
+    </a>
+  </Button>
+</motion.div>
 
         <FeedbackForm hairstyleId={generation.hairstyle.id} />
 

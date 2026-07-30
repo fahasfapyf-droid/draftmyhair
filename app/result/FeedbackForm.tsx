@@ -9,24 +9,61 @@ import { cn } from "@/lib/utils";
 const RATING_VALUES = [1, 2, 3, 4, 5] as const;
 
 const DECISION_OPTIONS = [
-  { value: "YES", label: "Yes" },
-  { value: "MAYBE", label: "Maybe" },
-  { value: "NO", label: "No" },
+  {
+    value: "DEFINITELY_YES",
+    label: "Definitely Yes",
+  },
+  {
+    value: "PROBABLY_YES",
+    label: "Probably Yes",
+  },
+  {
+    value: "UNSURE",
+    label: "Unsure",
+  },
+  {
+    value: "PROBABLY_NOT",
+    label: "Probably Not",
+  },
+  {
+    value: "DEFINITELY_NOT",
+    label: "Definitely Not",
+  },
 ] as const;
 
 const ISSUE_OPTIONS = [
-  { value: "IDENTITY", label: "Doesn't look like me" },
-  { value: "WRONG_STYLE", label: "Style doesn't match expectations" },
-  { value: "TOO_LONG", label: "Hair is too long" },
-  { value: "TOO_SHORT", label: "Hair is too short" },
-  { value: "WRONG_COLOR", label: "Hair colour is inaccurate" },
-  { value: "ARTIFICIAL_TEXTURE", label: "Texture looks unrealistic" },
-  { value: "HAIR_DENSITY", label: "Hair density looks unnatural" },
-  { value: "HAIRLINE", label: "Hairline or scalp looks unnatural" },
-  { value: "NOT_REALISTIC", label: "The result does not look realistic" },
-  { value: "LIGHTING", label: "Lighting changed" },
-  { value: "BACKGROUND", label: "Background changed" },
-  { value: "OTHER", label: "Other" },
+  {
+    value: "IDENTITY_DRIFT",
+    label: "Doesn't look like me",
+  },
+  {
+    value: "HAIRLINE",
+    label: "Hairline or scalp looks unnatural",
+  },
+  {
+    value: "HAIR_COLOR",
+    label: "Hair colour is inaccurate",
+  },
+  {
+    value: "TEXTURE",
+    label: "Hair texture looks unrealistic",
+  },
+  {
+    value: "BLENDING",
+    label: "Hair blending looks unrealistic",
+  },
+  {
+    value: "LIGHTING",
+    label: "Lighting changed",
+  },
+  {
+    value: "BACKGROUND",
+    label: "Background changed",
+  },
+  {
+    value: "OTHER",
+    label: "Other",
+  },
 ] as const;
 
 type DecisionConfidence = (typeof DECISION_OPTIONS)[number]["value"];
@@ -78,6 +115,7 @@ function RatingInput({ label, value, onChange }: RatingInputProps) {
 export function FeedbackForm({ hairstyleId }: { hairstyleId: string | null }) {
   const [overallRating, setOverallRating] = useState<number | null>(null);
   const [identityRating, setIdentityRating] = useState<number | null>(null);
+  const [realismRating, setRealismRating] = useState<number | null>(null);
   const [decisionConfidence, setDecisionConfidence] =
     useState<DecisionConfidence | null>(null);
   const [issues, setIssues] = useState<FeedbackIssue[]>([]);
@@ -88,12 +126,13 @@ export function FeedbackForm({ hairstyleId }: { hairstyleId: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const submissionLockRef = useRef(false);
 
-  const canSubmit =
-    Boolean(hairstyleId) &&
-    overallRating !== null &&
-    identityRating !== null &&
-    decisionConfidence !== null &&
-    !isSubmitting;
+const canSubmit =
+  Boolean(hairstyleId) &&
+  overallRating !== null &&
+  identityRating !== null &&
+  realismRating !== null &&
+  decisionConfidence !== null &&
+  !isSubmitting;
 
   const toggleIssue = (issue: FeedbackIssue) => {
     setIssues((currentIssues) =>
@@ -127,13 +166,14 @@ export function FeedbackForm({ hairstyleId }: { hairstyleId: string | null }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          hairstyleId,
-          overallRating,
-          identityRating,
-          decisionConfidence,
-          issues,
-          comment,
-        }),
+  hairstyleId,
+  overallRating,
+  identityRating,
+  realismRating,
+  decisionConfidence,
+  issues,
+  comment,
+}),
       });
 
       const responseBody = (await response
@@ -223,6 +263,11 @@ export function FeedbackForm({ hairstyleId }: { hairstyleId: string | null }) {
           value={identityRating}
           onChange={setIdentityRating}
         />
+        <RatingInput
+  label="How realistic does this hairstyle look?"
+  value={realismRating}
+  onChange={setRealismRating}
+/>
 
         <fieldset>
           <legend className="text-base font-medium text-brand-ink">
