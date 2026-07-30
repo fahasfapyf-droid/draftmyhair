@@ -1,17 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useGenerationSession } from "@/lib/context/GenerationSession";
 import { motion } from "framer-motion";
 import { Download, RefreshCcw, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FeedbackForm } from "./FeedbackForm";
 
-export default function ResultContent() {
-  const { session } = useGenerationSession();
+export interface ResultGeneration {
+  imageUrl: string;
+  hairstyle: {
+    id: string;
+    name: string;
+  };
+}
 
-  const formattedStyle = session.selectedStyle?.name ?? "Your Hairstyle";
+interface ResultContentProps {
+  generation: ResultGeneration;
+}
+
+export default function ResultContent({
+  generation,
+}: ResultContentProps) {
+  const formattedStyle = generation.hairstyle.name;
 
 
   return (
@@ -51,9 +62,9 @@ export default function ResultContent() {
           className="max-w-2xl mx-auto rounded-editorial overflow-hidden border border-brand-border bg-brand-surface shadow-editorial"
         >
           <div className="aspect-[3/4] bg-brand-border/15">
-            {session.generatedImageUrl ? (
+            {generation.imageUrl ? (
               <img
-                src={session.generatedImageUrl}
+                src={generation.imageUrl}
                 alt={formattedStyle}
                 className="w-full h-full object-cover"
               />
@@ -87,7 +98,7 @@ export default function ResultContent() {
           <Button
             variant="primary"
             size="lg"
-            disabled={!session.generatedImageUrl}
+            disabled={!generation.imageUrl}
             className="min-w-[280px]"
           >
             <Download className="mr-2 h-5 w-5" />
@@ -95,7 +106,7 @@ export default function ResultContent() {
           </Button>
         </motion.div>
 
-        <FeedbackForm hairstyleId={session.selectedStyle?.id ?? null} />
+        <FeedbackForm hairstyleId={generation.hairstyle.id} />
 
         {/* Actions */}
 

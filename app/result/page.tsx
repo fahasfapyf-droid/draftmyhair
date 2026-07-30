@@ -1,5 +1,9 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
 import ResultContent from "./ResultContent";
 import { createPageMetadata } from "../metadata";
 
@@ -10,18 +14,56 @@ export const metadata: Metadata = createPageMetadata({
   path: "/result",
 });
 
-export default function ResultPage() {
+interface ResultPageProps {
+  searchParams: Promise<{
+    generationId?: string | string[];
+  }>;
+}
+
+export default async function ResultPage({
+  searchParams,
+}: ResultPageProps) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const { generationId } = await searchParams;
+
+  if (typeof generationId !== "string" || !generationId) {
+    notFound();
+  }
+
+  const generation = await prisma.generation
+    .findFirst({
+      where: {
+        id: generationId,
+        userId: session.user.id,
+      },
+      select: {
+        outputImageUrl: true,
+        resultStorageKey: true,
+        hairstyle: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    })
+    .catch(() => notFound());
+
+  if (!generation?.outputImageUrl || !generation.resultStorageKey) {
+    notFound();
+  }
+
   return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-brand-canvas flex items-center justify-center">
-          <p className="text-brand-muted text-lg">
-            Loading preview...
-          </p>
-        </main>
-      }
-    >
-      <ResultContent />
-    </Suspense>
+    <ResultContent
+      generation={{
+        imageUrl: `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`,
+        hairstyle: generation.hairstyle,
+      }}
+    />
   );
 }

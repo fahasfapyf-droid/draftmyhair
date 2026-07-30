@@ -14,7 +14,6 @@ export default function PreviewContent() {
   const {
     session,
     setGenerationStatus,
-    setGenerationResult,
     setGenerationFailed,
   } = useGenerationSession();
 
@@ -65,12 +64,9 @@ export default function PreviewContent() {
           );
         }
 
-        setGenerationResult(
-          result.imageUrl,
-          result.generationId
+        router.push(
+          `/result?generationId=${result.generationId}`
         );
-
-        router.push("/result");
       } catch (error) {
         hasStartedGeneration.current = false;
 
@@ -88,7 +84,6 @@ export default function PreviewContent() {
     session.uploadedFile,
     session.selectedStyle,
     setGenerationStatus,
-    setGenerationResult,
     setGenerationFailed,
   ]);
 

@@ -24,9 +24,6 @@ export interface GenerationSessionData {
   uploadedFile: File | null;
   uploadedPreview: string | null;
   selectedStyle: SelectedHairstyle | null;
-
-  generatedImageUrl: string | null;
-  generationId: string | null;
   generationStatus: GenerationStatus;
   generationError: string | null;
 }
@@ -45,11 +42,6 @@ interface GenerationSessionContextType {
 
   setGenerationStatus: (
     status: GenerationStatus
-  ) => void;
-
-  setGenerationResult: (
-    imageUrl: string,
-    generationId: string
   ) => void;
 
   setGenerationFailed: (
@@ -78,12 +70,6 @@ export function GenerationSessionProvider({
   const [selectedStyle, setSelectedStyleState] =
     useState<SelectedHairstyle | null>(null);
 
-  const [generatedImageUrl, setGeneratedImageUrl] =
-    useState<string | null>(null);
-
-  const [generationId, setGenerationId] =
-    useState<string | null>(null);
-
   const [generationStatus, setGenerationStatusState] =
     useState<GenerationStatus>("idle");
 
@@ -110,16 +96,6 @@ export function GenerationSessionProvider({
     setGenerationStatusState(status);
   }
 
-  function setGenerationResult(
-    imageUrl: string,
-    id: string
-  ) {
-    setGeneratedImageUrl(imageUrl);
-    setGenerationId(id);
-    setGenerationStatusState("success");
-    setGenerationError(null);
-  }
-
   function setGenerationFailed(
     error: string
   ) {
@@ -128,8 +104,6 @@ export function GenerationSessionProvider({
   }
 
   function clearGenerationResult() {
-    setGeneratedImageUrl(null);
-    setGenerationId(null);
     setGenerationStatusState("idle");
     setGenerationError(null);
   }
@@ -148,9 +122,6 @@ export function GenerationSessionProvider({
         uploadedFile,
         uploadedPreview,
         selectedStyle,
-
-        generatedImageUrl,
-        generationId,
         generationStatus,
         generationError,
       },
@@ -159,7 +130,6 @@ export function GenerationSessionProvider({
       setSelectedStyle,
 
       setGenerationStatus,
-      setGenerationResult,
       setGenerationFailed,
       clearGenerationResult,
 
@@ -169,9 +139,6 @@ export function GenerationSessionProvider({
       uploadedFile,
       uploadedPreview,
       selectedStyle,
-
-      generatedImageUrl,
-      generationId,
       generationStatus,
       generationError,
     ]
