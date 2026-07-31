@@ -1,9 +1,12 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { CreditBalanceCard } from "@/components/dashboard/CreditBalanceCard";
+import { DashboardAnalyticsCard } from "@/components/dashboard/DashboardAnalyticsCard";
+import { GenerationCard } from "@/components/dashboard/GenerationCard";
 import { getUserGenerations } from "@/lib/services/generation.service";
+import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -19,7 +22,7 @@ export default async function DashboardPage() {
       title="Overview"
       description="Manage your Draft My Hair account."
     >
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Account */}
         <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-brand-ink">
@@ -59,8 +62,18 @@ export default async function DashboardPage() {
           </div>
         </div>
 
+        {/* Credit Balance */}
+        <CreditBalanceCard userId={session.user.id} />
+
+        {/* Dashboard Analytics */}
+        <QuickActionsCard />
+
+<DashboardAnalyticsCard
+  userId={session.user.id}
+/>
+
         {/* Generation History */}
-        <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
+        <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm lg:col-span-3">
           <h2 className="text-lg font-semibold text-brand-ink">
             Generation History
           </h2>
@@ -74,49 +87,10 @@ export default async function DashboardPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {generations.map((generation) => (
-                <Link
+                <GenerationCard
                   key={generation.id}
-                  href={`/dashboard/generations/${generation.id}`}
-                  className="block rounded border border-brand-border p-4 transition-colors hover:border-brand-ink"
-                >
-                  <div className="flex items-center justify-between gap-4">
-  <div className="flex items-center gap-4">
-    <div className="relative h-16 w-16 overflow-hidden rounded border border-brand-border bg-brand-canvas">
-      {generation.outputImageUrl ? (
-        <img
-  src={generation.outputImageUrl}
-  alt={generation.hairstyle.name}
-  className="h-full w-full object-cover"
-/>
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-xs text-brand-muted">
-          Pending
-        </div>
-      )}
-    </div>
-
-    <div>
-      <p className="font-medium text-brand-ink">
-        {generation.hairstyle.name}
-      </p>
-
-      <p className="mt-1 text-sm text-brand-muted">
-        {generation.status}
-      </p>
-    </div>
-  </div>
-
-  <div className="text-right">
-    <p className="text-sm text-brand-muted">
-      {generation.createdAt.toLocaleDateString()}
-    </p>
-
-    <p className="mt-1 text-sm font-medium text-brand-ink">
-      View →
-    </p>
-  </div>
-</div>
-                </Link>
+                  generation={generation}
+                />
               ))}
             </div>
           )}

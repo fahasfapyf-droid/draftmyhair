@@ -9,6 +9,10 @@ import { auth } from "@/auth";
 import { generatePreview } from "@/lib/engine";
 import { prisma } from "@/lib/prisma";
 import {
+  consumeCredits,
+  refundCredits,
+} from "@/lib/services/credit.service";
+import {
   deleteFromStorage,
   uploadBufferToStorage,
 } from "@/lib/storage";
@@ -23,8 +27,31 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 export async function POST(request: Request) {
+  let creditsConsumed = false;
+
   try {
     const session = await auth();
+    const refundIfNeeded = async (
+  description: string
+) => {
+  if (!creditsConsumed || !session?.user?.id) {
+    return;
+  }
+
+  try {
+    await refundCredits({
+      userId: session.user.id,
+      description,
+    });
+
+    creditsConsumed = false;
+  } catch (error) {
+    console.error(
+      "Failed to refund credits:",
+      error
+    );
+  }
+};
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -35,6 +62,28 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+    try {
+  await consumeCredits({
+    userId: session.user.id,
+    amount: 1,
+    description: "AI hairstyle generation",
+  });
+
+  creditsConsumed = true;
+} catch (error) {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to consume credits.",
+    },
+    {
+      status: 402,
+    }
+  );
+}
 
     const formData = await request.formData();
 
@@ -203,6 +252,7 @@ export async function POST(request: Request) {
     const generationCompletedAt = new Date();
 
 if (!result.success) {
+ await refundIfNeeded("Generation failed");
   try {
     await prisma.image.delete({
       where: {
@@ -240,8 +290,10 @@ if (!result.success) {
       !result.promptVersion ||
       !result.provider ||
       !result.providerModel
-    ) {
-      return NextResponse.json(
+    ){
+await refundIfNeeded(
+  "Generation returned incomplete image data"
+);      return NextResponse.json(
         {
           success: false,
           error: "Generation returned incomplete image data.",
@@ -276,6 +328,9 @@ if (!result.success) {
       });
     } catch (error) {
       console.error("Generated image upload failed:", error);
+      await refundIfNeeded(
+  "Generated image upload failed"
+);
 
       return NextResponse.json(
         {
@@ -301,6 +356,9 @@ if (!result.success) {
       });
     } catch (error) {
       console.error("Generated image record creation failed:", error);
+      await refundIfNeeded(
+  "Generated image record creation failed"
+);
 
       try {
         await deleteFromStorage({
@@ -370,7 +428,9 @@ if (!result.success) {
       });
     } catch (error) {
   console.error("Generation persistence failed:", error);
-
+await refundIfNeeded(
+  "Generation persistence failed"
+);
   try {
     await prisma.image.delete({
       where: {
@@ -444,6 +504,7 @@ if (!result.success) {
 );
   } catch (error) {
     console.error("Generation API Error:", error);
+    
 
     return NextResponse.json(
       {

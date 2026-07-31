@@ -2,6 +2,12 @@ import argon2 from "argon2";
 
 import { createEmailVerification } from "@/lib/auth/email-verification";
 import { prisma } from "@/lib/prisma";
+import {
+  awardCredits,
+} from "@/lib/services/credit.service";
+import {
+  WalletTransactionType,
+} from "@prisma/client";
 
 export async function registerUser(
   name: string,
@@ -32,6 +38,12 @@ export async function registerUser(
       },
     },
   });
+  await awardCredits({
+  userId: user.id,
+  amount: 5, // Welcome credits
+  type: WalletTransactionType.BONUS,
+  description: "Welcome bonus",
+});
 
   await createEmailVerification(
     user.id,

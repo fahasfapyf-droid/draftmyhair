@@ -40,7 +40,7 @@ const navigation = [
     title: "Payments",
     href: "/dashboard/payments",
     icon: CreditCard,
-    available: false,
+    available: true,
   },
   {
     title: "Settings",
@@ -69,24 +69,18 @@ export function DashboardSidebar() {
         {navigation.map((item) => {
           const Icon = item.icon;
 
-          const active =
-            pathname === item.href;
+          const active = pathname === item.href;
 
           return (
             <Link
               key={item.href}
-              href={
-                item.available
-                  ? item.href
-                  : "#"
-              }
+              href={item.available ? item.href : "#"}
               className={[
                 "flex items-center justify-between rounded-editorial border px-4 py-3 transition-all duration-200",
                 active
                   ? "border-brand-ink bg-brand-ink text-white"
                   : "border-transparent text-brand-muted hover:border-brand-border hover:bg-brand-canvas hover:text-brand-ink",
-                !item.available &&
-                  "cursor-default opacity-70",
+                !item.available && "cursor-default opacity-70",
               ].join(" ")}
             >
               <div className="flex items-center gap-3">
