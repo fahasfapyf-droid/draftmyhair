@@ -15,8 +15,8 @@ export default async function PaymentsPage() {
 
   return (
     <DashboardLayout
-      title="Payment History"
-      description="View your wallet activity and credit transactions."
+      title="Wallet"
+description="View your credit balance and wallet activity."
     >
       <div className="rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
         {transactions.length === 0 ? (
@@ -76,15 +76,15 @@ export default async function PaymentsPage() {
                     </td>
 
                     <td
-                      className={`px-6 py-4 text-right text-sm font-semibold ${
-                        transaction.amount >= 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {transaction.amount > 0 ? "+" : ""}
-                      {transaction.amount}
-                    </td>
+  className={`px-6 py-4 text-right text-sm font-semibold ${
+    transaction.type === "DEBIT"
+      ? "text-red-600"
+      : "text-green-600"
+  }`}
+>
+  {transaction.type === "DEBIT" ? "-" : "+"}
+  {transaction.amount}
+</td>
 
                     <td className="px-6 py-4 text-right text-sm font-medium text-brand-ink">
                       {transaction.balanceAfter}

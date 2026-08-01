@@ -1,0 +1,28 @@
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { AdminHome } from "@/components/dashboard/admin/AdminHome";
+import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
+
+export default async function AdminDashboardPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  if (session.user.role !== "ADMIN") {
+    redirect("/dashboard");
+  }
+
+  return (
+    <DashboardLayout
+  title="Admin Dashboard"
+  description="Manage Draft My Hair administration."
+  sidebar={<AdminSidebar />}
+    >
+      <AdminHome />
+    </DashboardLayout>
+  );
+}

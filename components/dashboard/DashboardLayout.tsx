@@ -7,16 +7,18 @@ interface DashboardLayoutProps {
   title: string;
   description?: string;
   children: ReactNode;
+  sidebar?: ReactNode;
 }
 
 export function DashboardLayout({
   title,
   description,
   children,
+  sidebar,
 }: DashboardLayoutProps) {
   return (
     <main className="mx-auto flex max-w-7xl gap-8 px-6 py-10">
-      <DashboardSidebar />
+      {sidebar ?? <DashboardSidebar />}
 
       <section className="min-w-0 flex-1">
         <DashboardHeader
