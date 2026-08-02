@@ -1,9 +1,44 @@
+import { ContactStatus, Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 
-export async function getContactMessages() {
-  return prisma.contactMessage.findMany({
+const CONTACT_MESSAGES_PAGE_SIZE = 20;
+
+type ContactMessagesOptions = {
+  page: number;
+  search?: string;
+  status?: ContactStatus;
+};
+
+export async function getContactMessages({
+  page,
+  search,
+  status,
+}: ContactMessagesOptions) {
+  const where: Prisma.ContactMessageWhereInput = {
+    ...(status ? { status } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { subject: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const messages = await prisma.contactMessage.findMany({
+    where,
     orderBy: {
       createdAt: "desc",
     },
+    skip: (page - 1) * CONTACT_MESSAGES_PAGE_SIZE,
+    take: CONTACT_MESSAGES_PAGE_SIZE + 1,
   });
+
+  return {
+    messages: messages.slice(0, CONTACT_MESSAGES_PAGE_SIZE),
+    hasNextPage: messages.length > CONTACT_MESSAGES_PAGE_SIZE,
+  };
 }
