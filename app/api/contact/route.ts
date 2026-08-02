@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { checkContactRateLimit } from "@/lib/security/contact-rate-limit";
 
 const ContactSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -13,8 +14,40 @@ const ContactSchema = z.object({
   website: z.string().optional(),
 });
 
+function getClientIpAddress(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+
+  if (forwardedFor) {
+    const ipAddress = forwardedFor.split(",")[0]?.trim();
+
+    if (ipAddress) {
+      return ipAddress;
+    }
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
 export async function POST(request: Request) {
   try {
+    const ipAddress = getClientIpAddress(request);
+    const rateLimit = checkContactRateLimit(ipAddress);
+
+    if (rateLimit.limited) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many contact form submissions. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+          },
+        }
+      );
+    }
+
     const body = await request.json();
 
     const result = ContactSchema.safeParse(body);
@@ -55,8 +88,7 @@ export async function POST(request: Request) {
         email,
         subject,
         message,
-        ipAddress:
-          request.headers.get("x-forwarded-for") ?? null,
+        ipAddress: ipAddress === "unknown" ? null : ipAddress,
         userAgent:
           request.headers.get("user-agent") ?? null,
       },
