@@ -5,6 +5,9 @@ import {
   ProviderGenerationResult,
 } from "../types";
 
+export const VERTEX_PROVIDER = "vertex";
+export const VERTEX_MODEL = "gemini-3-pro-image";
+
 /**
  * Lazily create the Vertex AI client.
  * This prevents initialization during module import,
@@ -62,7 +65,7 @@ export async function generateWithVertex(
     const ai = getVertexClient();
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-image",
+      model: VERTEX_MODEL,
       contents: [
         {
           role: "user",
@@ -98,8 +101,8 @@ export async function generateWithVertex(
 
     return {
       success: true,
-      provider: "vertex",
-      providerModel: "gemini-3-pro-image",
+      provider: VERTEX_PROVIDER,
+      providerModel: VERTEX_MODEL,
       imageBuffer: Buffer.from(
         imagePart.inlineData.data,
         "base64"

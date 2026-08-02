@@ -1,4 +1,7 @@
-export { generatePreview } from "./services/generationService";
+export {
+  generatePreview,
+  getGenerationMetadata,
+} from "./services/generationService";
 
 export type {
   GenerateRequestDTO,

@@ -8,7 +8,11 @@ import {
 
 import { validateGenerationRequest } from "../validators/generationValidator";
 import { PROMPT_VERSION } from "../prompts/master";
-import { generateWithVertex } from "../providers/vertex";
+import {
+  generateWithVertex,
+  VERTEX_MODEL,
+  VERTEX_PROVIDER,
+} from "../providers/vertex";
 import { buildPrompt } from "./promptBuilder";
 
 /**
@@ -19,6 +23,14 @@ import { buildPrompt } from "./promptBuilder";
  *
  * Coordinates the complete hairstyle generation pipeline.
  */
+
+export function getGenerationMetadata() {
+  return {
+    promptVersion: PROMPT_VERSION,
+    provider: VERTEX_PROVIDER,
+    providerModel: VERTEX_MODEL,
+  };
+}
 
 export async function generatePreview(
   context: GenerationContext
@@ -105,7 +117,7 @@ export async function generatePreview(
 
     return {
       success: true,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: getGenerationMetadata().promptVersion,
       provider: providerResult.provider,
       providerModel: providerResult.providerModel,
       imageBuffer: providerResult.imageBuffer,

@@ -1,0 +1,153 @@
+import { GenerationStatus } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+
+type GenerationMetadata = {
+  promptVersion: string;
+  provider: string;
+  providerModel: string;
+};
+
+type CreateQueuedGenerationInput = GenerationMetadata & {
+  userId: string;
+  hairstyleId: string;
+  promptKey: string;
+  inputImageUrl: string;
+  sourceStorageKey: string;
+  originalImageId: string;
+};
+
+export async function createQueuedGeneration({
+  originalImageId,
+  ...data
+}: CreateQueuedGenerationInput) {
+  return prisma.$transaction(async (tx) => {
+    const generation = await tx.generation.create({
+      data: {
+        ...data,
+        status: GenerationStatus.QUEUED,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await tx.image.update({
+      where: {
+        id: originalImageId,
+      },
+      data: {
+        generationId: generation.id,
+      },
+    });
+
+    return generation;
+  });
+}
+
+export async function markGenerationProcessing(generationId: string) {
+  const processingStartedAt = new Date();
+
+  const transition = await prisma.generation.updateMany({
+    where: {
+      id: generationId,
+      status: GenerationStatus.QUEUED,
+    },
+    data: {
+      status: GenerationStatus.PROCESSING,
+      processingStartedAt,
+      errorMessage: null,
+    },
+  });
+
+  if (transition.count !== 1) {
+    throw new Error("Generation could not transition to processing.");
+  }
+
+  return processingStartedAt;
+}
+
+type CompleteGenerationInput = {
+  generationId: string;
+  generatedImageId: string;
+  outputImageUrl: string;
+  resultStorageKey: string;
+  processingStartedAt: Date;
+};
+
+export async function completeGeneration({
+  generationId,
+  generatedImageId,
+  outputImageUrl,
+  resultStorageKey,
+  processingStartedAt,
+}: CompleteGenerationInput) {
+  const completedAt = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const transition = await tx.generation.updateMany({
+      where: {
+        id: generationId,
+        status: GenerationStatus.PROCESSING,
+      },
+      data: {
+        status: GenerationStatus.COMPLETED,
+        outputImageUrl,
+        resultStorageKey,
+        completedAt,
+        processingTimeMs:
+          completedAt.getTime() - processingStartedAt.getTime(),
+        errorMessage: null,
+      },
+    });
+
+    if (transition.count !== 1) {
+      throw new Error("Generation could not transition to completed.");
+    }
+
+    await tx.image.update({
+      where: {
+        id: generatedImageId,
+      },
+      data: {
+        generationId,
+      },
+    });
+
+    return {
+      id: generationId,
+    };
+  });
+}
+
+export async function failGeneration(
+  generationId: string,
+  errorMessage: string,
+  processingStartedAt?: Date
+) {
+  const completedAt = new Date();
+
+  const transition = await prisma.generation.updateMany({
+    where: {
+      id: generationId,
+      status: {
+        in: [GenerationStatus.QUEUED, GenerationStatus.PROCESSING],
+      },
+    },
+    data: {
+      status: GenerationStatus.FAILED,
+      errorMessage,
+      completedAt,
+      ...(processingStartedAt
+        ? {
+            processingTimeMs:
+              completedAt.getTime() - processingStartedAt.getTime(),
+          }
+        : {}),
+    },
+  });
+
+  if (transition.count !== 1) {
+    throw new Error("Generation could not transition to failed.");
+  }
+}
