@@ -15,7 +15,79 @@ import {
   uploadBufferToStorage,
 } from "@/lib/storage";
 import type { StorageUploadResult } from "@/lib/storage";
+const MAX_GENERATION_RETRIES = 3;
 
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableGenerationError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+
+  const retryablePatterns = [
+    "timeout",
+    "timed out",
+    "deadline",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "network",
+    "connection",
+    "unavailable",
+    "temporarily",
+    "internal server error",
+  ];
+
+  return retryablePatterns.some((pattern) =>
+    message.includes(pattern)
+  );
+}
+
+async function generatePreviewWithRetry(
+  args: Parameters<typeof generatePreview>[0]
+) {
+  let lastError: unknown;
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_GENERATION_RETRIES;
+    attempt++
+  ) {
+    try {
+      return await generatePreview(args);
+    } catch (error) {
+      lastError = error;
+
+      const shouldRetry =
+        attempt < MAX_GENERATION_RETRIES &&
+        isRetryableGenerationError(error);
+
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      console.warn(
+        `Generation attempt ${attempt} failed. Retrying...`,
+        error
+      );
+
+      await delay(RETRY_DELAYS_MS[attempt - 1]);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Generation failed.");
+}
 export type GeneratePreviewJob = {
   generationId: string;
 };
@@ -309,7 +381,7 @@ export async function executeGeneratePreviewJob(
   }
 
   try {
-    const result = await generatePreview({
+    const result = await generatePreviewWithRetry({
       imageBuffer: sourceImage.buffer,
       mimeType: sourceImage.mimeType,
       promptKey: generation.promptKey,
