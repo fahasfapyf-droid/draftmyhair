@@ -1,25 +1,14 @@
-import { randomUUID } from "crypto";
-import { ImageType } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import { generatePreview, getGenerationMetadata } from "@/lib/engine";
-import { prisma } from "@/lib/prisma";
 import {
-  completeGeneration,
-  createQueuedGeneration,
-  failGeneration,
-  markGenerationProcessing,
-} from "@/lib/services/generation-lifecycle.service";
+  createGeneratePreviewJob,
+  runGeneratePreviewJob,
+} from "@/lib/jobs/generate-preview.job";
 import {
   consumeCredits,
   refundCredits,
 } from "@/lib/services/credit.service";
-import {
-  deleteFromStorage,
-  uploadBufferToStorage,
-} from "@/lib/storage";
-import type { StorageUploadResult } from "@/lib/storage";
 
 const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -27,11 +16,9 @@ const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export async function POST(request: Request) {
   let creditsConsumed = false;
   let userId: string | undefined;
-  let generationId: string | undefined;
-  let processingStartedAt: Date | undefined;
 
-  const refundIfNeeded = async (description: string) => {
-    if (!creditsConsumed || !userId) {
+  const refundIfNeeded = async (description?: string) => {
+    if (!creditsConsumed || !userId || !description) {
       return;
     }
 
@@ -44,22 +31,6 @@ export async function POST(request: Request) {
       creditsConsumed = false;
     } catch (error) {
       console.error("Failed to refund credits:", error);
-    }
-  };
-
-  const markFailed = async (errorMessage: string) => {
-    if (!generationId) {
-      return;
-    }
-
-    try {
-      await failGeneration(
-        generationId,
-        errorMessage,
-        processingStartedAt
-      );
-    } catch (error) {
-      console.error("Failed to mark generation as failed:", error);
     }
   };
 
@@ -153,281 +124,50 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedPromptKey = promptKey.trim();
-    const hairstyle = await prisma.hairstyle.findUnique({
-      where: {
-        promptKey: normalizedPromptKey,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!hairstyle) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Hairstyle not found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    const imageBuffer = Buffer.from(await image.arrayBuffer());
-
-    let uploadedImage: StorageUploadResult;
-
-    try {
-      uploadedImage = await uploadBufferToStorage({
-        buffer: imageBuffer,
-        ownerId: userId,
-        folder: "originals",
-        filename: `${randomUUID()}-${image.name}`,
-        mimeType: image.type,
-      });
-    } catch (error) {
-      console.error("Original image upload failed:", error);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to store the original image.",
-        },
-        { status: 502 }
-      );
-    }
-
-    let originalImage: { id: string };
-
-    try {
-      originalImage = await prisma.image.create({
-        data: {
-          ownerId: userId,
-          type: ImageType.ORIGINAL,
-          storageKey: uploadedImage.storageKey,
-          blobUrl: uploadedImage.blobUrl,
-          originalFilename: image.name || null,
-          mimeType: uploadedImage.mimeType,
-          fileSize: uploadedImage.fileSize,
-        },
-        select: {
-          id: true,
-        },
-      });
-    } catch (error) {
-      console.error("Original image record creation failed:", error);
-
-      try {
-        await deleteFromStorage({
-          blobUrl: uploadedImage.blobUrl,
-        });
-      } catch (cleanupError) {
-        console.error("Original image cleanup failed:", cleanupError);
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to record the original image.",
-        },
-        { status: 500 }
-      );
-    }
-
-    try {
-      const metadata = getGenerationMetadata();
-      const generation = await createQueuedGeneration({
-        userId,
-        hairstyleId: hairstyle.id,
-        promptKey: normalizedPromptKey,
-        inputImageUrl: uploadedImage.blobUrl,
-        sourceStorageKey: uploadedImage.storageKey,
-        originalImageId: originalImage.id,
-        ...metadata,
-      });
-
-      generationId = generation.id;
-    } catch (error) {
-      console.error("Queued generation creation failed:", error);
-      await refundIfNeeded("Generation persistence failed");
-
-      try {
-        await prisma.image.delete({
-          where: {
-            id: originalImage.id,
-          },
-        });
-        await deleteFromStorage({
-          blobUrl: uploadedImage.blobUrl,
-        });
-      } catch (cleanupError) {
-        console.error("Original image cleanup failed:", cleanupError);
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to start the generation.",
-        },
-        { status: 500 }
-      );
-    }
-
-    try {
-      processingStartedAt = await markGenerationProcessing(generationId);
-    } catch (error) {
-      console.error("Generation processing transition failed:", error);
-      await markFailed("Unable to start generation processing.");
-      await refundIfNeeded("Generation processing transition failed");
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to start the generation.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const result = await generatePreview({
-      imageBuffer,
-      mimeType: image.type,
-      promptKey: normalizedPromptKey,
+    const jobPreparation = await createGeneratePreviewJob({
       userId,
+      promptKey: promptKey.trim(),
+      imageBuffer: Buffer.from(await image.arrayBuffer()),
+      mimeType: image.type,
+      originalFilename: image.name,
     });
 
-    if (!result.success) {
-      await markFailed(result.error ?? "Generation failed.");
-      await refundIfNeeded("Generation failed");
-
-      return NextResponse.json(result, {
-        status: 400,
-      });
-    }
-
-    if (!result.imageBuffer || !result.mimeType || !result.generationId) {
-      await markFailed("Generation returned incomplete image data.");
-      await refundIfNeeded("Generation returned incomplete image data");
+    if (!jobPreparation.ok) {
+      await refundIfNeeded(jobPreparation.refundDescription);
 
       return NextResponse.json(
         {
           success: false,
-          error: "Generation returned incomplete image data.",
+          error: jobPreparation.error,
         },
-        { status: 500 }
+        { status: jobPreparation.status }
       );
     }
 
-    let uploadedGeneratedImage: StorageUploadResult;
+    const execution = await runGeneratePreviewJob(jobPreparation.job);
 
-    try {
-      uploadedGeneratedImage = await uploadBufferToStorage({
-        buffer: result.imageBuffer,
-        ownerId: userId,
-        folder: "generated-images",
-        filename: result.generationId,
-        mimeType: result.mimeType,
-      });
-    } catch (error) {
-      console.error("Generated image upload failed:", error);
-      await markFailed("Unable to store the generated image.");
-      await refundIfNeeded("Generated image upload failed");
+    if (!execution.ok) {
+      await refundIfNeeded(execution.refundDescription);
 
       return NextResponse.json(
         {
           success: false,
-          error: "Unable to store the generated image.",
+          error: execution.error,
         },
-        { status: 502 }
-      );
-    }
-
-    let generatedImage: { id: string };
-
-    try {
-      generatedImage = await prisma.image.create({
-        data: {
-          ownerId: userId,
-          type: ImageType.GENERATED,
-          storageKey: uploadedGeneratedImage.storageKey,
-          blobUrl: uploadedGeneratedImage.blobUrl,
-          mimeType: uploadedGeneratedImage.mimeType,
-          fileSize: uploadedGeneratedImage.fileSize,
-        },
-        select: {
-          id: true,
-        },
-      });
-    } catch (error) {
-      console.error("Generated image record creation failed:", error);
-      await markFailed("Unable to record the generated image.");
-      await refundIfNeeded("Generated image record creation failed");
-
-      try {
-        await deleteFromStorage({
-          blobUrl: uploadedGeneratedImage.blobUrl,
-        });
-      } catch (cleanupError) {
-        console.error("Generated image cleanup failed:", cleanupError);
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to record the generated image.",
-        },
-        { status: 500 }
-      );
-    }
-
-    try {
-      await completeGeneration({
-        generationId,
-        generatedImageId: generatedImage.id,
-        outputImageUrl: uploadedGeneratedImage.blobUrl,
-        resultStorageKey: uploadedGeneratedImage.storageKey,
-        processingStartedAt,
-      });
-    } catch (error) {
-      console.error("Generation completion failed:", error);
-      await markFailed("Unable to complete the generation.");
-      await refundIfNeeded("Generation persistence failed");
-
-      try {
-        await prisma.image.delete({
-          where: {
-            id: generatedImage.id,
-          },
-        });
-        await deleteFromStorage({
-          blobUrl: uploadedGeneratedImage.blobUrl,
-        });
-      } catch (cleanupError) {
-        console.error("Generated image cleanup failed:", cleanupError);
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to persist the generation.",
-        },
-        { status: 500 }
+        { status: execution.status }
       );
     }
 
     return NextResponse.json(
       {
         success: true,
-        imageUrl: `/api/blob?pathname=${encodeURIComponent(
-          uploadedGeneratedImage.storageKey
-        )}`,
-        generationId,
+        imageUrl: execution.imageUrl,
+        generationId: execution.generationId,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error("Generation API Error:", error);
-    await markFailed("Unexpected generation error.");
 
     return NextResponse.json(
       {
