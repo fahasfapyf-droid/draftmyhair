@@ -28,20 +28,20 @@ const navigation = [
     title: "Generations",
     href: "/dashboard/generations",
     icon: Images,
-    available: false,
+    available: true,
   },
   {
-  title: "Wallet",
-  href: "/dashboard/payments",
-  icon: Wallet,
-  available: true,
-},
+    title: "Wallet",
+    href: "/dashboard/payments",
+    icon: Wallet,
+    available: true,
+  },
   {
-  title: "Buy Credits",
-  href: "/dashboard/buy-credits",
-  icon: CreditCard,
-  available: true,
-},
+    title: "Buy Credits",
+    href: "/dashboard/buy-credits",
+    icon: CreditCard,
+    available: true,
+  },
   {
     title: "Settings",
     href: "/dashboard/settings",
@@ -69,7 +69,10 @@ export function DashboardSidebar() {
         {navigation.map((item) => {
           const Icon = item.icon;
 
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href ||
+            (item.href !== "/dashboard" &&
+              pathname.startsWith(item.href));
 
           return (
             <Link

@@ -31,7 +31,7 @@ export async function CreditBalanceCard({
 
       <div className="mt-6">
         <Link
-          href="/dashboard/payments"
+          href="/dashboard/buy-credits"
           className="inline-flex items-center rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
         >
           Buy Credits

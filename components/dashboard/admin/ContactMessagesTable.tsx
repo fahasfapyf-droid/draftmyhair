@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ContactMessage, ContactStatus } from "@prisma/client";
+import { ContactMessage } from "@prisma/client";
+
+import { ContactStatusBadge } from "./ContactStatusBadge";
 
 type ContactMessagesTableProps = {
   messages: ContactMessage[];
@@ -20,22 +22,6 @@ export function ContactMessagesTable({
         </p>
       </div>
     );
-  }
-
-  function getStatusClass(status: ContactStatus) {
-    switch (status) {
-      case "NEW":
-        return "bg-blue-100 text-blue-700";
-
-      case "IN_PROGRESS":
-        return "bg-yellow-100 text-yellow-700";
-
-      case "RESOLVED":
-        return "bg-green-100 text-green-700";
-
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
   }
 
   return (
@@ -76,13 +62,7 @@ export function ContactMessagesTable({
               className="border-b border-brand-border last:border-0 hover:bg-brand-background"
             >
               <td className="px-6 py-4">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
-                    message.status
-                  )}`}
-                >
-                  {message.status}
-                </span>
+                <ContactStatusBadge status={message.status} />
               </td>
 
               <td className="px-6 py-4 text-sm font-medium text-brand-ink">
