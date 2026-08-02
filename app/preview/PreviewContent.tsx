@@ -1,21 +1,47 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { GenerationStatus } from "./GenerationStatus";
 import { useGenerationSession } from "@/lib/context/GenerationSession";
+import { useGenerationPolling } from "@/hooks/useGenerationPolling";
 
 export default function PreviewContent() {
   const router = useRouter();
 
   const hasStartedGeneration = useRef(false);
+  const [attempt, setAttempt] = useState(0);
+  const [generationId, setGenerationId] = useState<string | null>(null);
 
   const {
     session,
     setGenerationStatus,
     setGenerationFailed,
   } = useGenerationSession();
+
+  const handleCompleted = useCallback(
+    (completedGenerationId: string) => {
+      setGenerationStatus("success");
+      router.push(`/result?generationId=${completedGenerationId}`);
+    },
+    [router, setGenerationStatus]
+  );
+
+  const handleFailed = useCallback(
+    (error: string) => {
+      hasStartedGeneration.current = false;
+      setGenerationId(null);
+      setGenerationFailed(error);
+    },
+    [setGenerationFailed]
+  );
+
+  const polledStatus = useGenerationPolling({
+    generationId,
+    onCompleted: handleCompleted,
+    onFailed: handleFailed,
+  });
 
   useEffect(() => {
     if (!session.uploadedFile) {
@@ -38,6 +64,8 @@ export default function PreviewContent() {
 
     const uploadedFile = session.uploadedFile;
     const selectedStyle = session.selectedStyle;
+    const nextGenerationId = crypto.randomUUID();
+    setGenerationId(nextGenerationId);
 
     async function generate() {
       setGenerationStatus("generating");
@@ -50,6 +78,7 @@ export default function PreviewContent() {
           "promptKey",
           selectedStyle.promptKey
         );
+        formData.append("generationId", nextGenerationId);
 
         const response = await fetch("/api/generate", {
           method: "POST",
@@ -64,13 +93,11 @@ export default function PreviewContent() {
           );
         }
 
-        router.push(
-          `/result?generationId=${result.generationId}`
-        );
+        if (result.generationId !== nextGenerationId) {
+          throw new Error("Generation identifier mismatch.");
+        }
       } catch (error) {
-        hasStartedGeneration.current = false;
-
-        setGenerationFailed(
+        handleFailed(
           error instanceof Error
             ? error.message
             : "Unexpected error."
@@ -84,8 +111,17 @@ export default function PreviewContent() {
     session.uploadedFile,
     session.selectedStyle,
     setGenerationStatus,
-    setGenerationFailed,
+    handleFailed,
+    attempt,
   ]);
+
+  const retryGeneration = () => {
+    if (session.generationStatus === "generating") {
+      return;
+    }
+
+    setAttempt((value) => value + 1);
+  };
 
   return (
     <main className="min-h-screen bg-brand-canvas flex items-center justify-center px-6">
@@ -111,6 +147,8 @@ export default function PreviewContent() {
         <GenerationStatus
           status={session.generationStatus}
           error={session.generationError}
+          polledStatus={polledStatus}
+          onRetry={retryGeneration}
         />
       </div>
     </main>

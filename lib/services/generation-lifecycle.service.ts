@@ -9,6 +9,7 @@ type GenerationMetadata = {
 };
 
 type CreateQueuedGenerationInput = GenerationMetadata & {
+  generationId: string;
   userId: string;
   hairstyleId: string;
   promptKey: string;
@@ -19,11 +20,13 @@ type CreateQueuedGenerationInput = GenerationMetadata & {
 
 export async function createQueuedGeneration({
   originalImageId,
+  generationId,
   ...data
 }: CreateQueuedGenerationInput) {
   return prisma.$transaction(async (tx) => {
     const generation = await tx.generation.create({
       data: {
+        id: generationId,
         ...data,
         status: GenerationStatus.QUEUED,
       },

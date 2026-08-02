@@ -21,6 +21,7 @@ export type GeneratePreviewJob = {
 };
 
 export type PrepareGeneratePreviewJobInput = {
+  generationId: string;
   userId: string;
   promptKey: string;
   imageBuffer: Buffer;
@@ -187,6 +188,7 @@ export async function prepareGeneratePreviewJob(
 
   try {
     const generation = await createQueuedGeneration({
+      generationId: input.generationId,
       userId: input.userId,
       hairstyleId: hairstyle.id,
       promptKey: input.promptKey,

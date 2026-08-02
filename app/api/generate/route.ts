@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 import { auth } from "@/auth";
 import {
@@ -12,6 +13,8 @@ import {
 
 const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
   let creditsConsumed = false;
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const image = formData.get("image");
     const promptKey = formData.get("promptKey");
+    const requestedGenerationId = formData.get("generationId");
 
     if (!(image instanceof File)) {
       return NextResponse.json(
@@ -124,7 +128,27 @@ export async function POST(request: Request) {
       );
     }
 
+    if (
+      requestedGenerationId !== null &&
+      (typeof requestedGenerationId !== "string" ||
+        !UUID_PATTERN.test(requestedGenerationId))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid generation identifier.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const generationId =
+      typeof requestedGenerationId === "string"
+        ? requestedGenerationId
+        : randomUUID();
+
     const jobPreparation = await createGeneratePreviewJob({
+      generationId,
       userId,
       promptKey: promptKey.trim(),
       imageBuffer: Buffer.from(await image.arrayBuffer()),

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import type { PolledGenerationStatus } from "@/hooks/useGenerationPolling";
 
 export type GenerationStatusState =
   | "idle"
@@ -13,6 +14,8 @@ export type GenerationStatusState =
 interface GenerationStatusProps {
   status: GenerationStatusState;
   error?: string | null;
+  polledStatus?: PolledGenerationStatus | null;
+  onRetry?: () => void;
 }
 
 const STEPS = [
@@ -27,7 +30,7 @@ const STEP_DURATION = 800;
 
 export const GenerationStatus: React.FC<
   GenerationStatusProps
-> = ({ status, error }) => {
+> = ({ status, error, polledStatus, onRetry }) => {
   const [currentStep, setCurrentStep] = useState(
     status === "generating" ? 0 : -1
   );
@@ -55,6 +58,16 @@ export const GenerationStatus: React.FC<
 
   const displayedStep =
     status === "idle" ? -1 : currentStep;
+  const processingMessage =
+    polledStatus === "QUEUED"
+      ? "Queued..."
+      : polledStatus === "PROCESSING" && currentStep === STEPS.length - 1
+      ? "Almost finished..."
+      : polledStatus === "PROCESSING"
+      ? "Generating preview..."
+      : polledStatus === "COMPLETED"
+      ? "Completed"
+      : "Preparing generation...";
 
   return (
     <div className="w-full max-w-lg mx-auto mt-14">
@@ -115,6 +128,12 @@ export const GenerationStatus: React.FC<
         })}
       </div>
 
+      {status === "generating" && (
+        <p className="mt-8 text-center text-sm font-medium text-brand-muted" aria-live="polite">
+          {processingMessage}
+        </p>
+      )}
+
       {status === "failed" && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -136,6 +155,16 @@ export const GenerationStatus: React.FC<
                 {error ??
                   "Something went wrong while generating your hairstyle preview."}
               </p>
+
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-4 rounded-editorial border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                >
+                  Try Again
+                </button>
+              )}
             </div>
           </div>
         </motion.div>
