@@ -10,9 +10,7 @@ export const VERTEX_MODEL = "gemini-3-pro-image";
 
 /**
  * Lazily create the Vertex AI client.
- * This prevents initialization during module import,
- * which can break Next.js builds when credentials are
- * unavailable at build time.
+ * Prevents initialization during module import.
  */
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
@@ -64,6 +62,67 @@ export async function generateWithVertex(
   try {
     const ai = getVertexClient();
 
+    // ==========================================================
+    // DEBUG: VERIFY WHAT IS ACTUALLY SENT TO GEMINI
+    // ==========================================================
+
+    console.log("");
+    console.log("==========================================================");
+    console.log("           DRAFT MY HAIR → GEMINI REQUEST");
+    console.log("==========================================================");
+
+    console.log("Model:");
+    console.log(VERTEX_MODEL);
+
+    console.log("");
+
+    console.log("Prompt Length:");
+    console.log(request.prompt.length);
+
+    console.log("");
+
+    console.log("Prompt Start (first 1000 chars)");
+    console.log("--------------------------------");
+    console.log(request.prompt.substring(0, 1000));
+
+    console.log("");
+
+    console.log("Prompt End (last 1000 chars)");
+    console.log("------------------------------");
+    console.log(
+      request.prompt.substring(
+        Math.max(0, request.prompt.length - 1000)
+      )
+    );
+
+    console.log("");
+
+    console.log("Image");
+    console.log("--------------------------------");
+    console.log("Mime Type:", request.mimeType);
+    console.log(
+      "Image Size:",
+      request.imageBuffer.length,
+      "bytes"
+    );
+
+    console.log("");
+
+    console.log("Prompt Hash");
+    console.log("--------------------------------");
+    console.log(
+      Buffer.from(request.prompt)
+        .toString("base64")
+        .substring(0, 120)
+    );
+
+    console.log("==========================================================");
+    console.log("");
+
+    // ==========================================================
+    // SEND REQUEST
+    // ==========================================================
+
     const response = await ai.models.generateContent({
       model: VERTEX_MODEL,
       contents: [
@@ -99,6 +158,8 @@ export async function generateWithVertex(
       };
     }
 
+    console.log("✓ Gemini returned an image successfully.");
+
     return {
       success: true,
       provider: VERTEX_PROVIDER,
@@ -110,16 +171,28 @@ export async function generateWithVertex(
       mimeType: imagePart.inlineData.mimeType ?? "image/png",
     };
   } catch (error) {
-    console.error("========== VERTEX ERROR ==========");
+    console.error("");
+    console.error("==========================================================");
+    console.error("                 VERTEX ERROR");
+    console.error("==========================================================");
+
     console.error(error);
 
     if (error instanceof Error) {
-      console.error("Name:", error.name);
-      console.error("Message:", error.message);
-      console.error("Stack:", error.stack);
+      console.error("");
+      console.error("Name:");
+      console.error(error.name);
+
+      console.error("");
+      console.error("Message:");
+      console.error(error.message);
+
+      console.error("");
+      console.error("Stack:");
+      console.error(error.stack);
     }
 
-    console.error("==================================");
+    console.error("==========================================================");
 
     return {
       success: false,
