@@ -4,6 +4,8 @@ IMAGE EDITING CONTRACT
 
 TASK
 
+TEST_MARKER_PROMPT_COMPILER_V1
+
 This is an image-editing task.
 
 An existing photograph has been provided.

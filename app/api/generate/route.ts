@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-
+import { isAdmin } from "@/lib/auth/authorization";
 import { auth } from "@/auth";
 import {
   createGeneratePreviewJob,
@@ -52,26 +52,28 @@ export async function POST(request: Request) {
 
     userId = session.user.id;
 
-    try {
-      await consumeCredits({
-        userId,
-        amount: 1,
-        description: "AI hairstyle generation",
-      });
+if (!isAdmin(session)) {
+  try {
+    await consumeCredits({
+      userId,
+      amount: 1,
+      description: "AI hairstyle generation",
+    });
 
-      creditsConsumed = true;
-    } catch (error) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Unable to consume credits.",
-        },
-        { status: 402 }
-      );
-    }
+    creditsConsumed = true;
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to consume credits.",
+      },
+      { status: 402 }
+    );
+  }
+}
 
     const formData = await request.formData();
     const image = formData.get("image");

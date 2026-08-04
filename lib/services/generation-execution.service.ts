@@ -364,21 +364,42 @@ export async function executeGeneratePreviewJob(
   let processingStartedAt: Date;
 
   try {
-    processingStartedAt = await markGenerationProcessing(job.generationId);
-  } catch (error) {
-    console.error("Generation processing transition failed:", error);
-    await markJobFailed(
-      job.generationId,
-      "Unable to start generation processing."
-    );
+  processingStartedAt = await markGenerationProcessing(job.generationId);
+} catch (error) {
+  console.error("Generation processing transition failed:", error);
 
+  const latestGeneration = await prisma.generation.findUnique({
+    where: {
+      id: job.generationId,
+    },
+    select: {
+      status: true,
+    },
+  });
+
+  if (
+    latestGeneration?.status === GenerationStatus.PROCESSING ||
+    latestGeneration?.status === GenerationStatus.COMPLETED
+  ) {
     return {
       ok: false,
-      error: "Unable to start the generation.",
-      status: 500,
-      refundDescription: "Generation processing transition failed",
+      error: "Generation is already being processed.",
+      status: 409,
     };
   }
+
+  await markJobFailed(
+    job.generationId,
+    "Unable to start generation processing."
+  );
+
+  return {
+    ok: false,
+    error: "Unable to start the generation.",
+    status: 500,
+    refundDescription: "Generation processing transition failed",
+  };
+}
 
   try {
     const result = await generatePreviewWithRetry({
