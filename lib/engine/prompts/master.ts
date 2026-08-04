@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION = "5e58988078f7";
+export const PROMPT_VERSION = "e89a8c99180f";
 
 export const MASTER_PROMPT = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -26,8 +26,6 @@ IMAGE EDITING CONTRACT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TASK
-
-TEST_MARKER_PROMPT_COMPILER_V1
 
 This is an image-editing task.
 
