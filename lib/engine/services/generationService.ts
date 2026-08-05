@@ -62,10 +62,11 @@ export async function generatePreview(
     // ============================================================
 
     const providerRequest: ProviderGenerationRequest = {
-      imageBuffer: context.imageBuffer,
-      mimeType: context.mimeType,
-      prompt: promptResult.prompt,
-    };
+  imageBuffer: context.imageBuffer,
+  mimeType: context.mimeType,
+  metadata: context.metadata,
+  prompt: promptResult.prompt,
+};
 
     // ============================================================
     // Step 4 — Generate Image

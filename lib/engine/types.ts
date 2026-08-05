@@ -5,6 +5,8 @@
  * ============================================================
  */
 
+import { SourceImageMetadata } from "@/lib/image/types";
+
 /* ============================================================
    API LAYER
 ============================================================ */
@@ -27,14 +29,19 @@ export interface GenerateRequestDTO {
 
 export interface GenerationContext {
   /**
-   * Uploaded image.
+   * Original uploaded image.
    */
   imageBuffer: Buffer;
 
   /**
-   * MIME type.
+   * Source MIME type.
    */
   mimeType: string;
+
+  /**
+   * Metadata extracted from the source image.
+   */
+  metadata: SourceImageMetadata;
 
   /**
    * Selected hairstyle prompt key.
@@ -48,43 +55,43 @@ export interface GenerationContext {
 }
 
 export interface GenerationResult {
+  /**
+   * Whether generation completed successfully.
+   */
   success: boolean;
 
   /**
-   * Version of the prompt used for generation.
+   * Version of the production prompt.
    */
   promptVersion?: string;
 
   /**
-   * Identifier of the provider used for generation.
+   * Provider identifier.
    */
   provider?: string;
 
   /**
-   * Model identifier used by the provider.
+   * Provider model identifier.
    */
   providerModel?: string;
 
   /**
-   * Generated image bytes for server-side persistence.
+   * Generated image bytes.
    */
   imageBuffer?: Buffer;
 
   /**
-   * MIME type of the generated image.
+   * Generated image MIME type.
    */
   mimeType?: string;
 
   /**
-   * Public URL of the generated image.
-   *
-   * This is produced AFTER the image has been
-   * saved by the application.
+   * Public URL after persistence.
    */
   imageUrl?: string;
 
   /**
-   * Unique generation identifier.
+   * Generation identifier.
    */
   generationId?: string;
 
@@ -99,12 +106,15 @@ export interface GenerationResult {
 ============================================================ */
 
 export interface PromptBuildRequest {
+  /**
+   * Selected hairstyle prompt key.
+   */
   promptKey: string;
 }
 
 export interface PromptBuildResult {
   /**
-   * Final production prompt.
+   * Final compiled production prompt.
    */
   prompt: string;
 }
@@ -115,7 +125,7 @@ export interface PromptBuildResult {
 
 export interface ProviderGenerationRequest {
   /**
-   * Source image.
+   * Original uploaded image.
    */
   imageBuffer: Buffer;
 
@@ -125,12 +135,21 @@ export interface ProviderGenerationRequest {
   mimeType: string;
 
   /**
-   * Final generated prompt.
+   * Source image metadata.
+   *
+   * Provider implementations may use this
+   * for aspect ratio, orientation, validation,
+   * logging, or provider-specific optimizations.
+   */
+  metadata: SourceImageMetadata;
+
+  /**
+   * Final compiled production prompt.
    */
   prompt: string;
 
   /**
-   * Provider-specific options.
+   * Provider-specific generation options.
    */
   options?: {
     model?: string;
@@ -140,30 +159,33 @@ export interface ProviderGenerationRequest {
 }
 
 export interface ProviderGenerationResult {
+  /**
+   * Whether generation completed successfully.
+   */
   success: boolean;
 
   /**
-   * Identifier of the provider that produced the result.
+   * Provider identifier.
    */
   provider?: string;
 
   /**
-   * Model identifier used to produce the result.
+   * Provider model identifier.
    */
   providerModel?: string;
 
   /**
-   * Raw generated image returned by Gemini.
+   * Raw generated image.
    */
   imageBuffer?: Buffer;
 
   /**
-   * MIME type of generated image.
+   * Generated image MIME type.
    */
   mimeType?: string;
 
   /**
-   * Error returned by provider.
+   * Provider error.
    */
   error?: string;
 }

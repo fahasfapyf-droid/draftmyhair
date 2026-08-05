@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION = "5e01f60d9d69";
+export const PROMPT_VERSION = "d7c298c17cca";
 
 export const MASTER_PROMPT = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -33,17 +33,25 @@ A complete source photograph has already been provided.
 
 The supplied photograph is the authoritative source for the final result.
 
+This is NOT an image generation task.
+
+This is NOT a portrait generation task.
+
+This is NOT a portrait reconstruction task.
+
+This is NOT a portrait enhancement task.
+
 Do not generate a new portrait.
 
-Do not recreate the subject.
+Do not recreate the photographed person.
 
-Do not reinterpret the subject.
+Do not reinterpret the photographed person.
 
-Do not synthesize an alternative version of the person.
+Do not synthesize an alternative version of the photographed person.
 
 The objective is to perform a localized photographic edit that modifies only the requested hairstyle.
 
-The final image must remain a direct photographic derivative of the supplied photograph rather than a newly generated image.
+The final image must remain the exact same photograph with only the hairstyle changed.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AUTHORITATIVE SOURCE
@@ -51,13 +59,23 @@ AUTHORITATIVE SOURCE
 
 The uploaded photograph is the single source of truth.
 
-Every visible pixel outside the editable region is considered authoritative.
-
 The original photograph has priority over all learned visual priors.
 
-If any conflict exists between the requested hairstyle and the original photograph, preserve the original photograph and modify only the hair.
+The original photograph has priority over aesthetic preferences.
+
+The original photograph has priority over statistical expectations.
+
+The original photograph has priority over model assumptions.
+
+If any conflict exists between the requested hairstyle and the supplied photograph,
+
+preserve the photograph,
+
+modify only the hairstyle.
 
 Never replace the original photograph with a visually similar reconstruction.
+
+Never create another version of the person.
 
 Treat the supplied photograph as the master reference throughout the entire editing process.
 
@@ -65,23 +83,25 @@ Treat the supplied photograph as the master reference throughout the entire edit
 EDITING WORKFLOW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Before making any modifications:
+Before making any modification:
 
-1. Analyse the complete source photograph.
+1. Analyse the complete photograph.
 
-2. Identify the editable region.
+2. Identify the editable hair region.
 
 3. Identify every immutable region.
 
 4. Lock every immutable region.
 
-5. Perform a localized hairstyle edit only.
+5. Freeze all immutable pixels.
 
-6. Compare the edited photograph against the source photograph.
+6. Perform a localized hairstyle edit.
 
-7. Verify that every immutable region remains unchanged.
+7. Compare the edited photograph against the source photograph.
 
-Only after all verification checks have passed should the edit be considered complete.
+8. Verify every immutable region remains identical.
+
+Only after every verification step succeeds may the edit be considered complete.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EDITABLE REGION
@@ -91,20 +111,29 @@ Only the subject's hair system is editable.
 
 This includes:
 
-• Existing hair
-• Hair roots
 • Hair strands
+
+• Hair roots
+
 • Hair density
+
 • Hair length
-• Hair volume
-• Hair direction
+
 • Hair layering
+
+• Hair direction
+
 • Hair texture
+
 • Hair parting
 
-If the requested hairstyle naturally exposes previously hidden scalp, only the newly visible scalp required for that hairstyle may also be modified.
+• Hair silhouette
 
-Small neighbouring pixels may be adjusted only where physically necessary for seamless blending between the edited hair and the original photograph.
+If the requested hairstyle naturally exposes previously hidden scalp,
+
+only the newly visible scalp required for that hairstyle may also be modified.
+
+Small neighbouring pixels may be adjusted only where physically required for seamless strand integration.
 
 No intentional modification may extend beyond the minimum area required for natural hair integration.
 
@@ -112,77 +141,165 @@ No intentional modification may extend beyond the minimum area required for natu
 IMMUTABLE REGION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Everything outside the editable region is immutable.
+Everything outside the editable hair region is immutable.
 
-These regions must remain visually identical to the source photograph.
+These regions are authoritative.
 
-This includes, but is not limited to:
+They must remain visually identical to the supplied photograph.
+
+This includes:
 
 • Facial identity
+
 • Skull geometry
+
 • Face shape
+
 • Facial proportions
+
+• Facial landmarks
+
 • Head size
+
 • Head position
+
 • Head rotation
+
 • Camera viewpoint
-• Camera perspective
-• Eyes
-• Eyebrows
-• Eyelashes
-• Nose
-• Lips
-• Teeth
-• Ears
-• Jawline
-• Chin
-• Neck
-• Shoulders
-• Body position
-• Clothing
-• Accessories
-• Background
-• Framing
-• Crop
-• Composition
-• Camera angle
+
 • Camera distance
-• Lens perspective
+
+• Camera perspective
+
+• Camera angle
+
+• Camera height
+
+• Subject scale
+
+• Crop
+
+• Framing
+
+• Composition
+
+• Eyes
+
+• Eyebrows
+
+• Eyelashes
+
+• Nose
+
+• Lips
+
+• Teeth
+
+• Ears
+
+• Jawline
+
+• Chin
+
+• Neck
+
+• Shoulders
+
+• Body posture
+
+• Clothing
+
+• Accessories
+
+• Background
+
 • Lighting
+
 • Shadows
+
 • Exposure
+
 • White balance
+
 • Colour grading
+
 • Camera grain
+
+• Noise
+
 • Sharpness
-• Noise pattern
+
 • Skin
+
 • Skin colour
+
 • Skin texture
+
 • Skin pores
+
 • Freckles
-• Blemishes
+
 • Wrinkles
+
 • Fine lines
+
 • Makeup
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMAGE REGISTRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The edited photograph must register perfectly with the supplied photograph.
+
+Outside the editable hair region,
+
+every visible structure must occupy identical image coordinates.
+
+If both photographs are overlaid,
+
+all facial features,
+
+all body features,
+
+all clothing,
+
+all background features,
+
+all image borders,
+
+must align perfectly.
+
+If perfect registration cannot be achieved,
+
+discard the edit.
+
+Preserve the original photograph.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PIXEL PRESERVATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Outside the editable region, preserve the original photographic information.
+Outside the editable hair region,
 
-Do not regenerate identical-looking replacements.
+existing photographic pixels are authoritative.
 
-Do not redraw unchanged areas.
+Do not regenerate them.
 
-Do not reconstruct the face.
+Do not redraw them.
 
-Do not recreate the head.
+Do not repaint them.
 
-Retain the original pixel information wherever possible.
+Do not reinterpret them.
 
-The hairstyle should appear edited into the existing photograph rather than the photograph being regenerated around the hairstyle.
+Do not replace them with visually similar approximations.
+
+Reuse the existing photographic information.
+
+Only pixels belonging to the editable hair region may be synthesized.
+
+The hairstyle must be integrated into the existing photograph.
+
+The photograph must never be regenerated around the hairstyle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LOCALITY CONSTRAINT
@@ -190,41 +307,87 @@ LOCALITY CONSTRAINT
 
 The edit must remain spatially local.
 
-Modification must propagate no farther than necessary from the edited hair.
+Modification may propagate only as far as physically required for natural hair integration.
 
-Do not regenerate unrelated image regions.
+Hair editing must never trigger reconstruction of:
 
-Do not globally reinterpret the photograph.
+• facial identity
 
-Hair editing must not trigger reconstruction of facial anatomy, body position, lighting or camera geometry.
+• facial anatomy
+
+• body posture
+
+• camera geometry
+
+• perspective
+
+• framing
+
+• crop
+
+• zoom
+
+• lighting
+
+• composition
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORBIDDEN OPERATIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The following operations are prohibited:
+Never:
 
-• Generating a new face
-• Reconstructing facial identity
-• Changing facial geometry
-• Changing skull geometry
-• Changing head position
-• Changing head rotation
-• Changing camera viewpoint
-• Changing camera distance
-• Changing perspective
-• Changing pose
-• Changing facial expression
-• Changing gaze direction
-• Changing skin appearance
-• Changing skin texture
-• Changing skin tone
-• Changing clothing
-• Changing accessories
-• Changing background
-• Changing lighting
-• Changing composition
-• Global image regeneration
+• generate a new face
+
+• reconstruct facial identity
+
+• reconstruct the portrait
+
+• reconstruct the photograph
+
+• regenerate the subject
+
+• change facial geometry
+
+• change skull geometry
+
+• change head position
+
+• change head rotation
+
+• change camera viewpoint
+
+• change camera distance
+
+• change perspective
+
+• change crop
+
+• change zoom
+
+• change subject scale
+
+• change pose
+
+• change facial expression
+
+• change gaze direction
+
+• change skin appearance
+
+• change skin texture
+
+• change skin tone
+
+• change clothing
+
+• change accessories
+
+• change background
+
+• change lighting
+
+• globally regenerate the image
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STOP CONDITION
@@ -234,33 +397,39 @@ Editing is complete once:
 
 • the requested hairstyle has been naturally integrated
 
-• all immutable regions remain visually identical to the source photograph
+• every immutable region remains visually identical
+
+• image registration remains perfect
 
 • no further modifications are required
 
-Do not continue refining identity.
+Do not continue improving realism outside the editable hair region.
 
-Do not continue improving realism outside the edited hair region.
+Do not continue improving identity.
 
-Do not continue modifying facial anatomy.
+Do not continue refining the portrait.
 
-Stop editing immediately once the hairstyle has been successfully integrated.
+Stop immediately after the hairstyle has been successfully integrated.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SUCCESS CRITERIA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-A successful result appears indistinguishable from the original photograph except for the requested hairstyle.
+A successful result appears to be the exact same photograph captured immediately after the subject received a professional haircut.
 
-The viewer should perceive the result as the identical photograph captured immediately after a professional haircut.
+Identity is unchanged.
 
-Identity must remain unchanged.
+Geometry is unchanged.
 
-Camera geometry must remain unchanged.
+Pose is unchanged.
 
-Pose must remain unchanged.
+Camera is unchanged.
 
-Lighting must remain unchanged.
+Framing is unchanged.
+
+Lighting is unchanged.
+
+Every non-hair pixel remains visually consistent with the original photograph.
 
 The only intentional visual difference is the requested hairstyle.
 
@@ -1177,153 +1346,289 @@ MODULE: 04_pose.md
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-POSE & HEAD ORIENTATION LOCK
+POSE & CAMERA CONTINUITY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-IMAGE CONTINUITY
+The supplied photograph is the only authoritative photograph.
 
-This is a localized edit of an existing photograph.
+The photographed subject already exists.
 
-The supplied photograph already contains the correct person,
-the correct pose,
-the correct camera position,
-the correct framing,
-the correct lighting,
-and the correct composition.
+The photographed pose already exists.
 
-No second photograph exists.
+The photographed camera already exists.
 
-No alternative portrait exists.
+The photographed composition already exists.
 
-The supplied photograph remains the authoritative reference throughout the entire editing process.
+This task is a localized photographic edit.
 
-Only the hairstyle may change.
+Only the requested hairstyle may change.
 
-Nothing else may change.
+Everything else remains fixed.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-POSE STATE
+POSE AUTHORITY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The photographed pose is immutable.
+The original pose is immutable.
+
+The original body orientation is immutable.
+
+The original head orientation is immutable.
+
+The original camera viewpoint is immutable.
+
+Never improve the pose.
+
+Never normalize the pose.
+
+Never beautify the pose.
+
+Never generate a more flattering pose.
+
+Never generate a more balanced pose.
+
+The hairstyle must conform to the existing pose.
+
+The pose must never change to accommodate the hairstyle.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HEAD ORIENTATION LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Preserve exactly:
 
-• Head position
-• Head orientation
-• Head yaw
-• Head pitch
-• Head roll
-• Head tilt
-• Chin position
-• Chin angle
-• Neck position
-• Neck angle
-• Shoulder position
-• Shoulder rotation
-• Shoulder height
-• Body orientation
-• Spine alignment
-• Torso position
-• Facial direction
-• Eye direction
-• Eye alignment
-• Overall posture
+• head position
 
-Do not improve the pose.
+• head yaw
 
-Do not normalize the pose.
+• head pitch
 
-Do not balance the pose.
+• head roll
 
-Do not create a more symmetrical pose.
+• head tilt
 
-Do not create a more flattering pose.
+• chin elevation
 
-Do not reposition any part of the body.
+• chin projection
+
+• neck angle
+
+• facial direction
+
+• eye direction
+
+The existing orientation is authoritative.
+
+Do not:
+
+• rotate
+
+• tilt
+
+• straighten
+
+• twist
+
+• lean
+
+• nod
+
+• recenter
+
+• reposition
+
+The photographed head must remain rigidly fixed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BODY ORIENTATION LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Preserve exactly:
+
+• neck position
+
+• neck rotation
+
+• clavicles
+
+• shoulders
+
+• shoulder height
+
+• shoulder rotation
+
+• torso position
+
+• torso orientation
+
+• spine alignment
+
+• body posture
+
+The body is not editable.
+
+The hairstyle adapts to the body.
+
+The body never adapts to the hairstyle.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAMERA LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The original camera is physically locked.
+
+Preserve exactly:
+
+• camera position
+
+• camera height
+
+• camera distance
+
+• camera yaw
+
+• camera pitch
+
+• camera roll
+
+• viewpoint
+
+• perspective
+
+• lens characteristics
+
+• focal length appearance
+
+• field of view
+
+• subject scale
+
+The camera must never move.
+
+The portrait must never be regenerated from another viewpoint.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FRAMING LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Preserve exactly:
+
+• crop
+
+• framing
+
+• zoom
+
+• composition
+
+• subject placement
+
+• image borders
+
+Do not:
+
+• crop
+
+• uncrop
+
+• zoom
+
+• zoom out
+
+• enlarge the subject
+
+• shrink the subject
+
+• move the subject
+
+• recenter the subject
+
+The edited photograph must occupy the identical image boundaries as the source photograph.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IMAGE REGISTRATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Outside the editable hair region,
-every visible anatomical structure must register perfectly with the original photograph.
+every visible structure must register perfectly with the original photograph.
 
 If the original photograph and edited photograph are overlaid,
-all non-hair structures must align exactly.
+every non-hair structure must align exactly.
 
-Maintain perfect registration of:
+Preserve registration of:
 
-• Eyes
-• Eyebrows
-• Eyelids
-• Nose
-• Mouth
-• Lips
-• Jaw
-• Chin
-• Ears
-• Neck
-• Shoulders
-• Clothing
-• Jewelry
-• Background
+• forehead
+
+• eyebrows
+
+• eyes
+
+• eyelids
+
+• nose
+
+• lips
+
+• chin
+
+• ears
+
+• neck
+
+• shoulders
+
+• clothing
+
+• jewelry
+
+• background
 
 No measurable displacement is permitted.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PIXEL REGISTRATION
+PIXEL CONTINUITY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Outside the editable hair region,
-every visible pixel is already correct.
+the existing pixels are authoritative.
 
-Do not regenerate pixels that already exist.
+Do not regenerate them.
 
-Do not repaint existing anatomy.
+Do not repaint them.
 
-Do not redraw existing facial features.
+Do not redraw them.
 
-Do not reinterpret facial geometry.
+Do not reinterpret them.
 
-The edited image must preserve one-to-one pixel correspondence with the original photograph outside the edited hair region.
+Do not synthesize replacement pixels.
 
-Hair may change.
+Reuse the existing photographed pixels whenever possible.
 
-Nothing else may change.
+Only pixels belonging to the hairstyle may change.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IMMUTABLE CAMERA
+LOCALIZED EDITING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The camera that captured the original photograph is immutable.
+The hairstyle is the editable object.
 
-Preserve exactly:
+The face is not.
 
-• Camera position
-• Camera height
-• Camera distance
-• Camera yaw
-• Camera pitch
-• Camera roll
-• Lens characteristics
-• Perspective
-• Field of view
-• Focal length appearance
-• Subject scale
-• Framing
-• Crop
-• Composition
+The neck is not.
 
-Do not simulate another camera.
+The shoulders are not.
 
-Do not estimate another viewpoint.
+The body is not.
 
-Do not create another perspective.
+The camera is not.
 
-Do not reconstruct the portrait from another angle.
+The framing is not.
 
-The existing photograph remains the only camera reference.
+The composition is not.
+
+The hairstyle must be integrated into the existing photograph.
+
+The photograph must never be rebuilt around the hairstyle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PROHIBITED CHANGES
@@ -1331,72 +1636,137 @@ PROHIBITED CHANGES
 
 Do not:
 
-• Rotate the head.
-• Tilt the head.
-• Turn the face.
-• Raise the chin.
-• Lower the chin.
-• Move the neck.
-• Rotate the shoulders.
-• Shift the torso.
-• Change body posture.
-• Change gaze direction.
-• Change facial direction.
-• Change perspective.
-• Change framing.
-• Change crop.
-• Change camera viewpoint.
-• Change subject distance.
-• Reconstruct the portrait.
-• Generate a cleaner version of the person.
-• Generate a more attractive version of the person.
-• Generate a more symmetrical version of the person.
-• Replace the original pose with a newly synthesized pose.
+• rotate the head
+
+• tilt the head
+
+• turn the face
+
+• raise the chin
+
+• lower the chin
+
+• move the neck
+
+• rotate the shoulders
+
+• move the torso
+
+• alter posture
+
+• change gaze
+
+• change facial direction
+
+• change camera position
+
+• change perspective
+
+• change focal length
+
+• change crop
+
+• change zoom
+
+• change subject scale
+
+• change framing
+
+• regenerate the portrait
+
+• create another photograph
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONFLICT RESOLUTION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-If any hairstyle instruction conflicts with preserving the original pose,
-preservation of the original pose always takes priority.
+If any hairstyle instruction requires changing:
 
-If additional hair volume requires changing head position,
-do not change head position.
+• pose
 
-Adapt the hairstyle to the existing pose.
+• anatomy
 
-Never adapt the pose to the hairstyle.
+• framing
+
+• camera
+
+• perspective
+
+• crop
+
+• zoom
+
+then the hairstyle instruction is incorrect.
+
+Modify the hairstyle instead.
+
+Never modify the photograph.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FINAL VALIDATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Before completing the edit,
-mentally overlay the edited photograph onto the original photograph.
+compare the edited photograph directly against the source photograph.
 
-Outside the editable hair region,
-every visible contour,
-every edge,
-every facial landmark,
-every clothing fold,
-every shoulder edge,
-every ear,
-every neck contour,
-and every background feature
-must overlap perfectly.
+Mentally overlay both images.
 
-If any displacement,
-rotation,
-translation,
-perspective shift,
-camera movement,
-or pose difference exists,
+Outside the edited hair region verify:
 
-discard the reconstruction,
-restore the original geometry,
-and preserve the source photograph.
+• identical head position
 
-The edit is complete only when the original and edited photographs differ exclusively within the editable hair region.
+• identical head rotation
+
+• identical facial direction
+
+• identical neck alignment
+
+• identical shoulder alignment
+
+• identical subject scale
+
+• identical camera position
+
+• identical camera distance
+
+• identical perspective
+
+• identical framing
+
+• identical crop
+
+• identical zoom
+
+• identical composition
+
+If any geometric difference exists outside the edited hair region,
+discard the edit and preserve the source photograph.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STOP CONDITION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Editing is complete only when:
+
+• the requested hairstyle has changed
+
+• pose is unchanged
+
+• body orientation is unchanged
+
+• camera geometry is unchanged
+
+• subject scale is unchanged
+
+• framing is unchanged
+
+• crop is unchanged
+
+• zoom is unchanged
+
+• every non-hair pixel remains visually consistent with the source photograph
+
+The only intentional difference between the source photograph and the edited photograph is the requested hairstyle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MODULE: 05_camera.md

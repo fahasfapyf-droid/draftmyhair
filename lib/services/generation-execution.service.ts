@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { GenerationStatus, ImageType } from "@prisma/client";
-
+import { getImageMetadata } from "@/lib/image/metadata";
 import { generatePreview, getGenerationMetadata } from "@/lib/engine";
 import { prisma } from "@/lib/prisma";
 import {
@@ -360,6 +360,9 @@ export async function executeGeneratePreviewJob(
       refundDescription: "Original image is unavailable",
     };
   }
+  const metadata = await getImageMetadata(
+  sourceImage.buffer
+);
 
   let processingStartedAt: Date;
 
@@ -403,11 +406,12 @@ export async function executeGeneratePreviewJob(
 
   try {
     const result = await generatePreviewWithRetry({
-      imageBuffer: sourceImage.buffer,
-      mimeType: sourceImage.mimeType,
-      promptKey: generation.promptKey,
-      userId: generation.userId,
-    });
+  imageBuffer: sourceImage.buffer,
+  mimeType: sourceImage.mimeType,
+  metadata,
+  promptKey: generation.promptKey,
+  userId: generation.userId,
+});
 
     if (!result.success) {
       await markJobFailed(

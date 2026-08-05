@@ -100,11 +100,32 @@ export async function generateWithVertex(
     console.log("Image");
     console.log("--------------------------------");
     console.log("Mime Type:", request.mimeType);
-    console.log(
-      "Image Size:",
-      request.imageBuffer.length,
-      "bytes"
-    );
+
+console.log(
+  "Image Size:",
+  request.imageBuffer.length,
+  "bytes"
+);
+
+console.log(
+  "Width:",
+  request.metadata.width
+);
+
+console.log(
+  "Height:",
+  request.metadata.height
+);
+
+console.log(
+  "Orientation:",
+  request.metadata.orientation ?? "None"
+);
+
+console.log(
+  "Aspect Ratio:",
+  request.metadata.aspectRatio
+);
 
     console.log("");
 
