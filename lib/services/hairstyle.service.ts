@@ -1,19 +1,22 @@
 import { prisma } from "@/lib/prisma";
-import { GenderTarget, ServiceType } from "@prisma/client";
+import { GenderTarget, HairstyleCategory, ServiceType } from "@prisma/client";
 
 type ActiveHairstyleFilters = {
   gender?: GenderTarget;
   serviceType?: ServiceType;
+  category?: HairstyleCategory;
 };
 
 export async function getActiveHairstyles({
   gender,
   serviceType,
+  category,
 }: ActiveHairstyleFilters = {}) {
   return prisma.hairstyle.findMany({
     where: {
       isActive: true,
       ...(serviceType ? { serviceType } : {}),
+      ...(category ? { category } : {}),
       ...(gender
         ? {
             OR:
