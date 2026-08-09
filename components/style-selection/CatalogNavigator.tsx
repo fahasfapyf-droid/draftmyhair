@@ -90,20 +90,30 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
       <section aria-label="Audience">
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-brand-muted">Audience</p>
         <div className="flex flex-wrap gap-2">
-          {AUDIENCES.map((audience) => (
-            <button
-              key={audience.value}
-              type="button"
-              onClick={() => navigate({ gender: audience.value, category: "hairstyle", styleCategory: null })}
-              className={`rounded-full border px-5 py-2.5 text-sm transition-colors ${
-                gender === audience.value
-                  ? "border-brand-ink bg-brand-ink text-white"
-                  : "border-brand-border bg-brand-surface text-brand-ink hover:border-brand-ink"
-              }`}
-            >
-              {audience.label}
-            </button>
-          ))}
+          {AUDIENCES.map((audience) => {
+            const canKeepCurrentService = currentService?.audiences.includes(audience.value) ?? false;
+
+            return (
+              <button
+                key={audience.value}
+                type="button"
+                onClick={() =>
+                  navigate({
+                    gender: audience.value,
+                    category: canKeepCurrentService ? currentService.slug : "hairstyle",
+                    styleCategory: null,
+                  })
+                }
+                className={`rounded-full border px-5 py-2.5 text-sm transition-colors ${
+                  gender === audience.value
+                    ? "border-brand-ink bg-brand-ink text-white"
+                    : "border-brand-border bg-brand-surface text-brand-ink hover:border-brand-ink"
+                }`}
+              >
+                {audience.label}
+              </button>
+            );
+          })}
         </div>
       </section>
 
