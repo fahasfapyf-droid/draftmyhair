@@ -9,9 +9,36 @@ import { StyleGrid } from "./StyleGrid";
 import { StickyContinue } from "./StickyContinue";
 
 import { useHairstyles } from "@/hooks/useHairstyles";
+import {
+  HairstyleGender,
+  HairstyleServiceType,
+} from "@/lib/api/hairstyles";
 import { useGenerationSession } from "@/lib/context/GenerationSession";
 
-export const StyleSelectionPage: React.FC = () => {
+const SERVICE_TYPE_BY_CATEGORY: Record<string, HairstyleServiceType> = {
+  hairstyle: "HAIRSTYLE",
+  "hair-colour": "HAIR_COLOR",
+  "buzz-cut": "BUZZ_CUT",
+  bald: "BALD",
+  "beard-style": "BEARD",
+  "beard-removal": "BEARD_REMOVAL",
+};
+
+function getGenderFilter(value: string | null): HairstyleGender | undefined {
+  if (value === "FEMALE" || value === "MALE" || value === "UNISEX") {
+    return value;
+  }
+}
+
+type StyleSelectionPageProps = {
+  category?: string;
+  gender?: string;
+};
+
+export const StyleSelectionPage: React.FC<StyleSelectionPageProps> = ({
+  category,
+  gender: requestedGender,
+}) => {
   const router = useRouter();
 
   const {
@@ -19,7 +46,9 @@ export const StyleSelectionPage: React.FC = () => {
     clearGenerationResult,
   } = useGenerationSession();
 
-  const { styles, loading, error } = useHairstyles();
+  const serviceType = SERVICE_TYPE_BY_CATEGORY[category ?? "hairstyle"];
+  const gender = getGenderFilter(requestedGender ?? null);
+  const { styles, loading, error } = useHairstyles({ serviceType, gender });
 
   const [selectedId, setSelectedId] =
     useState<string | null>(null);

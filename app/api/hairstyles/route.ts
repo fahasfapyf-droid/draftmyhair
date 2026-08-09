@@ -1,9 +1,29 @@
-import { NextResponse } from "next/server";
+import { GenderTarget, ServiceType } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
 import { getActiveHairstyles } from "@/lib/services/hairstyle.service";
 
-export async function GET() {
+function isGenderTarget(value: string | null): value is GenderTarget {
+  return value !== null && Object.values(GenderTarget).includes(value as GenderTarget);
+}
+
+function isServiceType(value: string | null): value is ServiceType {
+  return value !== null && Object.values(ServiceType).includes(value as ServiceType);
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const hairstyles = await getActiveHairstyles();
+    const gender = request.nextUrl.searchParams.get("gender");
+    const serviceType = request.nextUrl.searchParams.get("serviceType");
+
+    if (gender !== null && !isGenderTarget(gender)) {
+      return NextResponse.json({ error: "Invalid gender filter" }, { status: 400 });
+    }
+
+    if (serviceType !== null && !isServiceType(serviceType)) {
+      return NextResponse.json({ error: "Invalid service type filter" }, { status: 400 });
+    }
+
+    const hairstyles = await getActiveHairstyles({ gender: gender ?? undefined, serviceType: serviceType ?? undefined });
 
     return NextResponse.json(hairstyles);
   } catch (error) {

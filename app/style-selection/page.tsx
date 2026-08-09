@@ -9,6 +9,24 @@ export const metadata: Metadata = createPageMetadata({
   path: "/style-selection",
 });
 
-export default function Page() {
-  return <StyleSelectionPage />;
+type PageProps = {
+  searchParams: Promise<{
+    category?: string | string[];
+    gender?: string | string[];
+  }>;
+};
+
+function getFirstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams;
+
+  return (
+    <StyleSelectionPage
+      category={getFirstValue(params.category)}
+      gender={getFirstValue(params.gender)}
+    />
+  );
 }
