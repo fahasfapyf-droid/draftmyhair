@@ -14,15 +14,18 @@ interface UseHairstylesResult {
 }
 
 export function useHairstyles(filters: HairstyleFilters = {}): UseHairstylesResult {
-  const { gender, serviceType } = filters;
+  const { gender, serviceType, category } = filters;
   const [styles, setStyles] = useState<HairStyle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     async function loadHairstyles() {
+      setLoading(true);
+      setError(null);
+
       try {
-        const data = await getHairstyles({ gender, serviceType });
+        const data = await getHairstyles({ gender, serviceType, category });
         setStyles(data);
       } catch (err) {
         setError(err instanceof Error ? err : new Error("Unknown error"));
@@ -32,7 +35,7 @@ export function useHairstyles(filters: HairstyleFilters = {}): UseHairstylesResu
     }
 
     loadHairstyles();
-  }, [gender, serviceType]);
+  }, [gender, serviceType, category]);
 
   return {
     styles,
