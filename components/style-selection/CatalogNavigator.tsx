@@ -20,73 +20,25 @@ const SERVICES: Array<{
   slug: string;
   audiences: HairstyleGender[];
 }> = [
-  {
-    value: "HAIRSTYLE",
-    label: "Haircuts & Hairstyles",
-    slug: "hairstyle",
-    audiences: ["FEMALE", "MALE", "UNISEX"],
-  },
-  {
-    value: "HAIR_COLOR",
-    label: "Hair Colour",
-    slug: "hair-colour",
-    audiences: ["FEMALE", "MALE", "UNISEX"],
-  },
-  {
-    value: "BUZZ_CUT",
-    label: "Buzz Cut",
-    slug: "buzz-cut",
-    audiences: ["FEMALE", "MALE", "UNISEX"],
-  },
-  {
-    value: "BALD",
-    label: "Bald",
-    slug: "bald",
-    audiences: ["FEMALE", "MALE", "UNISEX"],
-  },
-  {
-    value: "BEARD",
-    label: "Beard",
-    slug: "beard-style",
-    audiences: ["MALE"],
-  },
-  {
-    value: "BEARD_REMOVAL",
-    label: "Beard Removal",
-    slug: "beard-removal",
-    audiences: ["MALE"],
-  },
+  { value: "HAIRSTYLE", label: "Haircuts & Hairstyles", slug: "hairstyle", audiences: ["FEMALE", "MALE", "UNISEX"] },
+  { value: "HAIR_COLOR", label: "Hair Colour", slug: "hair-colour", audiences: ["FEMALE", "MALE", "UNISEX"] },
+  { value: "BUZZ_CUT", label: "Buzz Cut", slug: "buzz-cut", audiences: ["FEMALE", "MALE", "UNISEX"] },
+  { value: "BALD", label: "Bald", slug: "bald", audiences: ["FEMALE", "MALE", "UNISEX"] },
+  { value: "BEARD", label: "Beard", slug: "beard-style", audiences: ["MALE"] },
+  { value: "BEARD_REMOVAL", label: "Beard Removal", slug: "beard-removal", audiences: ["MALE"] },
 ];
 
 const FEMALE_CATEGORIES = [
-  ["BOB", "Bob"],
-  ["LOB", "Lob"],
-  ["PIXIE", "Pixie"],
-  ["BIXIE", "Bixie"],
-  ["LAYERS", "Layers"],
-  ["SHAG", "Shag"],
-  ["WOLF", "Wolf"],
-  ["MULLET", "Mullet"],
-  ["BANGS", "Bangs"],
-  ["UPDO", "Updo"],
+  ["BOB", "Bob"], ["LOB", "Lob"], ["PIXIE", "Pixie"], ["BIXIE", "Bixie"],
+  ["LAYERS", "Layers"], ["SHAG", "Shag"], ["WOLF", "Wolf"], ["MULLET", "Mullet"],
+  ["BANGS", "Bangs"], ["UPDO", "Updo"],
 ] as const;
 
 const MALE_CATEGORIES = [
-  ["FADE", "Fade"],
-  ["TAPER", "Taper"],
-  ["UNDERCUT", "Undercut"],
-  ["CROP", "Crop"],
-  ["CREW", "Crew"],
-  ["QUIFF", "Quiff"],
-  ["POMPADOUR", "Pompadour"],
-  ["SIDE_PART", "Side Part"],
-  ["COMB_OVER", "Comb Over"],
-  ["MOHAWK", "Mohawk"],
-  ["MAN_BUN", "Man Bun"],
-  ["BRAIDS", "Braids"],
-  ["LOCS", "Locs"],
-  ["AFRO", "Afro"],
-  ["CURLY", "Curly"],
+  ["FADE", "Fade"], ["TAPER", "Taper"], ["UNDERCUT", "Undercut"], ["CROP", "Crop"],
+  ["CREW", "Crew"], ["QUIFF", "Quiff"], ["POMPADOUR", "Pompadour"], ["SIDE_PART", "Side Part"],
+  ["COMB_OVER", "Comb Over"], ["MOHAWK", "Mohawk"], ["MAN_BUN", "Man Bun"], ["BRAIDS", "Braids"],
+  ["LOCS", "Locs"], ["AFRO", "Afro"], ["CURLY", "Curly"],
 ] as const;
 
 function getCategories(gender: HairstyleGender) {
@@ -100,7 +52,7 @@ function updateQuery(
   searchParams: URLSearchParams,
   updates: Record<string, string | null>,
 ) {
-  const next = new URLSearchParams(searchParams);
+  const next = new URLSearchParams(searchParams.toString());
 
   for (const [key, value] of Object.entries(updates)) {
     if (value) next.set(key, value);
@@ -125,28 +77,24 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
   const pathname = usePathname();
   const currentParams = useSearchParams();
 
-  const serviceOptions = SERVICES.filter((service) =>
-    service.audiences.includes(gender),
-  );
+  const serviceOptions = SERVICES.filter((service) => service.audiences.includes(gender));
   const currentService = SERVICES.find((service) => service.value === serviceType);
   const categories = serviceType === "HAIRSTYLE" ? getCategories(gender) : [];
 
   const navigate = (updates: Record<string, string | null>) => {
-    router.push(updateQuery(pathname, new URLSearchParams(currentParams), updates));
+    router.push(updateQuery(pathname, new URLSearchParams(currentParams.toString()), updates));
   };
 
   return (
     <div className="mb-12 space-y-8">
       <section aria-label="Audience">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-brand-muted">
-          Audience
-        </p>
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-brand-muted">Audience</p>
         <div className="flex flex-wrap gap-2">
           {AUDIENCES.map((audience) => (
             <button
               key={audience.value}
               type="button"
-              onClick={() => navigate({ gender: audience.value, styleCategory: null })}
+              onClick={() => navigate({ gender: audience.value, category: "hairstyle", styleCategory: null })}
               className={`rounded-full border px-5 py-2.5 text-sm transition-colors ${
                 gender === audience.value
                   ? "border-brand-ink bg-brand-ink text-white"
@@ -160,9 +108,7 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
       </section>
 
       <section aria-label="Service">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-brand-muted">
-          Service
-        </p>
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-brand-muted">Service</p>
         <div className="flex flex-wrap gap-2">
           {serviceOptions.map((service) => (
             <button
