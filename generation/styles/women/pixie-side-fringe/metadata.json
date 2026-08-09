@@ -1,0 +1,44 @@
+{
+  "styleName": "Pixie with Side Fringe",
+  "slug": "pixie-side-fringe",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A compact true pixie defined by a clear side part and lightweight diagonal side fringe grazing one eyebrow.",
+  "definingFeatures": [
+    "True pixie length",
+    "Defined side part",
+    "Diagonal side fringe",
+    "Eyebrow-grazing fringe",
+    "Close tapered sides",
+    "Short tapered nape",
+    "Compact silhouette",
+    "Natural matte-to-satin texture"
+  ],
+  "transformationType": "shortening-and-haircut",
+  "mustNotResemble": [
+    "Bixie",
+    "Long Pixie",
+    "Bob",
+    "Lob",
+    "Mia Farrow Pixie",
+    "Parisian Gamine Pixie"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "earGeometryPolicy": "Pixel-locked",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "earPreservation": 9.7,
+    "fringeAccuracy": 9.6,
+    "pixieAccuracy": 9.6,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

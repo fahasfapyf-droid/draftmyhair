@@ -1,0 +1,42 @@
+{
+  "styleName": "Side-Parted Textured Bixie",
+  "slug": "side-parted-textured-bixie",
+  "category": "women",
+  "type": "haircut",
+  "length": "short",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A compact pixie-bob hybrid with concentrated upper-side weight, lighter lower perimeter, natural side part, and restrained lived-in texture.",
+  "definingFeatures": [
+    "Clear natural side part",
+    "Compact silhouette",
+    "Upper cheekbone and temple weight",
+    "Short nape",
+    "Light fragmented lower perimeter",
+    "Short internal layering",
+    "Natural lived-in texture",
+    "Slight organic asymmetry"
+  ],
+  "mustNotResemble": [
+    "Bob",
+    "Blunt Bob",
+    "Pixie",
+    "Shag",
+    "Wolf Cut",
+    "Mushroom Cut",
+    "Modern fluffy pixie"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "haircutAccuracy": 9.5,
+    "hairIntegration": 9.4,
+    "overall": 9.7
+  }
+}

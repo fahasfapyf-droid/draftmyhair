@@ -1,0 +1,47 @@
+{
+  "styleName": "Blunt Lob",
+  "slug": "blunt-lob",
+  "category": "lob",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "True Lob length with a strong continuous blunt perimeter, substantial lower weight, and minimal visible internal structure.",
+  "definingFeatures": [
+    "Collarbone-to-shoulder length",
+    "Strong continuous perimeter",
+    "Dense healthy ends",
+    "Balanced lower-third weight",
+    "Minimal visible layering",
+    "Restrained movement",
+    "Straight elongated silhouette"
+  ],
+  "transformationType": "length-adjustment-and-blunt-lob",
+  "mustNotResemble": [
+    "Soft Lob",
+    "Italian Bob",
+    "French Bob",
+    "Butterfly Cut",
+    "Long Layers",
+    "Wolf Cut",
+    "Shag",
+    "Bixie",
+    "Pixie"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "earGeometryPolicy": "Pixel-locked",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "earPreservation": 9.7,
+    "lobAccuracy": 9.7,
+    "perimeterAccuracy": 9.7,
+    "densityAccuracy": 9.6,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

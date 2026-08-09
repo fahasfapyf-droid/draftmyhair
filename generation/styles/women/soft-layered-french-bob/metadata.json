@@ -1,0 +1,43 @@
+{
+  "styleName": "Soft Layered French Bob",
+  "slug": "soft-layered-french-bob",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A compact chin-level French Bob with soft internal layering, a lightweight breathable structure, and a subtly diffused natural perimeter.",
+  "definingFeatures": [
+    "Chin-level length",
+    "Compact Parisian silhouette",
+    "Soft internal layering",
+    "Lightweight density",
+    "Diffused perimeter",
+    "Natural inward tendency",
+    "Subtle front asymmetry",
+    "Close-to-skull volume"
+  ],
+  "transformationType": "shortening-and-layering",
+  "mustNotResemble": [
+    "Italian Bob",
+    "Structured Blunt Bob",
+    "Blunt Bob",
+    "Lob",
+    "Bixie",
+    "Shag"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "lengthAccuracy": 9.6,
+    "frenchBobAccuracy": 9.6,
+    "layerArchitecture": 9.5,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

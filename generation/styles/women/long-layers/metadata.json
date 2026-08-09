@@ -1,0 +1,43 @@
+{
+  "styleName": "Long Layers",
+  "slug": "long-layers",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "Long preserved length with soft cascading layers beginning around chin-to-collarbone level, subtle face framing, retained fullness, and naturally tapered ends.",
+  "definingFeatures": [
+    "Long overall length",
+    "Cascading layers",
+    "Chin-to-collarbone layer starting point",
+    "Soft face framing",
+    "Preserved fullness",
+    "Lightly tapered ends",
+    "Natural strand variation",
+    "Subtle crown lift"
+  ],
+  "transformationType": "layering-and-structural-refinement",
+  "mustNotResemble": [
+    "Medium Layers",
+    "Lob",
+    "Butterfly Cut",
+    "Shag",
+    "Wolf Cut",
+    "Blunt Long Hair"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "lengthAccuracy": 9.7,
+    "layerArchitecture": 9.6,
+    "faceFramingAccuracy": 9.5,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

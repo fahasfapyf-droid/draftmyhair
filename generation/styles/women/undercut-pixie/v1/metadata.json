@@ -1,0 +1,35 @@
+{
+  "id": "undercut_pixie",
+  "name": "Undercut Pixie",
+  "version": "1.0",
+
+  "category": "haircut",
+  "gender": "women",
+  "family": "pixie",
+
+  "length": "short",
+  "difficulty": "very-high",
+
+  "supportsHairColorOverride": true,
+  "supportsLengthOverride": false,
+
+  "status": "locked",
+
+  "benchmarkTarget": {
+    "identity": 9.5,
+    "hairRealism": 9.5,
+    "overall": 9.7
+  },
+
+  "tags": [
+    "undercut pixie",
+    "pixie",
+    "undercut",
+    "buzzed sides",
+    "short hair",
+    "textured crown",
+    "edgy",
+    "modern",
+    "salon"
+  ]
+}

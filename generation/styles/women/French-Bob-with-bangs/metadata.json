@@ -1,0 +1,51 @@
+{
+  "styleName": "French Bob",
+  "slug": "french-bob",
+  "category": "bob",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "Compact upper-jaw to mid-jaw bob with a softly rounded silhouette, moderate density, relaxed Parisian texture, and restrained natural movement.",
+  "definingFeatures": [
+    "Upper-jaw to mid-jaw length",
+    "Compact proportions",
+    "Soft rounded silhouette",
+    "Moderate density",
+    "Relaxed Parisian styling",
+    "Softly refined perimeter",
+    "Subtle natural strand grouping",
+    "Restrained inward movement"
+  ],
+  "transformationType": "french-bob-haircut",
+  "mustNotResemble": [
+    "Italian Bob",
+    "Blunt Bob",
+    "Blunt Lob",
+    "Soft Lob",
+    "Lob",
+    "Layered Bob",
+    "Bixie",
+    "Pixie",
+    "Shag",
+    "Wolf Cut",
+    "Mushroom Bob"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "earGeometryPolicy": "Pixel-locked",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "earPreservation": 9.7,
+    "frenchBobAccuracy": 9.7,
+    "silhouetteAccuracy": 9.7,
+    "textureAccuracy": 9.6,
+    "parisianCharacter": 9.7,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

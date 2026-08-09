@@ -1,0 +1,40 @@
+{
+  "styleName": "Bald / Clean Shaved",
+  "slug": "bald",
+  "category": "universal",
+  "type": "hair-removal",
+  "length": "zero",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A completely shaved scalp reconstructed as natural human skin while preserving exact source identity, skull geometry, lighting, and photographic characteristics.",
+  "definingFeatures": [
+    "Complete hair removal",
+    "Natural scalp reconstruction",
+    "Exact skull geometry preservation",
+    "Subtle follicle density perception",
+    "Natural scalp micro-variation",
+    "Source-consistent lighting",
+    "Seamless forehead-to-scalp transition",
+    "Photographic background reconstruction"
+  ],
+  "mustNotResemble": [
+    "Buzz Cut",
+    "Stubble",
+    "Hair Cap",
+    "Grey Scalp Overlay",
+    "Artificially Smooth Scalp"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Not Applicable After Hair Removal",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "scalpRealism": 9.7,
+    "backgroundIntegration": 9.5,
+    "overall": 9.7
+  }
+}

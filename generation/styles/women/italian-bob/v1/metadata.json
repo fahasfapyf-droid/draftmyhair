@@ -1,0 +1,34 @@
+{
+  "id": "italian_bob",
+  "name": "Italian Bob",
+  "version": "1.0",
+
+  "category": "haircut",
+  "gender": "women",
+  "family": "bob",
+
+  "length": "short",
+  "difficulty": "high",
+
+  "supportsHairColorOverride": true,
+  "supportsLengthOverride": false,
+
+  "status": "locked",
+
+  "benchmarkTarget": {
+    "identity": 9.5,
+    "hairRealism": 9.5,
+    "overall": 9.6
+  },
+
+  "tags": [
+    "italian bob",
+    "jaw length",
+    "rounded silhouette",
+    "luxury bob",
+    "salon",
+    "blowout",
+    "premium",
+    "short hair"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "styleName": "Mid-Length Layers",
+  "slug": "mid-length-layers",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A clearly layered mid-length haircut terminating between the collarbone and upper chest, with controlled internal layering and natural gravity-driven movement.",
+  "definingFeatures": [
+    "Collarbone-to-upper-chest final length",
+    "Active internal layering",
+    "Soft jaw-to-chin face framing",
+    "Reduced lower weight",
+    "Natural gravity-driven ends",
+    "Moderate natural volume",
+    "Preserved original part",
+    "Natural strand variation"
+  ],
+  "transformationType": "shortening-and-layering",
+  "mustNotResemble": [
+    "Long Layered Hair",
+    "Bob",
+    "Lob",
+    "Shag",
+    "Wolf Cut"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "lengthAccuracy": 9.6,
+    "layerArchitecture": 9.6,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "styleName": "Soft Layered Bob",
+  "slug": "soft-layered-bob",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A short rounded layered bob terminating at chin to slightly below chin level with soft internal layering, a diffused perimeter, and natural inward movement.",
+  "definingFeatures": [
+    "Chin to slightly-below-chin length",
+    "Rounded balanced silhouette",
+    "Three-zone architecture",
+    "Soft internal layering",
+    "Diffused perimeter",
+    "Natural inward tendency",
+    "Controlled crown",
+    "Natural gravity-driven movement"
+  ],
+  "transformationType": "shortening-and-layering",
+  "mustNotResemble": [
+    "Italian Bob",
+    "Structured Blunt Bob",
+    "Soft Layered French Bob",
+    "Lob",
+    "Bixie",
+    "Shag"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "lengthAccuracy": 9.6,
+    "bobAccuracy": 9.6,
+    "layerArchitecture": 9.6,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "styleName": "Mia Farrow 1968 Pixie",
+  "slug": "mia-farrow-1968-pixie",
+  "category": "women",
+  "type": "haircut",
+  "length": "ultra-short",
+  "version": "v2",
+  "status": "locked",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "An extremely short, compact, skull-hugging 1968 pixie with exposed ears, tight sides, tightly tapered nape, minimal crown fullness, and quiet fine texture.",
+  "historicalReference": "1968 Vidal Sassoon-inspired Rosemary's Baby pixie",
+  "definingFeatures": [
+    "Extremely short 1–2 inch length",
+    "Compact oval silhouette",
+    "Exposed ears",
+    "Tight skull-hugging sides",
+    "Tightly tapered nape",
+    "Mostly open forehead",
+    "Minimal crown fullness",
+    "Quiet fine texture",
+    "Architectural precision"
+  ],
+  "mustNotResemble": [
+    "Modern fluffy pixie",
+    "Bixie",
+    "Bob",
+    "Lob",
+    "Modern crop",
+    "Shag",
+    "Wolf Cut",
+    "Mushroom Cut"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "hairColorPolicy": "Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "haircutAccuracy": 9.5,
+    "hairIntegration": 9.4,
+    "overall": 9.7
+  }
+}

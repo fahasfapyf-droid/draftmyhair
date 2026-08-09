@@ -1,0 +1,47 @@
+{
+  "styleName": "Sleek-Back Pixie",
+  "slug": "sleek-back-pixie",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A true feminine pixie defined by controlled backward directional flow and natural surface tension rather than volume or heavy styling product.",
+  "definingFeatures": [
+    "True pixie proportions",
+    "Backward directional flow",
+    "Controlled surface tension",
+    "Close skull-following silhouette",
+    "Longer crown than sides",
+    "Short tapered sides",
+    "Short nape",
+    "Natural fibre visibility",
+    "Refined feminine character"
+  ],
+  "transformationType": "shortening-and-directional-pixie",
+  "mustNotResemble": [
+    "Bixie",
+    "Bob",
+    "Undercut Pixie",
+    "Spiky Pixie",
+    "Wet-Look Pixie",
+    "Gelled Editorial Slick-Back",
+    "Fluffy Pixie"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "earGeometryPolicy": "Pixel-locked",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "earPreservation": 9.7,
+    "pixieAccuracy": 9.6,
+    "directionalFlow": 9.7,
+    "surfaceRealism": 9.6,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

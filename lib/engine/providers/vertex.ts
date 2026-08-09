@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-
+import sharp from "sharp";
 import {
   ProviderGenerationRequest,
   ProviderGenerationResult,
@@ -143,6 +143,17 @@ console.log(
     // ==========================================================
     // SEND REQUEST
     // ==========================================================
+    console.log("Aspect Ratio Sent:", request.metadata.aspectRatio);
+    console.log(
+  "Expected Dimensions:",
+  `${request.metadata.width} × ${request.metadata.height}`
+);
+console.log("Config:", {
+  responseModalities: ["IMAGE"],
+  imageConfig: {
+    aspectRatio: request.metadata.aspectRatio,
+  },
+});
 
     const response = await ai.models.generateContent({
       model: VERTEX_MODEL,
@@ -163,8 +174,12 @@ console.log(
         },
       ],
       config: {
-        responseModalities: ["TEXT", "IMAGE"],
-      },
+  responseModalities: ["IMAGE"],
+
+  imageConfig: {
+    aspectRatio: request.metadata.aspectRatio,
+  },
+},
     });
 
     const imagePart =
@@ -172,25 +187,107 @@ console.log(
         (part: any) => part.inlineData
       );
 
-    if (!imagePart?.inlineData?.data) {
-      return {
-        success: false,
-        error: "Vertex AI returned no image.",
-      };
-    }
+   if (!imagePart?.inlineData?.data) {
+  return {
+    success: false,
+    error: "Vertex AI returned no image.",
+  };
+}
 
-    console.log("✓ Gemini returned an image successfully.");
+const outputBuffer = Buffer.from(
+  imagePart.inlineData.data,
+  "base64"
+);
 
-    return {
-      success: true,
-      provider: VERTEX_PROVIDER,
-      providerModel: VERTEX_MODEL,
-      imageBuffer: Buffer.from(
-        imagePart.inlineData.data,
-        "base64"
-      ),
-      mimeType: imagePart.inlineData.mimeType ?? "image/png",
-    };
+const meta = await sharp(outputBuffer).metadata();
+
+console.log("");
+console.log("==========================================================");
+console.log("           GEMINI RETURNED IMAGE");
+console.log("==========================================================");
+
+console.log("Width:", meta.width);
+console.log("Height:", meta.height);
+console.log("Orientation:", meta.orientation ?? "None");
+console.log(
+  "Expected Dimensions:",
+  `${request.metadata.width} × ${request.metadata.height}`
+);
+
+console.log(
+  "Returned Dimensions:",
+  `${meta.width} × ${meta.height}`
+);
+
+console.log(
+  "Dimension Match:",
+  meta.width === request.metadata.width &&
+  meta.height === request.metadata.height
+    ? "YES"
+    : "NO"
+);
+
+if (
+  meta.width &&
+  meta.height &&
+  request.metadata.width &&
+  request.metadata.height
+) {
+  console.log(
+    "Scale X:",
+    (meta.width / request.metadata.width).toFixed(4)
+  );
+
+  console.log(
+    "Scale Y:",
+    (meta.height / request.metadata.height).toFixed(4)
+  );
+  console.log(
+  "Scale Difference:",
+  (
+    (meta.width / request.metadata.width) -
+    (meta.height / request.metadata.height)
+  ).toFixed(4)
+);
+console.log(
+  "Uniform Scale:",
+  Math.abs(
+    (meta.width / request.metadata.width) -
+    (meta.height / request.metadata.height)
+  ) < 0.005
+    ? "YES"
+    : "NO"
+);
+}
+if (meta.width && meta.height) {
+  const returnedAspect = (
+    meta.width / meta.height
+  ).toFixed(4);
+
+  console.log(
+    "Returned Aspect Ratio:",
+    returnedAspect
+  );
+console.log(
+  "Dimensions:",
+  `${meta.width} × ${meta.height}`
+);
+}
+
+console.log("Mime Type:", imagePart.inlineData.mimeType ?? "image/png");
+console.log("Output Size:", outputBuffer.length, "bytes");
+console.log("==========================================================");
+console.log("");
+
+console.log("✓ Gemini returned an image successfully.");
+
+return {
+  success: true,
+  provider: VERTEX_PROVIDER,
+  providerModel: VERTEX_MODEL,
+  imageBuffer: outputBuffer,
+  mimeType: imagePart.inlineData.mimeType ?? "image/png",
+};
   } catch (error) {
     console.error("");
     console.error("==========================================================");

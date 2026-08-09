@@ -1,0 +1,47 @@
+{
+  "styleName": "Old Money Bob",
+  "slug": "old-money-bob",
+  "category": "universal",
+  "type": "haircut",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "Architectural chin-length bob defined by a deep side part, controlled asymmetric weight distribution, strong inward C-curve, and highly polished salon finish.",
+  "definingFeatures": [
+    "Chin-length perimeter",
+    "Deep side part",
+    "Heavy side sweep",
+    "Controlled light side",
+    "Strong inward C-curve",
+    "Polished salon finish",
+    "Architectural silhouette",
+    "Controlled crown",
+    "Visible earrings when present"
+  ],
+  "transformationType": "shortening-and-precision-bob",
+  "mustNotResemble": [
+    "Lob",
+    "Italian Bob",
+    "French Bob",
+    "Generic Blunt Bob",
+    "Soft Bob"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "earGeometryPolicy": "Pixel-locked",
+  "earringPolicy": "Preserve visible source earrings exactly",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "earPreservation": 9.7,
+    "lengthAccuracy": 9.7,
+    "sidePartAccuracy": 9.6,
+    "cCurveAccuracy": 9.7,
+    "salonFinish": 9.7,
+    "hairRealism": 9.7,
+    "overall": 9.7
+  }
+}

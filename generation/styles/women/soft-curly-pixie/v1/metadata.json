@@ -1,0 +1,43 @@
+{
+  "styleName": "Soft Curly Pixie",
+  "slug": "soft-curly-pixie",
+  "category": "women",
+  "type": "haircut",
+  "length": "short",
+  "texture": "curly",
+  "curlRange": "2C-3A",
+  "version": "v1",
+  "status": "draft",
+  "targetRealismScore": 9.7,
+  "primaryCharacteristic": "A compact short pixie with soft irregular 2C-to-loose-3A curl structure, concentrated crown weight, tapered sides and nape, and natural curl compression.",
+  "definingFeatures": [
+    "Compact pixie silhouette",
+    "Upper-crown visual weight",
+    "Soft 2C-to-loose-3A curl pattern",
+    "Short curly fringe",
+    "Tapered sides",
+    "Cropped tapered nape",
+    "Natural curl compression",
+    "Organic curl irregularity"
+  ],
+  "mustNotResemble": [
+    "Curly Bob",
+    "Bixie",
+    "Curly Crop",
+    "Curly Shag",
+    "Rounded Curly Cut"
+  ],
+  "geometryPolicy": "Absolute Geometry Lock",
+  "identityPolicy": "Universal Draft My Hair Identity Lock",
+  "posePolicy": "Universal Pose and Camera Lock",
+  "hairColorPolicy": "Universal Root Authority",
+  "targetScores": {
+    "identityPreservation": 9.5,
+    "posePreservation": 9.5,
+    "geometryPreservation": 9.5,
+    "haircutAccuracy": 9.5,
+    "curlRealism": 9.5,
+    "hairIntegration": 9.4,
+    "overall": 9.7
+  }
+}

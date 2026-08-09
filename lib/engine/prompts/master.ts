@@ -14,13 +14,9 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION = "d7c298c17cca";
+export const PROMPT_VERSION = "e6b3bdc53f8c";
 
 export const MASTER_PROMPT = `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 00_editing_contract.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORENSIC IMAGE EDITING CONTRACT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -433,10 +429,6 @@ Every non-hair pixel remains visually consistent with the original photograph.
 
 The only intentional visual difference is the requested hairstyle.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 01_edit_strategy.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 MODULE: 05_edit_strategy.md
 
 ────────────────────────────────────
@@ -654,10 +646,6 @@ Do not continue refining identity.
 Do not continue improving realism outside the edited hair region.
 
 Editing is complete once the requested hairstyle has been naturally integrated into the original photograph.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 02_geometry.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 GEOMETRY PRESERVATION
@@ -1074,10 +1062,6 @@ Editing is complete only when:
 No further geometric modification is permitted.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 03_identity.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDENTITY PRESERVATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1340,10 +1324,6 @@ Editing is complete only when:
 • no beautification has occurred
 
 The only intentional visual difference between the source photograph and the final photograph is the requested hairstyle.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 04_pose.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 POSE & CAMERA CONTINUITY
@@ -1769,10 +1749,6 @@ Editing is complete only when:
 The only intentional difference between the source photograph and the edited photograph is the requested hairstyle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 05_camera.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CAMERA & COMPOSITION LOCK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1875,10 +1851,6 @@ Outside the editable hair region, every visible structure must align perfectly w
 If any framing, perspective, scale, crop, camera position, or composition difference exists, correct only those differences while preserving the hairstyle.
 
 The edit is complete only when the original and edited photographs differ exclusively within the editable hair region.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 06_hair_color.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HAIR COLOR PRESERVATION
@@ -2125,10 +2097,6 @@ Editing is complete only when:
 • the edited hair appears to be the subject's original hair after a haircut rather than after a colour treatment
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 07_lighting.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LIGHTING PRESERVATION — ABSOLUTE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2197,10 +2165,6 @@ Outside the editable hair region, lighting must remain visually identical.
 Only newly generated hair may contain new highlights or shadows, and those must be fully explained by the original lighting conditions.
 
 The edit is complete only when the photograph appears to have been captured under the identical lighting setup as the source image.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 08_skin.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SKIN PRESERVATION — ZERO TOLERANCE
@@ -2285,10 +2249,6 @@ Compare the edited photograph with the source photograph.
 Outside the editable hair region, skin texture, pores, fine lines, colour and natural imperfections must remain visually identical.
 
 The edit is complete only when the skin appears unchanged and only the hairstyle differs.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 09_realism.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PHOTOREALISM & HAIR REALISM — ABSOLUTE
@@ -2390,10 +2350,6 @@ The hairstyle must integrate seamlessly into the existing image.
 Outside the editable hair region, the photograph must remain visually identical.
 
 The completed edit must appear to be the original photograph captured immediately after the requested hairstyle was professionally created.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODULE: 10_negative.md
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 UNIVERSAL NEGATIVE CONSTRAINTS

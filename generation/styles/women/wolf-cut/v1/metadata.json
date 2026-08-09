@@ -1,0 +1,37 @@
+{
+  "id": "wolf_cut",
+  "name": "Wolf Cut",
+  "version": "1.0",
+
+  "category": "haircut",
+  "gender": "women",
+  "family": "layered",
+
+  "length": "medium-long",
+  "difficulty": "very-high",
+
+  "supportsHairColorOverride": true,
+  "supportsLengthOverride": false,
+
+  "status": "locked",
+
+  "benchmarkTarget": {
+    "identity": 9.5,
+    "hairRealism": 9.5,
+    "overall": 9.6
+  },
+
+  "tags": [
+    "wolf cut",
+    "layered",
+    "textured",
+    "modern",
+    "salon",
+    "medium hair",
+    "long hair",
+    "volume",
+    "movement",
+    "korean",
+    "trending"
+  ]
+}

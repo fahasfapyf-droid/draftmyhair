@@ -1,0 +1,33 @@
+{
+  "id": "structured_blunt_bob",
+  "name": "Structured Blunt Bob",
+  "version": "1.0",
+
+  "category": "haircut",
+  "gender": "women",
+  "family": "bob",
+
+  "length": "short",
+  "difficulty": "high",
+
+  "supportsHairColorOverride": true,
+  "supportsLengthOverride": false,
+
+  "status": "locked",
+
+  "benchmarkTarget": {
+    "identity": 9.5,
+    "hairRealism": 9.5,
+    "overall": 9.6
+  },
+
+  "tags": [
+    "structured bob",
+    "blunt bob",
+    "jaw length",
+    "precision cut",
+    "minimal layers",
+    "salon",
+    "short hair"
+  ]
+}
