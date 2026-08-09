@@ -23,12 +23,14 @@ export interface HairStyle {
 export type HairstyleFilters = {
   gender?: HairstyleGender;
   serviceType?: HairstyleServiceType;
+  category?: string;
 };
 
 export async function getHairstyles(filters: HairstyleFilters = {}): Promise<HairStyle[]> {
   const searchParams = new URLSearchParams();
   if (filters.gender) searchParams.set("gender", filters.gender);
   if (filters.serviceType) searchParams.set("serviceType", filters.serviceType);
+  if (filters.category) searchParams.set("category", filters.category);
 
   const query = searchParams.size ? `?${searchParams.toString()}` : "";
   const response = await fetch(`/api/hairstyles${query}`, {
