@@ -92,6 +92,7 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
         <div className="flex flex-wrap gap-2">
           {AUDIENCES.map((audience) => {
             const canKeepCurrentService = currentService?.audiences.includes(audience.value) ?? false;
+            const nextServiceSlug = canKeepCurrentService && currentService ? currentService.slug : "hairstyle";
 
             return (
               <button
@@ -100,7 +101,7 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
                 onClick={() =>
                   navigate({
                     gender: audience.value,
-                    category: canKeepCurrentService ? currentService.slug : "hairstyle",
+                    category: nextServiceSlug,
                     styleCategory: null,
                   })
                 }
