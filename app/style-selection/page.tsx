@@ -3,9 +3,9 @@ import { StyleSelectionPage } from "@/components/style-selection";
 import { createPageMetadata } from "../metadata";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "Choose Your Hairstyle",
+  title: "Choose Your Style",
   description:
-    "Explore hairstyle options and choose the look you want to preview on your own photo.",
+    "Choose your audience, service, category, and style for a realistic Draft My Hair preview.",
   path: "/style-selection",
 });
 
@@ -13,6 +13,7 @@ type PageProps = {
   searchParams: Promise<{
     category?: string | string[];
     gender?: string | string[];
+    styleCategory?: string | string[];
   }>;
 };
 
@@ -27,6 +28,7 @@ export default async function Page({ searchParams }: PageProps) {
     <StyleSelectionPage
       category={getFirstValue(params.category)}
       gender={getFirstValue(params.gender)}
+      styleCategory={getFirstValue(params.styleCategory)}
     />
   );
 }
