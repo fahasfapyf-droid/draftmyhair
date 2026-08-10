@@ -2,12 +2,13 @@ import argon2 from "argon2";
 
 import { createEmailVerification } from "@/lib/auth/email-verification";
 import { prisma } from "@/lib/prisma";
-import { WalletTransactionType } from "@prisma/client";
+import { UserRole, WalletTransactionType } from "@prisma/client";
 
 export async function registerUser(
   name: string,
   email: string,
-  password: string
+  password: string,
+  role: UserRole = UserRole.USER
 ) {
   const existingUser = await prisma.user.findUnique({
     where: { email },
@@ -24,6 +25,7 @@ export async function registerUser(
       data: {
         name,
         email,
+        role,
         passwordHash,
         wallet: {
           create: { balance: 0 },
