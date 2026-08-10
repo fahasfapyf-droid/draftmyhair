@@ -20,7 +20,7 @@ const SERVICES: Array<{
   slug: string;
   audiences: HairstyleGender[];
 }> = [
-  { value: "HAIRSTYLE", label: "Haircuts & Hairstyles", slug: "hairstyle", audiences: ["FEMALE", "MALE", "UNISEX"] },
+  { value: "HAIRSTYLE", label: "Haircuts & Hairstyles", slug: "hairstyle", audiences: ["FEMALE", "MALE"] },
   { value: "HAIR_COLOR", label: "Hair Colour", slug: "hair-colour", audiences: ["FEMALE", "MALE", "UNISEX"] },
   { value: "BUZZ_CUT", label: "Buzz Cut", slug: "buzz-cut", audiences: ["FEMALE", "MALE", "UNISEX"] },
   { value: "BALD", label: "Bald", slug: "bald", audiences: ["FEMALE", "MALE", "UNISEX"] },
@@ -44,7 +44,7 @@ const MALE_CATEGORIES = [
 function getCategories(gender: HairstyleGender) {
   if (gender === "FEMALE") return FEMALE_CATEGORIES;
   if (gender === "MALE") return MALE_CATEGORIES;
-  return [...FEMALE_CATEGORIES, ...MALE_CATEGORIES];
+  return [];
 }
 
 function updateQuery(
@@ -92,7 +92,9 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
         <div className="flex flex-wrap gap-2">
           {AUDIENCES.map((audience) => {
             const canKeepCurrentService = currentService?.audiences.includes(audience.value) ?? false;
-            const nextServiceSlug = canKeepCurrentService && currentService ? currentService.slug : "hairstyle";
+            const nextService = canKeepCurrentService
+              ? currentService
+              : SERVICES.find((service) => service.audiences.includes(audience.value));
 
             return (
               <button
@@ -101,7 +103,7 @@ export const CatalogNavigator: React.FC<CatalogNavigatorProps> = ({
                 onClick={() =>
                   navigate({
                     gender: audience.value,
-                    category: nextServiceSlug,
+                    category: nextService?.slug ?? null,
                     styleCategory: null,
                   })
                 }
