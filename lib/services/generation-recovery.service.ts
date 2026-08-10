@@ -35,7 +35,13 @@ async function refundRecoveredGeneration(
 export async function recoverStaleGeneration(generationId: string): Promise<boolean> {
   const generation = await prisma.generation.findUnique({
     where: { id: generationId },
-    select: { id: true, userId: true, status: true, createdAt: true, processingStartedAt: true },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      createdAt: true,
+      processingStartedAt: true,
+    },
   });
 
   if (!generation) return false;
@@ -96,26 +102,19 @@ export async function recoverStaleGenerations(): Promise<RecoverySummary> {
         },
       ],
     },
-    select: { id: true },
+    select: { id: true, status: true },
   });
 
   let queuedRecovered = 0;
   let processingRecovered = 0;
 
-  for (const { id } of stale) {
-    const generation = await prisma.generation.findUnique({
-      where: { id },
-      select: { status: true, errorMessage: true },
-    });
-
-    if (!generation || generation.status === GenerationStatus.COMPLETED) continue;
-
-    const recovered = await recoverStaleGeneration(id);
+  for (const generation of stale) {
+    const recovered = await recoverStaleGeneration(generation.id);
     if (!recovered) continue;
 
-    if (generation.errorMessage === "Generation abandoned before processing.") {
+    if (generation.status === GenerationStatus.QUEUED) {
       queuedRecovered += 1;
-    } else {
+    } else if (generation.status === GenerationStatus.PROCESSING) {
       processingRecovered += 1;
     }
   }
