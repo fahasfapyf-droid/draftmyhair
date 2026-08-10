@@ -3,13 +3,15 @@ import Link from "next/link";
 interface PageProps {
   searchParams: Promise<{
     email?: string;
+    verificationEmailSent?: string;
   }>;
 }
 
 export default async function RegisterSuccessPage({
   searchParams,
 }: PageProps) {
-  const { email } = await searchParams;
+  const { email, verificationEmailSent } = await searchParams;
+  const emailSent = verificationEmailSent !== "false";
 
   return (
     <main className="mx-auto flex min-h-[70vh] items-center justify-center px-6">
@@ -19,19 +21,21 @@ export default async function RegisterSuccessPage({
         </div>
 
         <h1 className="mb-3 text-3xl font-bold">
-          Check your email
+          {emailSent ? "Check your email" : "Account created"}
         </h1>
 
         <p className="mb-2 text-brand-muted">
-          We've sent a verification email to:
+          {emailSent
+            ? "We've sent a verification email to:"
+            : "Your account was created, but we could not send the verification email to:"}
         </p>
 
-        <p className="mb-8 font-medium">
-          {email}
-        </p>
+        <p className="mb-8 font-medium">{email}</p>
 
         <p className="mb-8 text-sm text-brand-muted">
-          Verify your email before signing in.
+          {emailSent
+            ? "Verify your email before signing in."
+            : "Use the resend verification option to request a new verification email."}
         </p>
 
         <div className="space-y-3">
