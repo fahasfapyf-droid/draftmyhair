@@ -36,44 +36,25 @@ async function runWalletTransaction<T>(
   throw new Error("Wallet transaction could not be completed.");
 }
 
-export async function ensureWallet(
-  userId: string
-): Promise<Wallet> {
-  const wallet = await prisma.wallet.findUnique({
-    where: {
-      userId,
-    },
-  });
+export async function ensureWallet(userId: string): Promise<Wallet> {
+  const wallet = await prisma.wallet.findUnique({ where: { userId } });
+  if (wallet) return wallet;
 
-  if (wallet) {
-    return wallet;
-  }
-
-  return runWalletTransaction(async (tx) => {
-    return tx.wallet.upsert({
-      where: {
-        userId,
-      },
+  return runWalletTransaction(async (tx) =>
+    tx.wallet.upsert({
+      where: { userId },
       update: {},
-      create: {
-        userId,
-        balance: 0,
-      },
-    });
-  });
+      create: { userId, balance: 0 },
+    })
+  );
 }
 
-export async function getWallet(
-  userId: string
-): Promise<Wallet> {
+export async function getWallet(userId: string): Promise<Wallet> {
   return ensureWallet(userId);
 }
 
-export async function getBalance(
-  userId: string
-): Promise<number> {
+export async function getBalance(userId: string): Promise<number> {
   const wallet = await ensureWallet(userId);
-
   return wallet.balance;
 }
 
@@ -96,40 +77,19 @@ export async function awardCredits({
   paymentId,
   metadata,
 }: AwardCreditsInput) {
-  if (amount <= 0) {
-    throw new Error(
-      "Credit amount must be greater than zero."
-    );
-  }
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
 
   return runWalletTransaction(async (tx) => {
-    let wallet = await tx.wallet.findUnique({
-      where: {
-        userId,
-      },
-    });
-
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
     if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: {
-          userId,
-          balance: 0,
-        },
-      });
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
     }
 
     const balanceBefore = wallet.balance;
     const balanceAfter = balanceBefore + amount;
-
     const updatedWallet = await tx.wallet.update({
-      where: {
-        id: wallet.id,
-      },
-      data: {
-        balance: {
-          increment: amount,
-        },
-      },
+      where: { id: wallet.id },
+      data: { balance: { increment: amount } },
     });
 
     const transaction = await tx.creditTransaction.create({
@@ -142,16 +102,11 @@ export async function awardCredits({
         description,
         generationId,
         paymentId,
-        ...(metadata !== undefined
-          ? { metadata }
-          : {}),
+        ...(metadata !== undefined ? { metadata } : {}),
       },
     });
 
-    return {
-      wallet: updatedWallet,
-      transaction,
-    };
+    return { wallet: updatedWallet, transaction };
   });
 }
 
@@ -170,44 +125,21 @@ export async function consumeCredits({
   generationId,
   metadata,
 }: ConsumeCreditsInput) {
-  if (amount <= 0) {
-    throw new Error(
-      "Credit amount must be greater than zero."
-    );
-  }
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
 
   return runWalletTransaction(async (tx) => {
-    let wallet = await tx.wallet.findUnique({
-      where: {
-        userId,
-      },
-    });
-
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
     if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: {
-          userId,
-          balance: 0,
-        },
-      });
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
     }
 
-    if (wallet.balance < amount) {
-      throw new Error("Insufficient credits.");
-    }
+    if (wallet.balance < amount) throw new Error("Insufficient credits.");
 
     const balanceBefore = wallet.balance;
     const balanceAfter = balanceBefore - amount;
-
     const updatedWallet = await tx.wallet.update({
-      where: {
-        id: wallet.id,
-      },
-      data: {
-        balance: {
-          decrement: amount,
-        },
-      },
+      where: { id: wallet.id },
+      data: { balance: { decrement: amount } },
     });
 
     const transaction = await tx.creditTransaction.create({
@@ -219,16 +151,11 @@ export async function consumeCredits({
         balanceAfter,
         description,
         generationId,
-        ...(metadata !== undefined
-          ? { metadata }
-          : {}),
+        ...(metadata !== undefined ? { metadata } : {}),
       },
     });
 
-    return {
-      wallet: updatedWallet,
-      transaction,
-    };
+    return { wallet: updatedWallet, transaction };
   });
 }
 
@@ -247,40 +174,42 @@ export async function refundCredits({
   generationId,
   metadata,
 }: RefundCreditsInput) {
-  if (amount <= 0) {
-    throw new Error(
-      "Credit amount must be greater than zero."
-    );
-  }
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
 
   return runWalletTransaction(async (tx) => {
-    let wallet = await tx.wallet.findUnique({
-      where: {
-        userId,
-      },
-    });
-
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
     if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: {
-          userId,
-          balance: 0,
-        },
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
+    }
+
+    // Generation refunds are idempotent and only apply to a generation that
+    // actually consumed credits. This protects normal failures and stale
+    // recovery from double refunds and prevents refunds for admin generations.
+    if (generationId) {
+      const existingRefund = await tx.creditTransaction.findFirst({
+        where: { generationId, type: WalletTransactionType.REFUND },
       });
+
+      if (existingRefund) {
+        return { wallet, transaction: existingRefund, refunded: false };
+      }
+
+      const debit = await tx.creditTransaction.findFirst({
+        where: { generationId, type: WalletTransactionType.DEBIT },
+      });
+
+      if (!debit) {
+        return { wallet, transaction: null, refunded: false };
+      }
+
+      amount = debit.amount;
     }
 
     const balanceBefore = wallet.balance;
     const balanceAfter = balanceBefore + amount;
-
     const updatedWallet = await tx.wallet.update({
-      where: {
-        id: wallet.id,
-      },
-      data: {
-        balance: {
-          increment: amount,
-        },
-      },
+      where: { id: wallet.id },
+      data: { balance: { increment: amount } },
     });
 
     const transaction = await tx.creditTransaction.create({
@@ -292,15 +221,10 @@ export async function refundCredits({
         balanceAfter,
         description,
         generationId,
-        ...(metadata !== undefined
-          ? { metadata }
-          : {}),
+        ...(metadata !== undefined ? { metadata } : {}),
       },
     });
 
-    return {
-      wallet: updatedWallet,
-      transaction,
-    };
+    return { wallet: updatedWallet, transaction, refunded: true };
   });
 }
