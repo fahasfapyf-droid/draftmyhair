@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -18,7 +19,7 @@ model User {
   lastLoginAt         DateTime?
   failedLoginAttempts Int                  @default(0)
   isActive            Boolean              @default(true)
-  isDeleted            Boolean              @default(false)
+  isDeleted           Boolean              @default(false)
   deletedAt            DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
@@ -29,7 +30,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   payments            Payment[]
   sessions            Session[]
-  preference          UserPreference?
+  preference           UserPreference?
   wallet              Wallet?
 
   @@index([email])
@@ -133,8 +134,8 @@ model CreditTransaction {
 model Payment {
   id                 String              @id @default(cuid())
   userId             String
-  provider           PaymentProvider
-  type               PaymentType
+  provider            PaymentProvider
+  type                PaymentType
   status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
@@ -211,211 +212,10 @@ model ContactMessage {
   name       String
   email      String
   subject    String?
-  message    String
+  message   String
   status     ContactStatus @default(NEW)
   resolvedAt DateTime?
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
-
-  @@index([email])
-  @@index([status])
-  @@index([createdAt])
-}
-
-model Hairstyle {
-  id           String             @id @default(cuid())
-  name         String
-  slug         String             @unique
-  serviceType  ServiceType        @default(HAIRSTYLE)
-  category     HairstyleCategory?
-  gender       GenderTarget
-  description  String?
-  thumbnailUrl String?
-  displayOrder Int                @default(0)
-  promptKey    String             @unique
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  feedbacks    Feedback[]
-  generations  Generation[]
-
-  @@index([slug])
-  @@index([promptKey])
-  @@index([serviceType])
-  @@index([category])
-  @@index([gender])
-  @@index([isActive])
-}
-
-model Image {
-  id               String      @id @default(cuid())
-  ownerId          String
-  generationId     String?
-  type             ImageType
-  status           ImageStatus @default(ACTIVE)
-  storageKey       String      @unique
-  blobUrl          String      @unique
-  originalFilename String?
-  mimeType         String
-  fileSize         Int
-  width            Int?
-  height           Int?
-  checksum         String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  generation       Generation? @relation(fields: [generationId], references: [id])
-  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  @@index([ownerId])
-  @@index([generationId])
-  @@index([type])
-  @@index([status])
-}
-
-model Feedback {
-  id                 String             @id @default(cuid())
-  userId             String?
-  hairstyleId        String?
-  overallRating      Int
-  identityRating     Int
-  realismRating      Int
-  decisionConfidence DecisionConfidence
-  issues             FeedbackIssue[]
-  comment            String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  hairstyle          Hairstyle?         @relation(fields: [hairstyleId], references: [id])
-  user               User?              @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([hairstyleId])
-  @@index([overallRating])
-  @@index([decisionConfidence])
-  @@index([createdAt])
-}
-
-enum ImageType {
-  ORIGINAL
-  GENERATED
-}
-
-enum ImageStatus {
-  ACTIVE
-  FAILED
-  DELETED
-}
-
-enum UserRole {
-  USER
-  ADMIN
-}
-
-enum WalletTransactionType {
-  CREDIT
-  DEBIT
-  REFUND
-  BONUS
-  PURCHASE
-  ADJUSTMENT
-}
-
-enum GenerationStatus {
-  QUEUED
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  PROCESSING
-  SUCCEEDED
-  FAILED
-  REFUNDED
-  CANCELLED
-}
-
-enum PaymentProvider {
-  STRIPE
-  PAYPAL
-  LEMONSQUEEZY
-  MANUAL
-}
-
-enum PaymentType {
-  CREDIT_PURCHASE
-  SUBSCRIPTION
-  ONE_TIME
-}
-
-enum ContactStatus {
-  NEW
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum HairstyleCategory {
-  BOB
-  LOB
-  PIXIE
-  BIXIE
-  LAYERS
-  SHAG
-  WOLF
-  MULLET
-  FADE
-  TAPER
-  UNDERCUT
-  CROP
-  CREW
-  QUIFF
-  POMPADOUR
-  SIDE_PART
-  COMB_OVER
-  MOHAWK
-  MAN_BUN
-  BRAIDS
-  LOCS
-  AFRO
-  CURLY
-  BANGS
-  UPDO
-}
-
-enum ServiceType {
-  HAIRSTYLE
-  HAIR_COLOR
-  BUZZ_CUT
-  BALD
-  BEARD
-  BEARD_REMOVAL
-}
-
-enum GenderTarget {
-  FEMALE
-  MALE
-  UNISEX
-}
-
-enum DecisionConfidence {
-  DEFINITELY_NOT
-  PROBABLY_NOT
-  UNSURE
-  PROBABLY_YES
-  DEFINITELY_YES
-}
-
-enum FeedbackIssue {
-  IDENTITY_DRIFT
-  HAIRLINE
-  LIGHTING
-  HAIR_COLOR
-  TEXTURE
-  BLENDING
-  BACKGROUND
-  OTHER
-}
