@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -134,8 +133,8 @@ model CreditTransaction {
 model Payment {
   id                 String              @id @default(cuid())
   userId             String
-  provider            PaymentProvider
-  type                PaymentType
+  provider           PaymentProvider
+  type               PaymentType
   status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
