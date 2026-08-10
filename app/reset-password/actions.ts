@@ -4,9 +4,7 @@ import { redirect } from "next/navigation";
 import * as argon2 from "argon2";
 
 import { prisma } from "@/lib/prisma";
-
 import { resetPasswordSchema } from "@/lib/auth/password-reset.validation";
-
 import {
   getPasswordResetToken,
   markPasswordResetTokenUsed,
@@ -38,64 +36,51 @@ export async function resetPassword(
       };
     }
 
-    const {
-      token,
-      password,
-    } = parsed.data;
-
-    const resetToken =
-      await getPasswordResetToken(token);
+    const { token, password } = parsed.data;
+    const resetToken = await getPasswordResetToken(token);
 
     if (!resetToken) {
       return {
         success: false,
-        message:
-          "This password reset link is invalid or has expired.",
+        message: "This password reset link is invalid or has expired.",
       };
     }
 
-    const passwordHash =
-      await argon2.hash(password);
+    const passwordHash = await argon2.hash(password);
 
-    await prisma.user.update({
-  where: {
-    id: resetToken.userId,
-  },
-  data: {
-    passwordHash,
-  },
-});
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: {
+          passwordHash,
+          sessionVersion: { increment: 1 },
+        },
+      });
 
-// Invalidate every active login session.
-await prisma.session.deleteMany({
-  where: {
-    userId: resetToken.userId,
-  },
-});
+      await tx.session.deleteMany({
+        where: { userId: resetToken.userId },
+      });
 
-// Mark the current reset token as used.
-await markPasswordResetTokenUsed(
-  resetToken.id
-);
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      });
 
-// Remove every remaining reset token.
-await deleteUserPasswordResetTokens(
-  resetToken.userId
-);
+      await tx.passwordResetToken.deleteMany({
+        where: {
+          userId: resetToken.userId,
+          id: { not: resetToken.id },
+        },
+      });
+    });
   } catch (error) {
-    console.error(
-      "Reset password error:",
-      error
-    );
+    console.error("Reset password error:", error);
 
     return {
       success: false,
-      message:
-        "Something went wrong. Please try again.",
+      message: "Something went wrong. Please try again.",
     };
   }
 
-  redirect(
-    "/login?reset=success"
-  );
+  redirect("/login?reset=success");
 }

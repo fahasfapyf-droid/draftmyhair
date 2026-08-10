@@ -6,26 +6,16 @@ export async function loginUser(
   email: string,
   password: string
 ) {
-  console.log("================================");
-  console.log("LOGIN ATTEMPT");
-  console.log("EMAIL:", email);
-
   const user = await prisma.user.findUnique({
     where: {
       email,
     },
   });
 
-  console.log("USER FOUND:", !!user);
-
-  // User does not exist
   if (!user) {
     return null;
   }
 
-  console.log("HASH EXISTS:", !!user.passwordHash);
-
-  // User has no password (OAuth account, etc.)
   if (!user.passwordHash) {
     return null;
   }
@@ -35,25 +25,19 @@ export async function loginUser(
     password
   );
 
-  console.log("PASSWORD VALID:", validPassword);
-
-  // Wrong password
   if (!validPassword) {
     return null;
   }
 
-  // Block login until email is verified
   if (!user.emailVerified) {
-  console.log("EMAIL NOT VERIFIED");
-  return null;
-}
-
-  console.log("LOGIN SUCCESS");
+    return null;
+  }
 
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    sessionVersion: user.sessionVersion,
   };
 }

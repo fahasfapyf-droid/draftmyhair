@@ -5,42 +5,34 @@ import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
   const router = useRouter();
-
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
     setLoading(true);
     setMessage("");
 
     try {
       const response = await fetch("/api/register", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
         setMessage(data.error ?? "Registration failed.");
-      } else {
-        router.push(
-  `/register-success?email=${encodeURIComponent(email)}`
-);
+        return;
       }
+
+      router.push(
+        `/register-success?email=${encodeURIComponent(email)}&verificationEmailSent=${data.verificationEmailSent !== false}`
+      );
     } catch {
       setMessage("Something went wrong.");
     } finally {
@@ -59,7 +51,6 @@ export default function RegisterPage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-
         <input
           className="w-full rounded border p-3"
           type="email"
@@ -67,7 +58,6 @@ export default function RegisterPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-
         <input
           className="w-full rounded border p-3"
           type="password"
@@ -75,7 +65,6 @@ export default function RegisterPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-
         <button
           className="w-full rounded bg-black p-3 text-white disabled:opacity-50"
           disabled={loading}
@@ -84,11 +73,7 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      {message && (
-        <p className="mt-4 text-sm">
-          {message}
-        </p>
-      )}
+      {message && <p className="mt-4 text-sm">{message}</p>}
     </main>
   );
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { GenerationStatus, ImageType } from "@prisma/client";
-import { getImageMetadata } from "@/lib/image/metadata";
 import { generatePreview, getGenerationMetadata } from "@/lib/engine";
+import { normalizeImage } from "@/lib/image/normalize";
 import { prisma } from "@/lib/prisma";
 import {
   completeGeneration,
@@ -47,9 +47,7 @@ function isRetryableGenerationError(error: unknown) {
     "internal server error",
   ];
 
-  return retryablePatterns.some((pattern) =>
-    message.includes(pattern)
-  );
+  return retryablePatterns.some((pattern) => message.includes(pattern));
 }
 
 async function generatePreviewWithRetry(
@@ -57,11 +55,7 @@ async function generatePreviewWithRetry(
 ) {
   let lastError: unknown;
 
-  for (
-    let attempt = 1;
-    attempt <= MAX_GENERATION_RETRIES;
-    attempt++
-  ) {
+  for (let attempt = 1; attempt <= MAX_GENERATION_RETRIES; attempt++) {
     try {
       return await generatePreview(args);
     } catch (error) {
@@ -75,11 +69,7 @@ async function generatePreviewWithRetry(
         throw error;
       }
 
-      console.warn(
-        `Generation attempt ${attempt} failed. Retrying...`,
-        error
-      );
-
+      console.warn(`Generation attempt ${attempt} failed. Retrying...`);
       await delay(RETRY_DELAYS_MS[attempt - 1]);
     }
   }
@@ -120,10 +110,7 @@ export type GenerationExecutionResult =
   | GenerationExecutionSuccess;
 
 type JobPreparationResult =
-  | {
-      ok: true;
-      job: GeneratePreviewJob;
-    }
+  | { ok: true; job: GeneratePreviewJob }
   | GenerationExecutionFailure;
 
 async function cleanupOriginalImage(
@@ -131,19 +118,13 @@ async function cleanupOriginalImage(
   uploadedImage: StorageUploadResult
 ) {
   try {
-    await prisma.image.delete({
-      where: {
-        id: originalImageId,
-      },
-    });
+    await prisma.image.delete({ where: { id: originalImageId } });
   } catch (error) {
     console.error("Original image record cleanup failed:", error);
   }
 
   try {
-    await deleteFromStorage({
-      blobUrl: uploadedImage.blobUrl,
-    });
+    await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
   } catch (error) {
     console.error("Original image blob cleanup failed:", error);
   }
@@ -154,19 +135,13 @@ async function cleanupGeneratedImage(
   uploadedImage: StorageUploadResult
 ) {
   try {
-    await prisma.image.delete({
-      where: {
-        id: generatedImageId,
-      },
-    });
+    await prisma.image.delete({ where: { id: generatedImageId } });
   } catch (error) {
     console.error("Generated image record cleanup failed:", error);
   }
 
   try {
-    await deleteFromStorage({
-      blobUrl: uploadedImage.blobUrl,
-    });
+    await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
   } catch (error) {
     console.error("Generated image blob cleanup failed:", error);
   }
@@ -188,13 +163,8 @@ export async function prepareGeneratePreviewJob(
   input: PrepareGeneratePreviewJobInput
 ): Promise<JobPreparationResult> {
   const hairstyle = await prisma.hairstyle.findFirst({
-    where: {
-      promptKey: input.promptKey,
-      isActive: true,
-    },
-    select: {
-      id: true,
-    },
+    where: { promptKey: input.promptKey, isActive: true },
+    select: { id: true },
   });
 
   if (!hairstyle) {
@@ -206,19 +176,31 @@ export async function prepareGeneratePreviewJob(
     };
   }
 
+  let normalizedImage;
+  try {
+    normalizedImage = await normalizeImage(input.imageBuffer, input.mimeType);
+  } catch (error) {
+    console.error("Original image normalization failed:", error);
+    return {
+      ok: false,
+      error: "Unable to process the original image.",
+      status: 422,
+      refundDescription: "Original image normalization failed",
+    };
+  }
+
   let uploadedImage: StorageUploadResult;
 
   try {
     uploadedImage = await uploadBufferToStorage({
-      buffer: input.imageBuffer,
+      buffer: normalizedImage.buffer,
       ownerId: input.userId,
       folder: "originals",
       filename: `${randomUUID()}-${input.originalFilename}`,
-      mimeType: input.mimeType,
+      mimeType: normalizedImage.mimeType,
     });
   } catch (error) {
     console.error("Original image upload failed:", error);
-
     return {
       ok: false,
       error: "Unable to store the original image.",
@@ -239,18 +221,16 @@ export async function prepareGeneratePreviewJob(
         originalFilename: input.originalFilename || null,
         mimeType: uploadedImage.mimeType,
         fileSize: uploadedImage.fileSize,
+        width: normalizedImage.width,
+        height: normalizedImage.height,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
   } catch (error) {
     console.error("Original image record creation failed:", error);
 
     try {
-      await deleteFromStorage({
-        blobUrl: uploadedImage.blobUrl,
-      });
+      await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
     } catch (cleanupError) {
       console.error("Original image cleanup failed:", cleanupError);
     }
@@ -275,12 +255,7 @@ export async function prepareGeneratePreviewJob(
       ...getGenerationMetadata(),
     });
 
-    return {
-      ok: true,
-      job: {
-        generationId: generation.id,
-      },
-    };
+    return { ok: true, job: { generationId: generation.id } };
   } catch (error) {
     console.error("Queued generation creation failed:", error);
     await cleanupOriginalImage(originalImage.id, uploadedImage);
@@ -298,9 +273,7 @@ export async function executeGeneratePreviewJob(
   job: GeneratePreviewJob
 ): Promise<GenerationExecutionResult> {
   const generation = await prisma.generation.findUnique({
-    where: {
-      id: job.generationId,
-    },
+    where: { id: job.generationId },
     select: {
       userId: true,
       promptKey: true,
@@ -328,11 +301,7 @@ export async function executeGeneratePreviewJob(
   }
 
   if (!generation.sourceStorageKey) {
-    await markJobFailed(
-      job.generationId,
-      "Original image data is unavailable."
-    );
-
+    await markJobFailed(job.generationId, "Original image data is unavailable.");
     return {
       ok: false,
       error: "Unable to load the original image.",
@@ -348,7 +317,6 @@ export async function executeGeneratePreviewJob(
   } catch (error) {
     console.error("Original image read failed:", error);
     await markJobFailed(job.generationId, "Unable to load the original image.");
-
     return {
       ok: false,
       error: "Unable to load the original image.",
@@ -359,7 +327,6 @@ export async function executeGeneratePreviewJob(
 
   if (!sourceImage) {
     await markJobFailed(job.generationId, "Original image is unavailable.");
-
     return {
       ok: false,
       error: "Unable to load the original image.",
@@ -368,7 +335,10 @@ export async function executeGeneratePreviewJob(
     };
   }
 
-  const metadata = await getImageMetadata(sourceImage.buffer);
+  const metadata = await normalizeImage(
+    sourceImage.buffer,
+    sourceImage.mimeType
+  );
 
   let processingStartedAt: Date;
 
@@ -378,12 +348,8 @@ export async function executeGeneratePreviewJob(
     console.error("Generation processing transition failed:", error);
 
     const latestGeneration = await prisma.generation.findUnique({
-      where: {
-        id: job.generationId,
-      },
-      select: {
-        status: true,
-      },
+      where: { id: job.generationId },
+      select: { status: true },
     });
 
     if (
@@ -413,8 +379,8 @@ export async function executeGeneratePreviewJob(
 
   try {
     const result = await generatePreviewWithRetry({
-      imageBuffer: sourceImage.buffer,
-      mimeType: sourceImage.mimeType,
+      imageBuffer: metadata.buffer,
+      mimeType: metadata.mimeType,
       metadata,
       promptKey: generation.promptKey,
       userId: generation.userId,
@@ -426,7 +392,6 @@ export async function executeGeneratePreviewJob(
         result.error ?? "Generation failed.",
         processingStartedAt
       );
-
       return {
         ok: false,
         error: result.error ?? "Generation failed.",
@@ -441,7 +406,6 @@ export async function executeGeneratePreviewJob(
         "Generation returned incomplete image data.",
         processingStartedAt
       );
-
       return {
         ok: false,
         error: "Generation returned incomplete image data.",
@@ -467,7 +431,6 @@ export async function executeGeneratePreviewJob(
         "Unable to store the generated image.",
         processingStartedAt
       );
-
       return {
         ok: false,
         error: "Unable to store the generated image.",
@@ -488,9 +451,7 @@ export async function executeGeneratePreviewJob(
           mimeType: uploadedGeneratedImage.mimeType,
           fileSize: uploadedGeneratedImage.fileSize,
         },
-        select: {
-          id: true,
-        },
+        select: { id: true },
       });
     } catch (error) {
       console.error("Generated image record creation failed:", error);
@@ -501,9 +462,7 @@ export async function executeGeneratePreviewJob(
       );
 
       try {
-        await deleteFromStorage({
-          blobUrl: uploadedGeneratedImage.blobUrl,
-        });
+        await deleteFromStorage({ blobUrl: uploadedGeneratedImage.blobUrl });
       } catch (cleanupError) {
         console.error("Generated image cleanup failed:", cleanupError);
       }

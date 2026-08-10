@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 
 import { loginUser } from "@/lib/auth/login";
+import { prisma } from "@/lib/prisma";
 
 export default {
   providers: [
@@ -24,10 +25,7 @@ export default {
           return null;
         }
 
-        return loginUser(
-          parsed.data.email,
-          parsed.data.password
-        );
+        return loginUser(parsed.data.email, parsed.data.password);
       },
     }),
   ],
@@ -45,6 +43,33 @@ export default {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.sessionVersion = user.sessionVersion;
+        token.revoked = false;
+        return token;
+      }
+
+      const tokenUserId =
+        typeof token.id === "string" ? token.id : null;
+
+      if (tokenUserId && !token.revoked) {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: tokenUserId },
+          select: {
+            sessionVersion: true,
+            isActive: true,
+            isDeleted: true,
+          },
+        });
+
+        if (
+          !currentUser ||
+          !currentUser.isActive ||
+          currentUser.isDeleted ||
+          currentUser.sessionVersion !== token.sessionVersion
+        ) {
+          token.revoked = true;
+          token.id = "";
+        }
       }
 
       return token;
@@ -52,8 +77,10 @@ export default {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.id = token.revoked ? "" : String(token.id ?? "");
+        session.user.role = token.revoked
+          ? "USER"
+          : String(token.role ?? "USER");
       }
 
       return session;
