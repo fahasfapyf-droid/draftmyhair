@@ -25,10 +25,7 @@ export default {
           return null;
         }
 
-        return loginUser(
-          parsed.data.email,
-          parsed.data.password
-        );
+        return loginUser(parsed.data.email, parsed.data.password);
       },
     }),
   ],
@@ -51,10 +48,17 @@ export default {
         return token;
       }
 
-      if (token.id && !token.revoked) {
+      const tokenUserId =
+        typeof token.id === "string" ? token.id : null;
+
+      if (tokenUserId && !token.revoked) {
         const currentUser = await prisma.user.findUnique({
-          where: { id: token.id },
-          select: { sessionVersion: true, isActive: true, isDeleted: true },
+          where: { id: tokenUserId },
+          select: {
+            sessionVersion: true,
+            isActive: true,
+            isDeleted: true,
+          },
         });
 
         if (
@@ -73,8 +77,10 @@ export default {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.revoked ? "" : (token.id as string);
-        session.user.role = token.revoked ? "USER" : (token.role as string);
+        session.user.id = token.revoked ? "" : String(token.id ?? "");
+        session.user.role = token.revoked
+          ? "USER"
+          : String(token.role ?? "USER");
       }
 
       return session;
