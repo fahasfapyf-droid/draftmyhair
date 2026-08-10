@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CheckCircle2, Clock3, ImagePlus, Sparkles, Users } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  ImagePlus,
+  Sparkles,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -41,7 +49,11 @@ export default async function SalonDashboardPage() {
     .map((item) => item.processingTimeMs)
     .filter((value): value is number => typeof value === "number" && value > 0);
   const averageProcessing = processingTimes.length
-    ? Math.round(processingTimes.reduce((sum, value) => sum + value, 0) / processingTimes.length / 1000)
+    ? Math.round(
+        processingTimes.reduce((sum, value) => sum + value, 0) /
+          processingTimes.length /
+          1000
+      )
     : null;
 
   return (
@@ -219,7 +231,7 @@ function MetricCard({
   label: string;
   value: number;
   detail: string;
-  icon: typeof Sparkles;
+  icon: LucideIcon;
 }) {
   return (
     <div className="rounded-editorial border border-brand-border bg-brand-surface p-5 shadow-sm">
