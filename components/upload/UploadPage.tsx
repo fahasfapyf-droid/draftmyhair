@@ -17,16 +17,12 @@ export const UploadPage: React.FC = () => {
     clearGenerationResult,
   } = useGenerationSession();
 
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null);
-
   const [previewUrl, setPreviewUrl] =
     useState<string | null>(null);
 
   const handleFileSelect = (file: File) => {
     const objectUrl = URL.createObjectURL(file);
 
-    setSelectedFile(file);
     setPreviewUrl(objectUrl);
 
     // New upload invalidates any previous generation.
@@ -38,7 +34,6 @@ export const UploadPage: React.FC = () => {
   };
 
   const handleReplace = () => {
-    setSelectedFile(null);
     setPreviewUrl(null);
 
     // Remove any previous generation.
