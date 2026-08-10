@@ -11,8 +11,8 @@ import {
   refundCredits,
 } from "@/lib/services/credit.service";
 
-const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png"];
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "Image exceeds the 20 MB upload limit.",
+          error: "Image exceeds the 10 MB upload limit.",
         },
         { status: 413 }
       );
