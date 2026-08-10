@@ -187,9 +187,10 @@ async function markJobFailed(
 export async function prepareGeneratePreviewJob(
   input: PrepareGeneratePreviewJobInput
 ): Promise<JobPreparationResult> {
-  const hairstyle = await prisma.hairstyle.findUnique({
+  const hairstyle = await prisma.hairstyle.findFirst({
     where: {
       promptKey: input.promptKey,
+      isActive: true,
     },
     select: {
       id: true,
@@ -199,9 +200,9 @@ export async function prepareGeneratePreviewJob(
   if (!hairstyle) {
     return {
       ok: false,
-      error: "Hairstyle not found.",
+      error: "Hairstyle not found or is no longer available.",
       status: 404,
-      refundDescription: "Hairstyle prompt key not found",
+      refundDescription: "Hairstyle prompt key is unavailable",
     };
   }
 
