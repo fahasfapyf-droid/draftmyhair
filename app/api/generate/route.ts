@@ -19,15 +19,17 @@ const UUID_PATTERN =
 export async function POST(request: Request) {
   let creditsConsumed = false;
   let userId: string | undefined;
+  let generationId: string | undefined;
 
-  const refundIfNeeded = async (description?: string) => {
-    if (!creditsConsumed || !userId || !description) {
+  const refundIfNeeded = async (description = "Generation request failed") => {
+    if (!creditsConsumed || !userId) {
       return;
     }
 
     try {
       await refundCredits({
         userId,
+        generationId,
         description,
       });
 
@@ -52,29 +54,8 @@ export async function POST(request: Request) {
 
     userId = session.user.id;
 
-if (!isAdmin(session)) {
-  try {
-    await consumeCredits({
-      userId,
-      amount: 1,
-      description: "AI hairstyle generation",
-    });
-
-    creditsConsumed = true;
-  } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to consume credits.",
-      },
-      { status: 402 }
-    );
-  }
-}
-
+    // Validate the request before charging credits. Invalid uploads,
+    // prompt keys, and generation IDs must never consume a user's balance.
     const formData = await request.formData();
     const image = formData.get("image");
     const promptKey = formData.get("promptKey");
@@ -144,10 +125,34 @@ if (!isAdmin(session)) {
       );
     }
 
-    const generationId =
+    generationId =
       typeof requestedGenerationId === "string"
         ? requestedGenerationId
         : randomUUID();
+
+    if (!isAdmin(session)) {
+      try {
+        await consumeCredits({
+          userId,
+          amount: 1,
+          generationId,
+          description: "AI hairstyle generation",
+        });
+
+        creditsConsumed = true;
+      } catch (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Unable to consume credits.",
+          },
+          { status: 402 }
+        );
+      }
+    }
 
     const jobPreparation = await createGeneratePreviewJob({
       generationId,
@@ -184,6 +189,8 @@ if (!isAdmin(session)) {
       );
     }
 
+    // The server owns the final generation identifier. The client verifies it
+    // before beginning status polling.
     return NextResponse.json(
       {
         success: true,
@@ -194,6 +201,7 @@ if (!isAdmin(session)) {
     );
   } catch (error) {
     console.error("Generation API Error:", error);
+    await refundIfNeeded("Unexpected generation API error");
 
     return NextResponse.json(
       {
