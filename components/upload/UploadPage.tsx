@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Container } from "@/components/ui/container";
@@ -13,17 +13,15 @@ import { useGenerationSession } from "@/lib/context/GenerationSession";
 
 export const UploadPage: React.FC = () => {
   const {
+    session,
     setUploadedPhoto,
     clearGenerationResult,
   } = useGenerationSession();
 
-  const [previewUrl, setPreviewUrl] =
-    useState<string | null>(null);
+  const previewUrl = session.uploadedPreview;
 
   const handleFileSelect = (file: File) => {
     const objectUrl = URL.createObjectURL(file);
-
-    setPreviewUrl(objectUrl);
 
     // New upload invalidates any previous generation.
     clearGenerationResult();
@@ -34,13 +32,10 @@ export const UploadPage: React.FC = () => {
   };
 
   const handleReplace = () => {
-    setPreviewUrl(null);
-
-    // Remove any previous generation.
+    // Remove any previous generation and clear the shared upload session.
+    // GenerationSession revokes the previous object URL when its preview
+    // state changes.
     clearGenerationResult();
-
-    // GenerationSession will revoke the previous object URL after the
-    // session preview state changes.
     setUploadedPhoto(null, null);
   };
 
