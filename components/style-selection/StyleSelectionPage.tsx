@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Container } from "@/components/ui/container";
@@ -54,6 +54,10 @@ export const StyleSelectionPage: React.FC<StyleSelectionPageProps> = ({
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedId(null);
+  }, [gender, serviceType, categoryFilter]);
 
   const handleContinue = () => {
     const selectedStyle = styles.find((style) => style.id === selectedId);
