@@ -6,6 +6,36 @@ import {
 
 import { prisma } from "@/lib/prisma";
 
+const MAX_TRANSACTION_RETRIES = 3;
+
+function isRetryableTransactionError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2002")
+  );
+}
+
+async function runWalletTransaction<T>(
+  operation: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (
+        !isRetryableTransactionError(error) ||
+        attempt === MAX_TRANSACTION_RETRIES
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Wallet transaction could not be completed.");
+}
+
 export async function ensureWallet(
   userId: string
 ): Promise<Wallet> {
@@ -19,11 +49,17 @@ export async function ensureWallet(
     return wallet;
   }
 
-  return prisma.wallet.create({
-    data: {
-      userId,
-      balance: 0,
-    },
+  return runWalletTransaction(async (tx) => {
+    return tx.wallet.upsert({
+      where: {
+        userId,
+      },
+      update: {},
+      create: {
+        userId,
+        balance: 0,
+      },
+    });
   });
 }
 
@@ -66,7 +102,7 @@ export async function awardCredits({
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runWalletTransaction(async (tx) => {
     let wallet = await tx.wallet.findUnique({
       where: {
         userId,
@@ -90,7 +126,9 @@ export async function awardCredits({
         id: wallet.id,
       },
       data: {
-        balance: balanceAfter,
+        balance: {
+          increment: amount,
+        },
       },
     });
 
@@ -138,7 +176,7 @@ export async function consumeCredits({
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runWalletTransaction(async (tx) => {
     let wallet = await tx.wallet.findUnique({
       where: {
         userId,
@@ -166,7 +204,9 @@ export async function consumeCredits({
         id: wallet.id,
       },
       data: {
-        balance: balanceAfter,
+        balance: {
+          decrement: amount,
+        },
       },
     });
 
@@ -213,7 +253,7 @@ export async function refundCredits({
     );
   }
 
-  return prisma.$transaction(async (tx) => {
+  return runWalletTransaction(async (tx) => {
     let wallet = await tx.wallet.findUnique({
       where: {
         userId,
@@ -237,7 +277,9 @@ export async function refundCredits({
         id: wallet.id,
       },
       data: {
-        balance: balanceAfter,
+        balance: {
+          increment: amount,
+        },
       },
     });
 
