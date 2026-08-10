@@ -20,21 +20,34 @@ export function useHairstyles(filters: HairstyleFilters = {}): UseHairstylesResu
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadHairstyles() {
       setLoading(true);
       setError(null);
 
       try {
         const data = await getHairstyles({ gender, serviceType, category });
-        setStyles(data);
+
+        if (!cancelled) {
+          setStyles(data);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err : new Error("Unknown error"));
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error("Unknown error"));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     loadHairstyles();
+
+    return () => {
+      cancelled = true;
+    };
   }, [gender, serviceType, category]);
 
   return {
