@@ -22,9 +22,11 @@ type UseGenerationPollingOptions = {
   onFailed: (error: string) => void;
 };
 
-const POLL_INTERVAL_MS = 1_500;
+// Keep polling lightweight while still allowing the server-side stale
+// recovery trigger to run for generations that exceed normal processing time.
+const POLL_INTERVAL_MS = 5_000;
 const INITIAL_RECORD_WAIT_MS = 30_000;
-const MAX_POLL_DURATION_MS = 3 * 60 * 1000;
+const MAX_POLL_DURATION_MS = 35 * 60 * 1000;
 
 export function useGenerationPolling({
   generationId,
@@ -75,7 +77,7 @@ export function useGenerationPolling({
           MAX_POLL_DURATION_MS
         ) {
           stopWithFailure(
-            "Your generation is taking longer than expected. Please check your Generation History in a few minutes."
+            "Your generation is taking longer than expected. Please check your Generation History."
           );
           return;
         }

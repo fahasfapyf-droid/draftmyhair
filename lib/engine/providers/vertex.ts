@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, MediaResolution } from "@google/genai";
 import sharp from "sharp";
 import {
   ProviderGenerationRequest,
@@ -62,99 +62,6 @@ export async function generateWithVertex(
   try {
     const ai = getVertexClient();
 
-    // ==========================================================
-    // DEBUG: VERIFY WHAT IS ACTUALLY SENT TO GEMINI
-    // ==========================================================
-
-    console.log("");
-    console.log("==========================================================");
-    console.log("           DRAFT MY HAIR → GEMINI REQUEST");
-    console.log("==========================================================");
-
-    console.log("Model:");
-    console.log(VERTEX_MODEL);
-
-    console.log("");
-
-    console.log("Prompt Length:");
-    console.log(request.prompt.length);
-
-    console.log("");
-
-    console.log("Prompt Start (first 1000 chars)");
-    console.log("--------------------------------");
-    console.log(request.prompt.substring(0, 1000));
-
-    console.log("");
-
-    console.log("Prompt End (last 1000 chars)");
-    console.log("------------------------------");
-    console.log(
-      request.prompt.substring(
-        Math.max(0, request.prompt.length - 1000)
-      )
-    );
-
-    console.log("");
-
-    console.log("Image");
-    console.log("--------------------------------");
-    console.log("Mime Type:", request.mimeType);
-
-console.log(
-  "Image Size:",
-  request.imageBuffer.length,
-  "bytes"
-);
-
-console.log(
-  "Width:",
-  request.metadata.width
-);
-
-console.log(
-  "Height:",
-  request.metadata.height
-);
-
-console.log(
-  "Orientation:",
-  request.metadata.orientation ?? "None"
-);
-
-console.log(
-  "Aspect Ratio:",
-  request.metadata.aspectRatio
-);
-
-    console.log("");
-
-    console.log("Prompt Hash");
-    console.log("--------------------------------");
-    console.log(
-      Buffer.from(request.prompt)
-        .toString("base64")
-        .substring(0, 120)
-    );
-
-    console.log("==========================================================");
-    console.log("");
-
-    // ==========================================================
-    // SEND REQUEST
-    // ==========================================================
-    console.log("Aspect Ratio Sent:", request.metadata.aspectRatio);
-    console.log(
-  "Expected Dimensions:",
-  `${request.metadata.width} × ${request.metadata.height}`
-);
-console.log("Config:", {
-  responseModalities: ["IMAGE"],
-  imageConfig: {
-    aspectRatio: request.metadata.aspectRatio,
-  },
-});
-
     const response = await ai.models.generateContent({
       model: VERTEX_MODEL,
       contents: [
@@ -174,12 +81,14 @@ console.log("Config:", {
         },
       ],
       config: {
-  responseModalities: ["IMAGE"],
-
-  imageConfig: {
-    aspectRatio: request.metadata.aspectRatio,
-  },
-},
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: request.metadata.aspectRatio,
+        },
+        // Gemini 3 image tasks benefit from high input resolution when
+        // preserving fine facial/hair geometry is important.
+        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
+      },
     });
 
     const imagePart =
@@ -187,130 +96,49 @@ console.log("Config:", {
         (part: any) => part.inlineData
       );
 
-   if (!imagePart?.inlineData?.data) {
-  return {
-    success: false,
-    error: "Vertex AI returned no image.",
-  };
-}
-
-const outputBuffer = Buffer.from(
-  imagePart.inlineData.data,
-  "base64"
-);
-
-const meta = await sharp(outputBuffer).metadata();
-
-console.log("");
-console.log("==========================================================");
-console.log("           GEMINI RETURNED IMAGE");
-console.log("==========================================================");
-
-console.log("Width:", meta.width);
-console.log("Height:", meta.height);
-console.log("Orientation:", meta.orientation ?? "None");
-console.log(
-  "Expected Dimensions:",
-  `${request.metadata.width} × ${request.metadata.height}`
-);
-
-console.log(
-  "Returned Dimensions:",
-  `${meta.width} × ${meta.height}`
-);
-
-console.log(
-  "Dimension Match:",
-  meta.width === request.metadata.width &&
-  meta.height === request.metadata.height
-    ? "YES"
-    : "NO"
-);
-
-if (
-  meta.width &&
-  meta.height &&
-  request.metadata.width &&
-  request.metadata.height
-) {
-  console.log(
-    "Scale X:",
-    (meta.width / request.metadata.width).toFixed(4)
-  );
-
-  console.log(
-    "Scale Y:",
-    (meta.height / request.metadata.height).toFixed(4)
-  );
-  console.log(
-  "Scale Difference:",
-  (
-    (meta.width / request.metadata.width) -
-    (meta.height / request.metadata.height)
-  ).toFixed(4)
-);
-console.log(
-  "Uniform Scale:",
-  Math.abs(
-    (meta.width / request.metadata.width) -
-    (meta.height / request.metadata.height)
-  ) < 0.005
-    ? "YES"
-    : "NO"
-);
-}
-if (meta.width && meta.height) {
-  const returnedAspect = (
-    meta.width / meta.height
-  ).toFixed(4);
-
-  console.log(
-    "Returned Aspect Ratio:",
-    returnedAspect
-  );
-console.log(
-  "Dimensions:",
-  `${meta.width} × ${meta.height}`
-);
-}
-
-console.log("Mime Type:", imagePart.inlineData.mimeType ?? "image/png");
-console.log("Output Size:", outputBuffer.length, "bytes");
-console.log("==========================================================");
-console.log("");
-
-console.log("✓ Gemini returned an image successfully.");
-
-return {
-  success: true,
-  provider: VERTEX_PROVIDER,
-  providerModel: VERTEX_MODEL,
-  imageBuffer: outputBuffer,
-  mimeType: imagePart.inlineData.mimeType ?? "image/png",
-};
-  } catch (error) {
-    console.error("");
-    console.error("==========================================================");
-    console.error("                 VERTEX ERROR");
-    console.error("==========================================================");
-
-    console.error(error);
-
-    if (error instanceof Error) {
-      console.error("");
-      console.error("Name:");
-      console.error(error.name);
-
-      console.error("");
-      console.error("Message:");
-      console.error(error.message);
-
-      console.error("");
-      console.error("Stack:");
-      console.error(error.stack);
+    if (!imagePart?.inlineData?.data) {
+      return {
+        success: false,
+        error: "Vertex AI returned no image.",
+      };
     }
 
-    console.error("==========================================================");
+    const outputBuffer = Buffer.from(
+      imagePart.inlineData.data,
+      "base64"
+    );
+
+    const meta = await sharp(outputBuffer).metadata();
+
+    if (!meta.width || !meta.height) {
+      return {
+        success: false,
+        error: "Vertex AI returned an image with invalid dimensions.",
+      };
+    }
+
+    if (process.env.DEBUG_VERTEX === "true") {
+      console.debug("Vertex generation completed", {
+        model: VERTEX_MODEL,
+        inputBytes: request.imageBuffer.length,
+        inputWidth: request.metadata.width,
+        inputHeight: request.metadata.height,
+        inputAspectRatio: request.metadata.aspectRatio,
+        outputWidth: meta.width,
+        outputHeight: meta.height,
+        outputMimeType: imagePart.inlineData.mimeType ?? "image/png",
+      });
+    }
+
+    return {
+      success: true,
+      provider: VERTEX_PROVIDER,
+      providerModel: VERTEX_MODEL,
+      imageBuffer: outputBuffer,
+      mimeType: imagePart.inlineData.mimeType ?? "image/png",
+    };
+  } catch (error) {
+    console.error("Vertex AI request failed:", error);
 
     return {
       success: false,

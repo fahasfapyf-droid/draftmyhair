@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { isAdmin } from "@/lib/auth/authorization";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { normalizeImage } from "@/lib/image/normalize";
 import {
   createGeneratePreviewJob,
   runGeneratePreviewJob,
@@ -130,14 +132,55 @@ export async function POST(request: Request) {
         ? requestedGenerationId
         : randomUUID();
 
+    // A retried POST with the same generation ID must not charge again or
+    // create a second generation. Return the existing generation instead.
+    if (requestedGenerationId) {
+      const existingGeneration = await prisma.generation.findFirst({
+        where: {
+          id: generationId,
+          userId,
+        },
+        select: {
+          status: true,
+          resultStorageKey: true,
+          errorMessage: true,
+        },
+      });
+
+      if (existingGeneration) {
+        return NextResponse.json({
+          success: true,
+          generationId,
+          imageUrl:
+            existingGeneration.status === "COMPLETED" &&
+            existingGeneration.resultStorageKey
+              ? `/api/blob?pathname=${encodeURIComponent(existingGeneration.resultStorageKey)}`
+              : null,
+          status: existingGeneration.status,
+          error: existingGeneration.errorMessage,
+        });
+      }
+    }
+
     if (!isAdmin(session)) {
       try {
-        await consumeCredits({
+        const consumption = await consumeCredits({
           userId,
           amount: 1,
           generationId,
           description: "AI hairstyle generation",
         });
+
+        if (consumption.alreadyConsumed) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "This generation request is already being processed.",
+              generationId,
+            },
+            { status: 409 }
+          );
+        }
 
         creditsConsumed = true;
       } catch (error) {
@@ -154,12 +197,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Bake EXIF orientation into the pixels before storage and model input.
+    // This makes the generation pipeline geometry-stable for phone photos.
+    const normalizedImage = await normalizeImage(
+      Buffer.from(await image.arrayBuffer()),
+      image.type
+    );
+
     const jobPreparation = await createGeneratePreviewJob({
       generationId,
       userId,
       promptKey: promptKey.trim(),
-      imageBuffer: Buffer.from(await image.arrayBuffer()),
-      mimeType: image.type,
+      imageBuffer: normalizedImage.buffer,
+      mimeType: normalizedImage.mimeType,
       originalFilename: image.name,
     });
 
