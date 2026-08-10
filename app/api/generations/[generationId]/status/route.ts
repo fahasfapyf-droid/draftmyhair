@@ -26,15 +26,8 @@ export async function GET(
 
   const { generationId } = await params;
 
-  // Client-side status polling is the reliable execution-time trigger for
-  // stale recovery. It is scoped to the requested generation, so normal
-  // polling does not scan the entire generations table.
-  try {
-    await recoverStaleGeneration(generationId);
-  } catch (error) {
-    console.error(`Stale generation recovery failed for ${generationId}:`, error);
-  }
-
+  // Authorize the generation before performing any lifecycle mutation.
+  // Recovery is deliberately scoped to a generation the caller can access.
   const generation = await prisma.generation.findFirst({
     where: {
       id: generationId,
@@ -57,15 +50,43 @@ export async function GET(
     );
   }
 
+  try {
+    await recoverStaleGeneration(generationId);
+  } catch (error) {
+    console.error(`Stale generation recovery failed for ${generationId}:`, error);
+  }
+
+  const latestGeneration = await prisma.generation.findFirst({
+    where: {
+      id: generationId,
+      ...(session.user.role === "ADMIN"
+        ? {}
+        : { userId: session.user.id }),
+    },
+    select: {
+      status: true,
+      completedAt: true,
+      errorMessage: true,
+      resultStorageKey: true,
+    },
+  });
+
+  if (!latestGeneration) {
+    return NextResponse.json(
+      { error: "Generation not found." },
+      { status: 404 }
+    );
+  }
+
   return NextResponse.json(
     {
-      status: generation.status,
-      completedAt: generation.completedAt,
-      error: generation.errorMessage,
+      status: latestGeneration.status,
+      completedAt: latestGeneration.completedAt,
+      error: latestGeneration.errorMessage,
       imageUrl:
-        generation.status === GenerationStatus.COMPLETED &&
-        generation.resultStorageKey
-          ? `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`
+        latestGeneration.status === GenerationStatus.COMPLETED &&
+        latestGeneration.resultStorageKey
+          ? `/api/blob?pathname=${encodeURIComponent(latestGeneration.resultStorageKey)}`
           : null,
     },
     {
