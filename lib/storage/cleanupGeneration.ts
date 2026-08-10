@@ -8,21 +8,12 @@ export async function cleanupGeneration(
   generationId: string
 ): Promise<void> {
   const generation = await prisma.generation.findUnique({
-    where: {
-      id: generationId,
-    },
-    include: {
-      images: true,
-    },
+    where: { id: generationId },
+    include: { images: true },
   });
 
-  if (!generation) {
-    return;
-  }
+  if (!generation) return;
 
-  // Deleting an incomplete generation must not permanently consume the
-  // user's credit. refundCredits is idempotent by generationId, so this is
-  // safe for FAILED generations that were already refunded elsewhere.
   if (
     generation.status === GenerationStatus.QUEUED ||
     generation.status === GenerationStatus.PROCESSING ||
@@ -35,26 +26,24 @@ export async function cleanupGeneration(
     });
   }
 
-  // Delete every blob first.
-  // If any deletion fails, stop immediately so the database remains intact.
-  for (const image of generation.images) {
-    await deleteFromStorage({
-      blobUrl: image.blobUrl,
-    });
-  }
-
-  // Remove database records atomically.
+  // Remove database records first so a storage failure can never leave a
+  // visible generation pointing at a partially deleted set of blobs.
   await prisma.$transaction(async (tx) => {
-    await tx.image.deleteMany({
-      where: {
-        generationId,
-      },
-    });
-
-    await tx.generation.delete({
-      where: {
-        id: generationId,
-      },
-    });
+    await tx.image.deleteMany({ where: { generationId } });
+    await tx.generation.delete({ where: { id: generationId } });
   });
+
+  // Blob deletion is best-effort after the database state is finalized.
+  // A failed blob cleanup creates storage debt, not a broken user-visible
+  // generation. Missing/already-deleted blobs are safe to retry later.
+  for (const image of generation.images) {
+    try {
+      await deleteFromStorage({ blobUrl: image.blobUrl });
+    } catch (error) {
+      console.error(
+        `Generation ${generationId} blob cleanup failed for ${image.storageKey}:`,
+        error
+      );
+    }
+  }
 }
