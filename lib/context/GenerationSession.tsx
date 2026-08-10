@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   ReactNode,
@@ -75,6 +76,14 @@ export function GenerationSessionProvider({
 
   const [generationError, setGenerationError] =
     useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (uploadedPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(uploadedPreview);
+      }
+    };
+  }, [uploadedPreview]);
 
   function setUploadedPhoto(
     file: File | null,

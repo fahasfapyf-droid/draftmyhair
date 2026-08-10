@@ -15,8 +15,8 @@ import {
   uploadBufferToStorage,
 } from "@/lib/storage";
 import type { StorageUploadResult } from "@/lib/storage";
-const MAX_GENERATION_RETRIES = 3;
 
+const MAX_GENERATION_RETRIES = 3;
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 function delay(ms: number) {
@@ -88,6 +88,7 @@ async function generatePreviewWithRetry(
     ? lastError
     : new Error("Generation failed.");
 }
+
 export type GeneratePreviewJob = {
   generationId: string;
 };
@@ -186,9 +187,10 @@ async function markJobFailed(
 export async function prepareGeneratePreviewJob(
   input: PrepareGeneratePreviewJobInput
 ): Promise<JobPreparationResult> {
-  const hairstyle = await prisma.hairstyle.findUnique({
+  const hairstyle = await prisma.hairstyle.findFirst({
     where: {
       promptKey: input.promptKey,
+      isActive: true,
     },
     select: {
       id: true,
@@ -198,8 +200,9 @@ export async function prepareGeneratePreviewJob(
   if (!hairstyle) {
     return {
       ok: false,
-      error: "Hairstyle not found.",
+      error: "Hairstyle not found or is no longer available.",
       status: 404,
+      refundDescription: "Hairstyle prompt key is unavailable",
     };
   }
 
@@ -220,6 +223,7 @@ export async function prepareGeneratePreviewJob(
       ok: false,
       error: "Unable to store the original image.",
       status: 502,
+      refundDescription: "Original image upload failed",
     };
   }
 
@@ -255,6 +259,7 @@ export async function prepareGeneratePreviewJob(
       ok: false,
       error: "Unable to record the original image.",
       status: 500,
+      refundDescription: "Original image record creation failed",
     };
   }
 
@@ -309,6 +314,7 @@ export async function executeGeneratePreviewJob(
       ok: false,
       error: "Generation not found.",
       status: 404,
+      refundDescription: "Generation record not found",
     };
   }
 
@@ -317,6 +323,7 @@ export async function executeGeneratePreviewJob(
       ok: false,
       error: "Generation is already being processed or has finished.",
       status: 409,
+      refundDescription: "Generation was already processed",
     };
   }
 
@@ -360,58 +367,58 @@ export async function executeGeneratePreviewJob(
       refundDescription: "Original image is unavailable",
     };
   }
-  const metadata = await getImageMetadata(
-  sourceImage.buffer
-);
+
+  const metadata = await getImageMetadata(sourceImage.buffer);
 
   let processingStartedAt: Date;
 
   try {
-  processingStartedAt = await markGenerationProcessing(job.generationId);
-} catch (error) {
-  console.error("Generation processing transition failed:", error);
+    processingStartedAt = await markGenerationProcessing(job.generationId);
+  } catch (error) {
+    console.error("Generation processing transition failed:", error);
 
-  const latestGeneration = await prisma.generation.findUnique({
-    where: {
-      id: job.generationId,
-    },
-    select: {
-      status: true,
-    },
-  });
+    const latestGeneration = await prisma.generation.findUnique({
+      where: {
+        id: job.generationId,
+      },
+      select: {
+        status: true,
+      },
+    });
 
-  if (
-    latestGeneration?.status === GenerationStatus.PROCESSING ||
-    latestGeneration?.status === GenerationStatus.COMPLETED
-  ) {
+    if (
+      latestGeneration?.status === GenerationStatus.PROCESSING ||
+      latestGeneration?.status === GenerationStatus.COMPLETED
+    ) {
+      return {
+        ok: false,
+        error: "Generation is already being processed.",
+        status: 409,
+        refundDescription: "Generation was already processed",
+      };
+    }
+
+    await markJobFailed(
+      job.generationId,
+      "Unable to start generation processing."
+    );
+
     return {
       ok: false,
-      error: "Generation is already being processed.",
-      status: 409,
+      error: "Unable to start the generation.",
+      status: 500,
+      refundDescription: "Generation processing transition failed",
     };
   }
 
-  await markJobFailed(
-    job.generationId,
-    "Unable to start generation processing."
-  );
-
-  return {
-    ok: false,
-    error: "Unable to start the generation.",
-    status: 500,
-    refundDescription: "Generation processing transition failed",
-  };
-}
-
   try {
     const result = await generatePreviewWithRetry({
-  imageBuffer: sourceImage.buffer,
-  mimeType: sourceImage.mimeType,
-  metadata,
-  promptKey: generation.promptKey,
-  userId: generation.userId,
-});
+      imageBuffer: sourceImage.buffer,
+      mimeType: sourceImage.mimeType,
+      metadata,
+      promptKey: generation.promptKey,
+      userId: generation.userId,
+    });
 
     if (!result.success) {
       await markJobFailed(

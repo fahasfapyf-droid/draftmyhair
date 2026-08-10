@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Container } from "@/components/ui/container";
@@ -13,53 +13,29 @@ import { useGenerationSession } from "@/lib/context/GenerationSession";
 
 export const UploadPage: React.FC = () => {
   const {
+    session,
     setUploadedPhoto,
     clearGenerationResult,
   } = useGenerationSession();
 
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null);
-
-  const [previewUrl, setPreviewUrl] =
-    useState<string | null>(null);
-
-  useEffect(() => {
-    if (!previewUrl) return;
-
-    return () => {
-      URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+  const previewUrl = session.uploadedPreview;
 
   const handleFileSelect = (file: File) => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
     const objectUrl = URL.createObjectURL(file);
-
-    setSelectedFile(file);
-    setPreviewUrl(objectUrl);
 
     // New upload invalidates any previous generation.
     clearGenerationResult();
 
-    // Save into the Generation Session.
+    // The Generation Session owns the object URL lifecycle so it remains
+    // valid while the user moves from Upload -> Style Selection -> Preview.
     setUploadedPhoto(file, objectUrl);
   };
 
   const handleReplace = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
-    setSelectedFile(null);
-    setPreviewUrl(null);
-
-    // Remove any previous generation.
+    // Remove any previous generation and clear the shared upload session.
+    // GenerationSession revokes the previous object URL when its preview
+    // state changes.
     clearGenerationResult();
-
-    // Clear the Generation Session.
     setUploadedPhoto(null, null);
   };
 
