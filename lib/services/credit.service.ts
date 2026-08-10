@@ -133,6 +133,25 @@ export async function consumeCredits({
       wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
     }
 
+    // A generation ID is the idempotency key for a generation charge.
+    // Retries must return the original debit instead of charging twice.
+    if (generationId) {
+      const existingDebit = await tx.creditTransaction.findFirst({
+        where: {
+          generationId,
+          type: WalletTransactionType.DEBIT,
+        },
+      });
+
+      if (existingDebit) {
+        return {
+          wallet,
+          transaction: existingDebit,
+          alreadyConsumed: true,
+        };
+      }
+    }
+
     if (wallet.balance < amount) throw new Error("Insufficient credits.");
 
     const balanceBefore = wallet.balance;
@@ -155,7 +174,7 @@ export async function consumeCredits({
       },
     });
 
-    return { wallet: updatedWallet, transaction };
+    return { wallet: updatedWallet, transaction, alreadyConsumed: false };
   });
 }
 
