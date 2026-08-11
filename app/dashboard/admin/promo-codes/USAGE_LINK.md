@@ -1,0 +1,1 @@
+Promo code usage is available from each admin promo code at /dashboard/admin/promo-codes/[id].
