@@ -62,6 +62,7 @@ export async function POST(request: Request) {
     const image = formData.get("image");
     const promptKey = formData.get("promptKey");
     const requestedGenerationId = formData.get("generationId");
+    const requestedSalonClientId = formData.get("salonClientId");
 
     if (!(image instanceof File)) {
       return NextResponse.json(
@@ -125,6 +126,38 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       );
+    }
+
+    const salonClientId =
+      typeof requestedSalonClientId === "string" && requestedSalonClientId.trim()
+        ? requestedSalonClientId.trim()
+        : null;
+
+    if (salonClientId) {
+      if (session.user.role !== "SALON") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Salon client previews require a salon account.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const client = await prisma.salonClient.findFirst({
+        where: { id: salonClientId, salonId: userId },
+        select: { id: true },
+      });
+
+      if (!client) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Client not found in this salon.",
+          },
+          { status: 404 }
+        );
+      }
     }
 
     generationId =
@@ -223,6 +256,13 @@ export async function POST(request: Request) {
         },
         { status: jobPreparation.status }
       );
+    }
+
+    if (salonClientId) {
+      await prisma.generation.update({
+        where: { id: generationId },
+        data: { salonClientId },
+      });
     }
 
     const execution = await runGeneratePreviewJob(jobPreparation.job);
