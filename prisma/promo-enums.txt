@@ -1,0 +1,1 @@
+Enums remain in standard Prisma multiline format in schema.prisma.
