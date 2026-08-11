@@ -30,10 +30,9 @@ export function SalonClientsWorkspace({ initialClients }: { initialClients: Clie
     );
   }, [clients, query]);
 
-  async function createClient(form: HTMLFormElement) {
+  async function createClient(data: FormData) {
     setSaving(true);
     setError(null);
-    const data = new FormData(form);
 
     try {
       const response = await fetch("/api/salon/clients", {
@@ -51,7 +50,6 @@ export function SalonClientsWorkspace({ initialClients }: { initialClients: Clie
       if (!response.ok || !result.success) throw new Error(result.error ?? "Unable to create client.");
       setClients((current) => [result.client, ...current]);
       setShowForm(false);
-      form.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create client.");
     } finally {
