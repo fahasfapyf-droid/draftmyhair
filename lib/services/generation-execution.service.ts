@@ -8,8 +8,11 @@ import {
   failGeneration,
   markGenerationProcessing,
 } from "@/lib/services/generation-lifecycle.service";
+import {
+  deleteFromStorage,
+  uploadBufferToStorage,
+} from "@/lib/storage";
 import type { StorageUploadResult } from "@/lib/storage";
-import { uploadBufferToStorage } from "@/lib/storage";
 
 const MAX_GENERATION_RETRIES = 3;
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
@@ -88,7 +91,6 @@ export type PrepareGeneratePreviewJobInput = {
   promptKey: string;
   imageBuffer: Buffer;
   mimeType: string;
-  originalFilename: string;
 };
 
 export type GenerationExecutionFailure = {
@@ -175,7 +177,6 @@ async function cleanupGeneratedImage(
   }
 
   try {
-    const { deleteFromStorage } = await import("@/lib/storage");
     await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
   } catch (error) {
     console.error("Generated image blob cleanup failed:", error);
@@ -351,7 +352,6 @@ export async function executeGeneratePreviewJob(
       );
 
       try {
-        const { deleteFromStorage } = await import("@/lib/storage");
         await deleteFromStorage({ blobUrl: uploadedGeneratedImage.blobUrl });
       } catch (cleanupError) {
         console.error("Generated image cleanup failed:", cleanupError);
