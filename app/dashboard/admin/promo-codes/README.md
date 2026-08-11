@@ -1,0 +1,1 @@
+Admin usage details are available at /dashboard/admin/promo-codes/[id].
