@@ -32,6 +32,7 @@ model User {
   sessions            Session[]
   preference          UserPreference?
   wallet              Wallet?
+  salonClients        SalonClient[]        @relation("SalonOwnerClients")
 
   @@index([email])
   @@index([role])
@@ -160,13 +161,14 @@ model Payment {
 model Generation {
   id                  String              @id @default(cuid())
   userId              String
+  salonClientId       String?
   hairstyleId         String
   paymentId           String?
   status              GenerationStatus    @default(QUEUED)
   promptKey           String
   promptVersion       String
   provider             String
-  providerModel        String
+  providerModel       String
   inputImageUrl       String?
   outputImageUrl      String?
   sourceStorageKey    String?
@@ -177,20 +179,40 @@ model Generation {
   completedAt          DateTime?
   processingTimeMs    Int?
   metadata            Json?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   transactions        CreditTransaction[]
   hairstyle            Hairstyle           @relation(fields: [hairstyleId], references: [id])
   payment              Payment?            @relation(fields: [paymentId], references: [id])
   user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  salonClient         SalonClient?        @relation(fields: [salonClientId], references: [id], onDelete: SetNull)
   images               Image[]
 
   @@index([userId])
+  @@index([salonClientId])
   @@index([hairstyleId])
   @@index([paymentId])
   @@index([status])
   @@index([provider])
   @@index([providerModel])
+  @@index([createdAt])
+}
+
+model SalonClient {
+  id          String       @id @default(cuid())
+  salonId     String
+  name        String
+  email       String?
+  phone       String?
+  notes       String?
+  consentAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  salon       User         @relation("SalonOwnerClients", fields: [salonId], references: [id], onDelete: Cascade)
+  generations Generation[]
+
+  @@index([salonId])
+  @@index([name])
   @@index([createdAt])
 }
 
