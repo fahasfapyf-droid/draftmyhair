@@ -18,13 +18,13 @@ model User {
   sessionVersion      Int                  @default(0)
   lastLoginAt         DateTime?
   failedLoginAttempts Int                  @default(0)
-  isActive            Boolean              @default(true)
-  isDeleted           Boolean              @default(false)
-  deletedAt           DateTime?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  accounts            Account[]
-  feedbacks           Feedback[]
+  isActive             Boolean              @default(true)
+  isDeleted            Boolean              @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  accounts             Account[]
+  feedbacks            Feedback[]
   generations         Generation[]
   images              Image[]
   passwordResetTokens PasswordResetToken[]
@@ -135,8 +135,8 @@ model Payment {
   id                 String              @id @default(cuid())
   userId             String
   provider           PaymentProvider
-  type                PaymentType
-  status              PaymentStatus      @default(PENDING)
+  type               PaymentType
+  status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
   providerPaymentId  String?             @unique
@@ -145,8 +145,8 @@ model Payment {
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -165,8 +165,8 @@ model Generation {
   status              GenerationStatus    @default(QUEUED)
   promptKey           String
   promptVersion       String
-  provider            String
-  providerModel       String
+  provider             String
+  providerModel        String
   inputImageUrl       String?
   outputImageUrl      String?
   sourceStorageKey    String?
@@ -174,16 +174,16 @@ model Generation {
   errorMessage        String?
   creditsUsed         Int                 @default(1)
   processingStartedAt DateTime?
-  completedAt         DateTime?
+  completedAt          DateTime?
   processingTimeMs    Int?
   metadata            Json?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
   transactions        CreditTransaction[]
-  hairstyle           Hairstyle           @relation(fields: [hairstyleId], references: [id])
-  payment             Payment?            @relation(fields: [paymentId], references: [id])
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  images              Image[]
+  hairstyle            Hairstyle           @relation(fields: [hairstyleId], references: [id])
+  payment              Payment?            @relation(fields: [paymentId], references: [id])
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images               Image[]
 
   @@index([userId])
   @@index([hairstyleId])
@@ -262,7 +262,7 @@ model Image {
   mimeType         String
   fileSize         Int
   width            Int?
-  height            Int?
+  height           Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -294,6 +294,7 @@ model Feedback {
   @@index([hairstyleId])
   @@index([overallRating])
   @@index([decisionConfidence])
+  @@index([createdAt])
 }
 
 enum ImageType {
