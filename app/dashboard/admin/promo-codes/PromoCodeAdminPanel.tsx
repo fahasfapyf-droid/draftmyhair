@@ -1,0 +1,43 @@
+"use client";
+
+import { useState } from "react";
+import { createPromoCodeAction, togglePromoCodeAction } from "./actions";
+
+type Promo = { id: string; code: string; credits: number; maxRedemptions: number | null; redeemedCount: number; startsAt: Date | null; expiresAt: Date | null; isActive: boolean };
+
+export function PromoCodeAdminPanel({ promos }: { promos: Promo[] }) {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function create(formData: FormData) {
+    setBusy(true); setMessage("");
+    const result = await createPromoCodeAction(formData);
+    setMessage(result.message ?? "");
+    if (result.ok) window.location.reload();
+    setBusy(false);
+  }
+  async function toggle(id: string, active: boolean) {
+    const fd = new FormData(); fd.set("id", id); fd.set("active", String(!active));
+    const result = await togglePromoCodeAction(fd);
+    if (!result.ok) setMessage(result.message ?? "Unable to update promo code."); else window.location.reload();
+  }
+  return (
+    <div className="space-y-6">
+      <form action={create} className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-brand-ink">Issue Promo Code</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="text-sm">Code<input name="code" required maxLength={64} placeholder="WELCOME10" className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2" /></label>
+          <label className="text-sm">Credits<input name="credits" required type="number" min="1" step="1" className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2" /></label>
+          <label className="text-sm">Maximum redemptions<input name="maxRedemptions" type="number" min="1" step="1" placeholder="Unlimited" className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2" /></label>
+          <label className="text-sm">Starts<input name="startsAt" type="datetime-local" className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2" /></label>
+          <label className="text-sm">Expires<input name="expiresAt" type="datetime-local" className="mt-1 w-full rounded-lg border border-brand-border px-3 py-2" /></label>
+        </div>
+        <button disabled={busy} className="mt-5 rounded-lg bg-brand-ink px-5 py-2 text-sm font-medium text-white disabled:opacity-50">{busy ? "Creating…" : "Create Promo Code"}</button>
+        {message && <p className="mt-3 text-sm text-brand-muted">{message}</p>}
+      </form>
+      <div className="overflow-x-auto rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
+        <table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-brand-border text-brand-muted"><tr><th className="px-5 py-4">Code</th><th className="px-5 py-4">Credits</th><th className="px-5 py-4">Usage</th><th className="px-5 py-4">Expires</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Action</th></tr></thead><tbody>{promos.map((promo) => <tr key={promo.id} className="border-b border-brand-border last:border-0"><td className="px-5 py-4 font-medium">{promo.code}</td><td className="px-5 py-4">{promo.credits}</td><td className="px-5 py-4">{promo.redeemedCount}{promo.maxRedemptions !== null ? ` / ${promo.maxRedemptions}` : " / ∞"}</td><td className="px-5 py-4">{promo.expiresAt ? new Date(promo.expiresAt).toLocaleString() : "—"}</td><td className="px-5 py-4">{promo.isActive ? "Active" : "Inactive"}</td><td className="px-5 py-4"><button onClick={() => toggle(promo.id, promo.isActive)} className="rounded-lg border border-brand-border px-3 py-2 text-xs">{promo.isActive ? "Deactivate" : "Activate"}</button></td></tr>)}</tbody></table>
+        {promos.length === 0 && <p className="p-6 text-sm text-brand-muted">No promo codes have been issued.</p>}
+      </div>
+    </div>
+  );
+}
