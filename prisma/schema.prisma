@@ -21,8 +21,8 @@ model User {
   isActive            Boolean              @default(true)
   isDeleted           Boolean              @default(false)
   deletedAt           DateTime?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   accounts            Account[]
   feedbacks           Feedback[]
   generations         Generation[]
@@ -136,7 +136,7 @@ model Payment {
   userId             String
   provider           PaymentProvider
   type                PaymentType
-  status             PaymentStatus       @default(PENDING)
+  status              PaymentStatus      @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
   providerPaymentId  String?             @unique
@@ -145,8 +145,8 @@ model Payment {
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -167,7 +167,7 @@ model Generation {
   promptVersion       String
   provider            String
   providerModel       String
-  inputImageUrl       String
+  inputImageUrl       String?
   outputImageUrl      String?
   sourceStorageKey    String?
   resultStorageKey    String?
@@ -204,7 +204,7 @@ model UserPreference {
   marketingEmails     Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ContactMessage {
@@ -255,14 +255,14 @@ model Image {
   ownerId          String
   generationId     String?
   type             ImageType
-  status           ImageStatus @default(ACTIVE)
+  status            ImageStatus @default(ACTIVE)
   storageKey       String      @unique
   blobUrl          String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
   width            Int?
-  height           Int?
+  height            Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -294,7 +294,6 @@ model Feedback {
   @@index([hairstyleId])
   @@index([overallRating])
   @@index([decisionConfidence])
-  @@index([createdAt])
 }
 
 enum ImageType {
