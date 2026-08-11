@@ -13,38 +13,21 @@ type CreateQueuedGenerationInput = GenerationMetadata & {
   userId: string;
   hairstyleId: string;
   promptKey: string;
-  inputImageUrl: string;
-  sourceStorageKey: string;
-  originalImageId: string;
 };
 
 export async function createQueuedGeneration({
-  originalImageId,
   generationId,
   ...data
 }: CreateQueuedGenerationInput) {
-  return prisma.$transaction(async (tx) => {
-    const generation = await tx.generation.create({
-      data: {
-        id: generationId,
-        ...data,
-        status: GenerationStatus.QUEUED,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    await tx.image.update({
-      where: {
-        id: originalImageId,
-      },
-      data: {
-        generationId: generation.id,
-      },
-    });
-
-    return generation;
+  return prisma.generation.create({
+    data: {
+      id: generationId,
+      ...data,
+      status: GenerationStatus.QUEUED,
+    },
+    select: {
+      id: true,
+    },
   });
 }
 

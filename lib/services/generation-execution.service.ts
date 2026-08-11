@@ -1,8 +1,6 @@
-import { randomUUID } from "crypto";
 import { GenerationStatus, ImageType } from "@prisma/client";
 import { getImageMetadata } from "@/lib/image/metadata";
 import { generatePreview, getGenerationMetadata } from "@/lib/engine";
-import { normalizeImage } from "@/lib/image/normalize";
 import { prisma } from "@/lib/prisma";
 import {
   completeGeneration,
@@ -12,7 +10,6 @@ import {
 } from "@/lib/services/generation-lifecycle.service";
 import {
   deleteFromStorage,
-  readBufferFromStorage,
   uploadBufferToStorage,
 } from "@/lib/storage";
 import type { StorageUploadResult } from "@/lib/storage";
@@ -82,6 +79,10 @@ async function generatePreviewWithRetry(
 
 export type GeneratePreviewJob = {
   generationId: string;
+  sourceImage: {
+    buffer: Buffer;
+    mimeType: string;
+  };
 };
 
 export type PrepareGeneratePreviewJobInput = {
@@ -90,7 +91,6 @@ export type PrepareGeneratePreviewJobInput = {
   promptKey: string;
   imageBuffer: Buffer;
   mimeType: string;
-  originalFilename: string;
 };
 
 export type GenerationExecutionFailure = {
@@ -114,20 +114,55 @@ type JobPreparationResult =
   | { ok: true; job: GeneratePreviewJob }
   | GenerationExecutionFailure;
 
-async function cleanupOriginalImage(
-  originalImageId: string,
-  uploadedImage: StorageUploadResult
-) {
-  try {
-    await prisma.image.delete({ where: { id: originalImageId } });
-  } catch (error) {
-    console.error("Original image record cleanup failed:", error);
+export async function prepareGeneratePreviewJob(
+  input: PrepareGeneratePreviewJobInput
+): Promise<JobPreparationResult> {
+  const hairstyle = await prisma.hairstyle.findFirst({
+    where: { promptKey: input.promptKey, isActive: true },
+    select: { id: true },
+  });
+
+  if (!hairstyle) {
+    return {
+      ok: false,
+      error: "Hairstyle not found or is no longer available.",
+      status: 404,
+      refundDescription: "Hairstyle prompt key is unavailable",
+    };
   }
 
+  // The API route already normalizes the uploaded image. Keep the normalized
+  // bytes in memory for this synchronous job instead of writing the original
+  // image to Blob and reading it back. This removes one Blob PUT and one Blob
+  // GET from every generation while preserving the exact model input bytes.
   try {
-    await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
+    const generation = await createQueuedGeneration({
+      generationId: input.generationId,
+      userId: input.userId,
+      hairstyleId: hairstyle.id,
+      promptKey: input.promptKey,
+      ...getGenerationMetadata(),
+    });
+
+    return {
+      ok: true,
+      job: {
+        generationId: generation.id,
+        sourceImage: {
+          buffer: input.imageBuffer,
+          mimeType: input.mimeType,
+        },
+      },
+    };
   } catch (error) {
-    console.error("Original image blob cleanup failed:", error);
+    console.error("Queued generation creation failed:", error);
+
+    return {
+      ok: false,
+      error: "Unable to start the generation.",
+      status: 500,
+      refundDescription: "Generation persistence failed",
+    };
   }
 }
 
@@ -160,116 +195,6 @@ async function markJobFailed(
   }
 }
 
-export async function prepareGeneratePreviewJob(
-  input: PrepareGeneratePreviewJobInput
-): Promise<JobPreparationResult> {
-  const hairstyle = await prisma.hairstyle.findFirst({
-    where: { promptKey: input.promptKey, isActive: true },
-    select: { id: true },
-  });
-
-  if (!hairstyle) {
-    return {
-      ok: false,
-      error: "Hairstyle not found or is no longer available.",
-      status: 404,
-      refundDescription: "Hairstyle prompt key is unavailable",
-    };
-  }
-
-  let normalizedImage;
-  try {
-    normalizedImage = await normalizeImage(input.imageBuffer, input.mimeType);
-  } catch (error) {
-    console.error("Original image normalization failed:", error);
-    return {
-      ok: false,
-      error: "Unable to process the original image.",
-      status: 422,
-      refundDescription: "Original image normalization failed",
-    };
-  }
-
-  let uploadedImage: StorageUploadResult;
-
-  try {
-    uploadedImage = await uploadBufferToStorage({
-      buffer: normalizedImage.buffer,
-      ownerId: input.userId,
-      folder: "originals",
-      filename: `${randomUUID()}-${input.originalFilename}`,
-      mimeType: normalizedImage.mimeType,
-    });
-  } catch (error) {
-    console.error("Original image upload failed:", error);
-    return {
-      ok: false,
-      error: "Unable to store the original image.",
-      status: 502,
-      refundDescription: "Original image upload failed",
-    };
-  }
-
-  let originalImage: { id: string };
-
-  try {
-    originalImage = await prisma.image.create({
-      data: {
-        ownerId: input.userId,
-        type: ImageType.ORIGINAL,
-        storageKey: uploadedImage.storageKey,
-        blobUrl: uploadedImage.blobUrl,
-        originalFilename: input.originalFilename || null,
-        mimeType: uploadedImage.mimeType,
-        fileSize: uploadedImage.fileSize,
-        width: normalizedImage.width,
-        height: normalizedImage.height,
-      },
-      select: { id: true },
-    });
-  } catch (error) {
-    console.error("Original image record creation failed:", error);
-
-    try {
-      await deleteFromStorage({ blobUrl: uploadedImage.blobUrl });
-    } catch (cleanupError) {
-      console.error("Original image cleanup failed:", cleanupError);
-    }
-
-    return {
-      ok: false,
-      error: "Unable to record the original image.",
-      status: 500,
-      refundDescription: "Original image record creation failed",
-    };
-  }
-
-  try {
-    const generation = await createQueuedGeneration({
-      generationId: input.generationId,
-      userId: input.userId,
-      hairstyleId: hairstyle.id,
-      promptKey: input.promptKey,
-      inputImageUrl: uploadedImage.blobUrl,
-      sourceStorageKey: uploadedImage.storageKey,
-      originalImageId: originalImage.id,
-      ...getGenerationMetadata(),
-    });
-
-    return { ok: true, job: { generationId: generation.id } };
-  } catch (error) {
-    console.error("Queued generation creation failed:", error);
-    await cleanupOriginalImage(originalImage.id, uploadedImage);
-
-    return {
-      ok: false,
-      error: "Unable to start the generation.",
-      status: 500,
-      refundDescription: "Generation persistence failed",
-    };
-  }
-}
-
 export async function executeGeneratePreviewJob(
   job: GeneratePreviewJob
 ): Promise<GenerationExecutionResult> {
@@ -278,7 +203,6 @@ export async function executeGeneratePreviewJob(
     select: {
       userId: true,
       promptKey: true,
-      sourceStorageKey: true,
       status: true,
     },
   });
@@ -301,44 +225,9 @@ export async function executeGeneratePreviewJob(
     };
   }
 
-  if (!generation.sourceStorageKey) {
-    await markJobFailed(job.generationId, "Original image data is unavailable.");
-    return {
-      ok: false,
-      error: "Unable to load the original image.",
-      status: 500,
-      refundDescription: "Original image data is unavailable",
-    };
-  }
-
-  let sourceImage: Awaited<ReturnType<typeof readBufferFromStorage>>;
-
-  try {
-    sourceImage = await readBufferFromStorage(generation.sourceStorageKey);
-  } catch (error) {
-    console.error("Original image read failed:", error);
-    await markJobFailed(job.generationId, "Unable to load the original image.");
-    return {
-      ok: false,
-      error: "Unable to load the original image.",
-      status: 502,
-      refundDescription: "Original image read failed",
-    };
-  }
-
-  if (!sourceImage) {
-    await markJobFailed(job.generationId, "Original image is unavailable.");
-    return {
-      ok: false,
-      error: "Unable to load the original image.",
-      status: 500,
-      refundDescription: "Original image is unavailable",
-    };
-  }
-
-  // The image was normalized before it was stored. Read metadata only here;
-  // re-normalizing the stored buffer adds unnecessary image processing and can
-  // change the exact bytes sent to the generation provider.
+  // The source image is intentionally held in memory for this synchronous
+  // execution path. Persistent Blob storage is reserved for generated results.
+  const sourceImage = job.sourceImage;
   const metadata = await getImageMetadata(sourceImage.buffer);
 
   let processingStartedAt: Date;
