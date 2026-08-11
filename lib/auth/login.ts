@@ -29,9 +29,8 @@ export async function loginUser(
   email: string,
   password: string
 ): Promise<LoginResult> {
-  const normalizedEmail = email.trim().toLowerCase();
   const user = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
+    where: { email: email.trim() },
   });
 
   if (!user || !user.passwordHash) {
