@@ -30,9 +30,10 @@ model User {
   passwordResetTokens PasswordResetToken[]
   payments            Payment[]
   sessions            Session[]
-  preference          UserPreference?
+  preference           UserPreference?
   wallet              Wallet?
-
+  promoRedemptions    PromoRedemption[]
+  
   @@index([email])
   @@index([role])
   @@index([isDeleted])
@@ -55,7 +56,6 @@ model Account {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
@@ -68,7 +68,6 @@ model Session {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
   @@index([expires])
 }
@@ -77,8 +76,8 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
-
   @@unique([identifier, token])
+  @@index([identifier])
   @@index([expires])
 }
 
@@ -90,7 +89,6 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
   @@index([expiresAt])
   @@index([usedAt])
@@ -104,7 +102,6 @@ model Wallet {
   updatedAt    DateTime            @updatedAt
   transactions CreditTransaction[]
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([balance])
 }
 
@@ -123,7 +120,6 @@ model CreditTransaction {
   generation    Generation?           @relation(fields: [generationId], references: [id])
   payment       Payment?              @relation(fields: [paymentId], references: [id])
   wallet        Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
   @@index([walletId])
   @@index([paymentId])
   @@index([generationId])
@@ -134,23 +130,22 @@ model CreditTransaction {
 model Payment {
   id                 String              @id @default(cuid())
   userId             String
-  provider           PaymentProvider
+  provider            PaymentProvider
   type                PaymentType
-  status             PaymentStatus       @default(PENDING)
-  amount             Decimal             @db.Decimal(10, 2)
-  currency           String              @default("USD")
-  providerPaymentId  String?             @unique
+  status              PaymentStatus       @default(PENDING)
+  amount              Decimal             @db.Decimal(10, 2)
+  currency            String              @default("USD")
+  providerPaymentId  String?              @unique
   providerCustomerId String?
   providerSessionId  String?
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
   @@index([status])
   @@index([provider])
@@ -184,7 +179,6 @@ model Generation {
   payment             Payment?            @relation(fields: [paymentId], references: [id])
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   images              Image[]
-
   @@index([userId])
   @@index([hairstyleId])
   @@index([paymentId])
@@ -219,7 +213,6 @@ model ContactMessage {
   userAgent  String?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
-
   @@index([email])
   @@index([status])
   @@index([createdAt])
@@ -241,7 +234,6 @@ model Hairstyle {
   updatedAt    DateTime           @updatedAt
   feedbacks    Feedback[]
   generations  Generation[]
-
   @@index([slug])
   @@index([promptKey])
   @@index([serviceType])
@@ -268,7 +260,6 @@ model Image {
   updatedAt        DateTime    @updatedAt
   generation       Generation? @relation(fields: [generationId], references: [id])
   owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
   @@index([ownerId])
   @@index([generationId])
   @@index([type])
@@ -285,11 +276,10 @@ model Feedback {
   decisionConfidence DecisionConfidence
   issues             FeedbackIssue[]
   comment            String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  hairstyle          Hairstyle?         @relation(fields: [hairstyleId], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  hairstyle           Hairstyle?         @relation(fields: [hairstyleId], references: [id])
   user               User?              @relation(fields: [userId], references: [id])
-
   @@index([userId])
   @@index([hairstyleId])
   @@index([overallRating])
@@ -297,127 +287,46 @@ model Feedback {
   @@index([createdAt])
 }
 
-enum ImageType {
-  ORIGINAL
-  GENERATED
+model PromoCode {
+  id              String           @id @default(cuid())
+  code            String           @unique
+  credits         Int
+  maxRedemptions  Int?
+  redeemedCount   Int              @default(0)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  redemptions     PromoRedemption[]
+  @@index([isActive])
+  @@index([expiresAt])
 }
 
-enum ImageStatus {
-  ACTIVE
-  FAILED
-  DELETED
+model PromoRedemption {
+  id            String   @id @default(cuid())
+  promoCodeId   String
+  userId        String
+  creditsGranted Int
+  redeemedAt    DateTime @default(now())
+  promoCode     PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([promoCodeId, userId])
+  @@index([userId])
+  @@index([redeemedAt])
 }
 
-enum UserRole {
-  USER
-  ADMIN
-  SALON
-}
-
-enum WalletTransactionType {
-  CREDIT
-  DEBIT
-  REFUND
-  BONUS
-  PURCHASE
-  ADJUSTMENT
-}
-
-enum GenerationStatus {
-  QUEUED
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  PROCESSING
-  SUCCEEDED
-  FAILED
-  REFUNDED
-  CANCELLED
-}
-
-enum PaymentProvider {
-  STRIPE
-  PAYPAL
-  LEMONSQUEEZY
-  MANUAL
-}
-
-enum PaymentType {
-  CREDIT_PURCHASE
-  SUBSCRIPTION
-  ONE_TIME
-}
-
-enum ContactStatus {
-  NEW
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum HairstyleCategory {
-  BOB
-  LOB
-  PIXIE
-  BIXIE
-  LAYERS
-  SHAG
-  WOLF
-  MULLET
-  FADE
-  TAPER
-  UNDERCUT
-  CROP
-  CREW
-  QUIFF
-  POMPADOUR
-  SIDE_PART
-  COMB_OVER
-  MOHAWK
-  MAN_BUN
-  BRAIDS
-  LOCS
-  AFRO
-  CURLY
-  BANGS
-  UPDO
-}
-
-enum ServiceType {
-  HAIRSTYLE
-  HAIR_COLOR
-  BUZZ_CUT
-  BALD
-  BEARD
-  BEARD_REMOVAL
-}
-
-enum GenderTarget {
-  FEMALE
-  MALE
-  UNISEX
-}
-
-enum DecisionConfidence {
-  DEFINITELY_NOT
-  PROBABLY_NOT
-  UNSURE
-  PROBABLY_YES
-  DEFINITELY_YES
-}
-
-enum FeedbackIssue {
-  IDENTITY_DRIFT
-  HAIRLINE
-  LIGHTING
-  HAIR_COLOR
-  TEXTURE
-  BLENDING
-  BACKGROUND
-  OTHER
-}
+enum ImageType { ORIGINAL GENERATED }
+enum ImageStatus { ACTIVE FAILED DELETED }
+enum UserRole { USER ADMIN SALON }
+enum WalletTransactionType { CREDIT DEBIT REFUND BONUS PURCHASE ADJUSTMENT }
+enum GenerationStatus { QUEUED PROCESSING COMPLETED FAILED CANCELLED }
+enum PaymentStatus { PENDING PROCESSING SUCCEEDED FAILED REFUNDED CANCELLED }
+enum PaymentProvider { STRIPE PAYPAL LEMONSQUEEZY MANUAL }
+enum PaymentType { CREDIT_PURCHASE SUBSCRIPTION ONE_TIME }
+enum ContactStatus { NEW IN_PROGRESS RESOLVED CLOSED }
+enum HairstyleCategory { BOB LOB PIXIE BIXIE LAYERS SHAG WOLF MULLET FADE TAPER UNDERCUT CROP CREW QUIFF POMPADOUR SIDE_PART COMB_OVER MOHAWK MAN_BUN BRAIDS LOCS AFRO CURLY BANGS UPDO }
+enum ServiceType { HAIRSTYLE HAIR_COLOR BUZZ_CUT BALD BEARD BEARD_REMOVAL }
+enum GenderTarget { FEMALE MALE UNISEX }
+enum DecisionConfidence { DEFINITELY_NOT PROBABLY_NOT UNSURE PROBABLY_YES DEFINITELY_YES }
+enum FeedbackIssue { IDENTITY_DRIFT HAIRLINE LIGHTING HAIR_COLOR TEXTURE BLENDING BACKGROUND OTHER }
