@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { GenerationStatus, ImageType } from "@prisma/client";
+import { getImageMetadata } from "@/lib/image/metadata";
 import { generatePreview, getGenerationMetadata } from "@/lib/engine";
 import { normalizeImage } from "@/lib/image/normalize";
 import { prisma } from "@/lib/prisma";
@@ -335,10 +336,10 @@ export async function executeGeneratePreviewJob(
     };
   }
 
-  const metadata = await normalizeImage(
-    sourceImage.buffer,
-    sourceImage.mimeType
-  );
+  // The image was normalized before it was stored. Read metadata only here;
+  // re-normalizing the stored buffer adds unnecessary image processing and can
+  // change the exact bytes sent to the generation provider.
+  const metadata = await getImageMetadata(sourceImage.buffer);
 
   let processingStartedAt: Date;
 
@@ -379,8 +380,8 @@ export async function executeGeneratePreviewJob(
 
   try {
     const result = await generatePreviewWithRetry({
-      imageBuffer: metadata.buffer,
-      mimeType: metadata.mimeType,
+      imageBuffer: sourceImage.buffer,
+      mimeType: sourceImage.mimeType,
       metadata,
       promptKey: generation.promptKey,
       userId: generation.userId,
