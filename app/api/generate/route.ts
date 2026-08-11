@@ -13,6 +13,8 @@ import {
   refundCredits,
 } from "@/lib/services/credit.service";
 
+export const maxDuration = 300;
+
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png"];
 const UUID_PATTERN =

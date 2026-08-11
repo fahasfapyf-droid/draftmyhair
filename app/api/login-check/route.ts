@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import argon2 from "argon2";
 
-import { prisma } from "@/lib/prisma";
+import { loginUser } from "@/lib/auth/login";
 
 const schema = z.object({
   email: z.string().email(),
@@ -12,60 +11,36 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-
     const parsed = schema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
-        {
-          status: "INVALID_CREDENTIALS",
-        },
+        { status: "INVALID_CREDENTIALS" },
         { status: 400 }
       );
     }
 
-    const { email, password } = parsed.data;
-
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-    });
-
-    if (!user || !user.passwordHash) {
-      return NextResponse.json({
-        status: "INVALID_CREDENTIALS",
-      });
-    }
-
-    const validPassword = await argon2.verify(
-      user.passwordHash,
-      password
+    const result = await loginUser(
+      parsed.data.email,
+      parsed.data.password
     );
 
-    if (!validPassword) {
-      return NextResponse.json({
-        status: "INVALID_CREDENTIALS",
-      });
+    if (result.status === "RATE_LIMITED") {
+      return NextResponse.json(
+        {
+          status: "RATE_LIMITED",
+          message:
+            "Too many unsuccessful sign-in attempts. Please try again in 15 minutes.",
+        },
+        { status: 429 }
+      );
     }
 
-    if (!user.emailVerified) {
-      return NextResponse.json({
-        status: "EMAIL_NOT_VERIFIED",
-      });
-    }
-
-    return NextResponse.json({
-      status: "SUCCESS",
-    });
+    return NextResponse.json({ status: result.status });
   } catch {
     return NextResponse.json(
-      {
-        status: "ERROR",
-      },
-      {
-        status: 500,
-      }
+      { status: "ERROR" },
+      { status: 500 }
     );
   }
 }
