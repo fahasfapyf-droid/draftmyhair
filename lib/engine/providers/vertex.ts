@@ -1,4 +1,4 @@
-import { GoogleGenAI, MediaResolution } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import sharp from "sharp";
 import {
   ProviderGenerationRequest,
@@ -85,9 +85,6 @@ export async function generateWithVertex(
         imageConfig: {
           aspectRatio: request.metadata.aspectRatio,
         },
-        // Gemini 3 image tasks benefit from high input resolution when
-        // preserving fine facial/hair geometry is important.
-        mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
       },
     });
 

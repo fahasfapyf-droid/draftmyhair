@@ -15,6 +15,46 @@ import {
 } from "../providers/vertex";
 import { buildPrompt } from "./promptBuilder";
 
+const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+function isRetryableGenerationError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+
+  const retryablePatterns = [
+    "timeout",
+    "timed out",
+    "deadline",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "network",
+    "connection",
+    "unavailable",
+    "temporarily",
+    "internal server error",
+  ];
+
+  return retryablePatterns.some((pattern) => message.includes(pattern));
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function waitBeforeProviderRetry(attempt: number) {
+  const baseDelay = PROVIDER_RETRY_DELAYS_MS[attempt - 1];
+  const jitter = Math.floor(Math.random() * 250);
+
+  await delay(baseDelay + jitter);
+}
+
 /**
  * ============================================================
  * Draft My Hair
@@ -62,17 +102,55 @@ export async function generatePreview(
     // ============================================================
 
     const providerRequest: ProviderGenerationRequest = {
-  imageBuffer: context.imageBuffer,
-  mimeType: context.mimeType,
-  metadata: context.metadata,
-  prompt: promptResult.prompt,
-};
+      imageBuffer: context.imageBuffer,
+      mimeType: context.mimeType,
+      metadata: context.metadata,
+      prompt: promptResult.prompt,
+    };
 
     // ============================================================
     // Step 4 — Generate Image
     // ============================================================
+    // The Vertex provider currently returns transient provider failures as
+    // { success: false } rather than throwing. Retry them here so the existing
+    // execution-layer retry wrapper is not bypassed for 429/5xx responses.
 
-    const providerResult = await generateWithVertex(providerRequest);
+    let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
+
+    for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
+      providerResult = await generateWithVertex(providerRequest);
+
+      if (providerResult.success) {
+        break;
+      }
+
+      const retryable = isRetryableGenerationError(providerResult.error);
+      const hasRetryRemaining = attempt <= PROVIDER_RETRY_DELAYS_MS.length;
+
+      if (!retryable || !hasRetryRemaining) {
+        return {
+          success: false,
+          error: providerResult.error ?? "Image generation failed.",
+        };
+      }
+
+      console.warn(
+        `Transient Vertex generation failure on attempt ${attempt}. Retrying...`,
+        {
+          error: providerResult.error,
+          nextAttempt: attempt + 1,
+        }
+      );
+
+      await waitBeforeProviderRetry(attempt);
+    }
+
+    if (!providerResult) {
+      return {
+        success: false,
+        error: "Image generation failed.",
+      };
+    }
 
     if (!providerResult.success) {
       return {
