@@ -115,7 +115,7 @@ export async function generatePreview(
     // { success: false } rather than throwing. Retry them here so the existing
     // execution-layer retry wrapper is not bypassed for 429/5xx responses.
 
-    let providerResult: Awaited<ReturnType<typeof generateWithVertex>>;
+    let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
 
     for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
       providerResult = await generateWithVertex(providerRequest);
@@ -145,10 +145,17 @@ export async function generatePreview(
       await waitBeforeProviderRetry(attempt);
     }
 
-    if (!providerResult!.success) {
+    if (!providerResult) {
       return {
         success: false,
-        error: providerResult!.error ?? "Image generation failed.",
+        error: "Image generation failed.",
+      };
+    }
+
+    if (!providerResult.success) {
+      return {
+        success: false,
+        error: providerResult.error ?? "Image generation failed.",
       };
     }
 
