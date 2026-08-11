@@ -197,8 +197,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Bake EXIF orientation into the pixels before storage and model input.
-    // This makes the generation pipeline geometry-stable for phone photos.
+    // Bake EXIF orientation into the pixels before the generation model sees
+    // them. The normalized bytes remain in memory for the synchronous job;
+    // only the generated result is persisted to Blob.
     const normalizedImage = await normalizeImage(
       Buffer.from(await image.arrayBuffer()),
       image.type
@@ -210,7 +211,6 @@ export async function POST(request: Request) {
       promptKey: promptKey.trim(),
       imageBuffer: normalizedImage.buffer,
       mimeType: normalizedImage.mimeType,
-      originalFilename: image.name,
     });
 
     if (!jobPreparation.ok) {
