@@ -18,7 +18,12 @@ export async function uploadBufferToStorage({
 }: BufferUploadInput): Promise<StorageUploadResult> {
   const storageKey = `users/${ownerId}/${folder}/${filename}`;
 
-  const blob = await blobClient.put(storageKey, buffer, {
+  // Node Buffers can expose SharedArrayBuffer-backed memory in the Vercel
+  // runtime. Vercel Blob's fetch path rejects SharedArrayBuffer bodies, so
+  // make an independent Uint8Array copy backed by a normal ArrayBuffer.
+  const uploadBytes = Uint8Array.from(buffer);
+
+  const blob = await blobClient.put(storageKey, uploadBytes, {
     access: "private",
     addRandomSuffix: false,
     contentType: mimeType,
