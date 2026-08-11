@@ -18,6 +18,7 @@ model User {
   sessionVersion      Int                  @default(0)
   lastLoginAt         DateTime?
   failedLoginAttempts Int                  @default(0)
+  loginLockedUntil    DateTime?
   isActive             Boolean              @default(true)
   isDeleted            Boolean              @default(false)
   deletedAt            DateTime?
@@ -80,7 +81,7 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
-  @@index([expires])
+  @@index([identifier])
 }
 
 model PasswordResetToken {
@@ -279,12 +280,12 @@ model Image {
   type             ImageType
   status            ImageStatus @default(ACTIVE)
   storageKey       String      @unique
-  blobUrl          String      @unique
+  blobUrl           String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
   width            Int?
-  height           Int?
+  height            Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
