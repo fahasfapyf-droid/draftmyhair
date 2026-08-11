@@ -18,20 +18,21 @@ model User {
   sessionVersion      Int                  @default(0)
   lastLoginAt         DateTime?
   failedLoginAttempts Int                  @default(0)
-  isActive            Boolean              @default(true)
-  isDeleted           Boolean              @default(false)
-  deletedAt           DateTime?
+  isActive             Boolean              @default(true)
+  isDeleted            Boolean              @default(false)
+  deletedAt            DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
-  accounts            Account[]
-  feedbacks           Feedback[]
+  accounts             Account[]
+  feedbacks            Feedback[]
   generations         Generation[]
-  images              Image[]
+  images               Image[]
   passwordResetTokens PasswordResetToken[]
-  payments            Payment[]
-  sessions            Session[]
-  preference          UserPreference?
-  wallet              Wallet?
+  payments             Payment[]
+  sessions             Session[]
+  preference           UserPreference?
+  wallet               Wallet?
+  promoRedemptions     PromoRedemption[]
 
   @@index([email])
   @@index([role])
@@ -79,6 +80,7 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+  @@index([identifier])
   @@index([expires])
 }
 
@@ -133,23 +135,23 @@ model CreditTransaction {
 
 model Payment {
   id                 String              @id @default(cuid())
-  userId             String
-  provider           PaymentProvider
-  type                PaymentType
-  status             PaymentStatus       @default(PENDING)
-  amount             Decimal             @db.Decimal(10, 2)
-  currency           String              @default("USD")
-  providerPaymentId  String?             @unique
-  providerCustomerId String?
-  providerSessionId  String?
-  creditsPurchased   Int                 @default(0)
-  metadata           Json?
-  refundedAt         DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  userId              String              
+  provider             PaymentProvider
+  type                 PaymentType
+  status               PaymentStatus       @default(PENDING)
+  amount               Decimal             @db.Decimal(10, 2)
+  currency             String              @default("USD")
+  providerPaymentId    String?             @unique
+  providerCustomerId   String?
+  providerSessionId    String?
+  creditsPurchased    Int                 @default(0)
+  metadata             Json?
+  refundedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
   creditTransactions CreditTransaction[]
-  generations        Generation[]
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations         Generation[]
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -240,7 +242,7 @@ model Hairstyle {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   feedbacks    Feedback[]
-  generations  Generation[]
+  generations Generation[]
 
   @@index([slug])
   @@index([promptKey])
@@ -262,7 +264,7 @@ model Image {
   mimeType         String
   fileSize         Int
   width            Int?
-  height           Int?
+  height            Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -295,6 +297,37 @@ model Feedback {
   @@index([overallRating])
   @@index([decisionConfidence])
   @@index([createdAt])
+}
+
+model PromoCode {
+  id             String            @id @default(cuid())
+  code           String            @unique
+  credits        Int
+  maxRedemptions Int?
+  redeemedCount  Int               @default(0)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  redemptions    PromoRedemption[]
+
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model PromoRedemption {
+  id             String   @id @default(cuid())
+  promoCodeId    String
+  userId         String
+  creditsGranted Int
+  redeemedAt     DateTime @default(now())
+  promoCode      PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, userId])
+  @@index([userId])
+  @@index([redeemedAt])
 }
 
 enum ImageType {

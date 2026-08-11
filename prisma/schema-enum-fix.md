@@ -1,0 +1,1 @@
+The promo-code branch build exposed a Prisma parser issue caused by compact enum declarations. The schema must use standard multiline enum blocks.
