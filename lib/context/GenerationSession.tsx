@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 
 export interface SelectedHairstyle {
   id: string;
@@ -15,99 +8,62 @@ export interface SelectedHairstyle {
   promptKey: string;
 }
 
-export type GenerationStatus =
-  | "idle"
-  | "generating"
-  | "success"
-  | "failed";
+export type GenerationStatus = "idle" | "generating" | "success" | "failed";
 
 export interface GenerationSessionData {
   uploadedFile: File | null;
   uploadedPreview: string | null;
   selectedStyle: SelectedHairstyle | null;
+  salonClientId: string | null;
   generationStatus: GenerationStatus;
   generationError: string | null;
 }
 
 interface GenerationSessionContextType {
   session: GenerationSessionData;
-
-  setUploadedPhoto: (
-    file: File | null,
-    preview: string | null
-  ) => void;
-
-  setSelectedStyle: (
-    style: SelectedHairstyle | null
-  ) => void;
-
-  setGenerationStatus: (
-    status: GenerationStatus
-  ) => void;
-
-  setGenerationFailed: (
-    error: string
-  ) => void;
-
+  setUploadedPhoto: (file: File | null, preview: string | null) => void;
+  setSelectedStyle: (style: SelectedHairstyle | null) => void;
+  setSalonClientId: (clientId: string | null) => void;
+  setGenerationStatus: (status: GenerationStatus) => void;
+  setGenerationFailed: (error: string) => void;
   clearGenerationResult: () => void;
-
   resetSession: () => void;
 }
 
-const GenerationSessionContext =
-  createContext<GenerationSessionContextType | null>(null);
+const GenerationSessionContext = createContext<GenerationSessionContextType | null>(null);
 
-export function GenerationSessionProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [uploadedFile, setUploadedFile] =
-    useState<File | null>(null);
-
-  const [uploadedPreview, setUploadedPreview] =
-    useState<string | null>(null);
-
-  const [selectedStyle, setSelectedStyleState] =
-    useState<SelectedHairstyle | null>(null);
-
-  const [generationStatus, setGenerationStatusState] =
-    useState<GenerationStatus>("idle");
-
-  const [generationError, setGenerationError] =
-    useState<string | null>(null);
+export function GenerationSessionProvider({ children }: { children: ReactNode }) {
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyleState] = useState<SelectedHairstyle | null>(null);
+  const [salonClientId, setSalonClientIdState] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatusState] = useState<GenerationStatus>("idle");
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
-      if (uploadedPreview?.startsWith("blob:")) {
-        URL.revokeObjectURL(uploadedPreview);
-      }
+      if (uploadedPreview?.startsWith("blob:")) URL.revokeObjectURL(uploadedPreview);
     };
   }, [uploadedPreview]);
 
-  function setUploadedPhoto(
-    file: File | null,
-    preview: string | null
-  ) {
+  function setUploadedPhoto(file: File | null, preview: string | null) {
     setUploadedFile(file);
     setUploadedPreview(preview);
   }
 
-  function setSelectedStyle(
-    style: SelectedHairstyle | null
-  ) {
+  function setSelectedStyle(style: SelectedHairstyle | null) {
     setSelectedStyleState(style);
   }
 
-  function setGenerationStatus(
-    status: GenerationStatus
-  ) {
+  function setSalonClientId(clientId: string | null) {
+    setSalonClientIdState(clientId);
+  }
+
+  function setGenerationStatus(status: GenerationStatus) {
     setGenerationStatusState(status);
   }
 
-  function setGenerationFailed(
-    error: string
-  ) {
+  function setGenerationFailed(error: string) {
     setGenerationStatusState("failed");
     setGenerationError(error);
   }
@@ -121,55 +77,26 @@ export function GenerationSessionProvider({
     setUploadedFile(null);
     setUploadedPreview(null);
     setSelectedStyleState(null);
-
+    setSalonClientIdState(null);
     clearGenerationResult();
   }
 
-  const value = useMemo(
-    () => ({
-      session: {
-        uploadedFile,
-        uploadedPreview,
-        selectedStyle,
-        generationStatus,
-        generationError,
-      },
+  const value = useMemo(() => ({
+    session: { uploadedFile, uploadedPreview, selectedStyle, salonClientId, generationStatus, generationError },
+    setUploadedPhoto,
+    setSelectedStyle,
+    setSalonClientId,
+    setGenerationStatus,
+    setGenerationFailed,
+    clearGenerationResult,
+    resetSession,
+  }), [uploadedFile, uploadedPreview, selectedStyle, salonClientId, generationStatus, generationError]);
 
-      setUploadedPhoto,
-      setSelectedStyle,
-
-      setGenerationStatus,
-      setGenerationFailed,
-      clearGenerationResult,
-
-      resetSession,
-    }),
-    [
-      uploadedFile,
-      uploadedPreview,
-      selectedStyle,
-      generationStatus,
-      generationError,
-    ]
-  );
-
-  return (
-    <GenerationSessionContext.Provider value={value}>
-      {children}
-    </GenerationSessionContext.Provider>
-  );
+  return <GenerationSessionContext.Provider value={value}>{children}</GenerationSessionContext.Provider>;
 }
 
 export function useGenerationSession() {
-  const context = useContext(
-    GenerationSessionContext
-  );
-
-  if (!context) {
-    throw new Error(
-      "useGenerationSession must be used inside GenerationSessionProvider"
-    );
-  }
-
+  const context = useContext(GenerationSessionContext);
+  if (!context) throw new Error("useGenerationSession must be used inside GenerationSessionProvider");
   return context;
 }
