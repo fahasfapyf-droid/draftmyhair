@@ -25,7 +25,12 @@ export default {
           return null;
         }
 
-        return loginUser(parsed.data.email, parsed.data.password);
+        const result = await loginUser(
+          parsed.data.email,
+          parsed.data.password
+        );
+
+        return result.status === "SUCCESS" ? result.user : null;
       },
     }),
   ],
