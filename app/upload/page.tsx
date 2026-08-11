@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { UploadPage } from "@/components/upload";
 import { createPageMetadata } from "../metadata";
 
@@ -10,5 +11,9 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default function Upload() {
-  return <UploadPage />;
+  return (
+    <Suspense fallback={null}>
+      <UploadPage />
+    </Suspense>
+  );
 }
