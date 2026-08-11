@@ -48,157 +48,258 @@ export async function POST(request: Request) {
 
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        {
+          success: false,
+          error: "Unauthorized.",
+        },
         { status: 401 }
       );
     }
 
     userId = session.user.id;
 
+    // Validate the request before charging credits. Invalid uploads,
+    // prompt keys, and generation IDs must never consume a user's balance.
     const formData = await request.formData();
     const image = formData.get("image");
-    const hairstyleId = formData.get("hairstyleId");
+    const promptKey = formData.get("promptKey");
     const requestedGenerationId = formData.get("generationId");
-    const salonClientId = formData.get("salonClientId");
+    const requestedSalonClientId = formData.get("salonClientId");
 
     if (!(image instanceof File)) {
       return NextResponse.json(
-        { error: "Image is required." },
+        {
+          success: false,
+          error: "Image is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (typeof promptKey !== "string" || promptKey.trim().length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Hairstyle prompt key is required.",
+        },
         { status: 400 }
       );
     }
 
     if (!ALLOWED_MIME_TYPES.includes(image.type)) {
       return NextResponse.json(
-        { error: "Only JPEG and PNG images are supported." },
+        {
+          success: false,
+          error: `Unsupported image format: ${image.type}`,
+        },
         { status: 400 }
       );
     }
 
-    if (image.size <= 0 || image.size > MAX_UPLOAD_SIZE) {
+    if (image.size > MAX_UPLOAD_SIZE) {
       return NextResponse.json(
-        { error: "Image must be between 1 byte and 10 MB." },
-        { status: 400 }
+        {
+          success: false,
+          error: "Image exceeds the 10 MB upload limit.",
+        },
+        { status: 413 }
       );
     }
 
-    if (typeof hairstyleId !== "string" || !hairstyleId) {
+    if (image.size === 0) {
       return NextResponse.json(
-        { error: "Hairstyle is required." },
+        {
+          success: false,
+          error: "Image is empty.",
+        },
         { status: 400 }
       );
     }
 
     if (
       requestedGenerationId !== null &&
-      typeof requestedGenerationId !== "string"
+      (typeof requestedGenerationId !== "string" ||
+        !UUID_PATTERN.test(requestedGenerationId))
     ) {
       return NextResponse.json(
-        { error: "Invalid generation ID." },
+        {
+          success: false,
+          error: "Invalid generation identifier.",
+        },
         { status: 400 }
       );
     }
 
-    if (
-      requestedGenerationId &&
-      !UUID_PATTERN.test(requestedGenerationId)
-    ) {
-      return NextResponse.json(
-        { error: "Invalid generation ID." },
-        { status: 400 }
-      );
-    }
-
-    generationId = requestedGenerationId ?? randomUUID();
-
-    const existingGeneration = await prisma.generation.findFirst({
-      where: {
-        id: generationId,
-        userId: session.user.id,
-      },
-    });
-
-    if (existingGeneration) {
-      return NextResponse.json({
-        generationId: existingGeneration.id,
-        status: existingGeneration.status,
-        resultStorageKey: existingGeneration.resultStorageKey,
-      });
-    }
-
-    if (salonClientId !== null && typeof salonClientId !== "string") {
-      return NextResponse.json(
-        { error: "Invalid salon client." },
-        { status: 400 }
-      );
-    }
-
-    if (salonClientId && session.user.role !== "SALON") {
-      return NextResponse.json(
-        { error: "Only salon accounts can attach clients." },
-        { status: 403 }
-      );
-    }
+    const salonClientId =
+      typeof requestedSalonClientId === "string" && requestedSalonClientId.trim()
+        ? requestedSalonClientId.trim()
+        : null;
 
     if (salonClientId) {
+      if (session.user.role !== "SALON") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Salon client previews require a salon account.",
+          },
+          { status: 403 }
+        );
+      }
+
       const client = await prisma.salonClient.findFirst({
-        where: {
-          id: salonClientId,
-          salonId: session.user.id,
-        },
+        where: { id: salonClientId, salonId: userId },
+        select: { id: true },
       });
 
       if (!client) {
         return NextResponse.json(
-          { error: "Salon client not found." },
+          {
+            success: false,
+            error: "Client not found in this salon.",
+          },
           { status: 404 }
         );
       }
     }
 
-    const admin = isAdmin(session.user.role);
-    const creditResult = admin
-      ? { alreadyConsumed: false }
-      : await consumeCredits({
-          userId: session.user.id,
+    generationId =
+      typeof requestedGenerationId === "string"
+        ? requestedGenerationId
+        : randomUUID();
+
+    // A retried POST with the same generation ID must not charge again or
+    // create a second generation. Return the existing generation instead.
+    if (requestedGenerationId) {
+      const existingGeneration = await prisma.generation.findFirst({
+        where: {
+          id: generationId,
+          userId,
+        },
+        select: {
+          status: true,
+          resultStorageKey: true,
+          errorMessage: true,
+        },
+      });
+
+      if (existingGeneration) {
+        return NextResponse.json({
+          success: true,
           generationId,
+          imageUrl:
+            existingGeneration.status === "COMPLETED" &&
+            existingGeneration.resultStorageKey
+              ? `/api/blob?pathname=${encodeURIComponent(existingGeneration.resultStorageKey)}`
+              : null,
+          status: existingGeneration.status,
+          error: existingGeneration.errorMessage,
+        });
+      }
+    }
+
+    if (!isAdmin(session)) {
+      try {
+        const consumption = await consumeCredits({
+          userId,
           amount: 1,
-          description: "Hairstyle generation",
+          generationId,
+          description: "AI hairstyle generation",
         });
 
-    if (creditResult.alreadyConsumed) {
+        if (consumption.alreadyConsumed) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "This generation request is already being processed.",
+              generationId,
+            },
+            { status: 409 }
+          );
+        }
+
+        creditsConsumed = true;
+      } catch (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Unable to consume credits.",
+          },
+          { status: 402 }
+        );
+      }
+    }
+
+    // Bake EXIF orientation into the pixels before the generation model sees
+    // them. The normalized bytes remain in memory for the synchronous job;
+    // only the generated result is persisted to Blob.
+    const normalizedImage = await normalizeImage(
+      Buffer.from(await image.arrayBuffer()),
+      image.type
+    );
+
+    const jobPreparation = await createGeneratePreviewJob({
+      generationId,
+      userId,
+      promptKey: promptKey.trim(),
+      imageBuffer: normalizedImage.buffer,
+      mimeType: normalizedImage.mimeType,
+    });
+
+    if (!jobPreparation.ok) {
+      await refundIfNeeded(jobPreparation.refundDescription);
+
       return NextResponse.json(
-        { error: "Generation has already been started." },
-        { status: 409 }
+        {
+          success: false,
+          error: jobPreparation.error,
+        },
+        { status: jobPreparation.status }
       );
     }
 
-    creditsConsumed = !admin;
+    if (salonClientId) {
+      await prisma.generation.update({
+        where: { id: generationId },
+        data: { salonClientId },
+      });
+    }
 
-    const imageBytes = Buffer.from(await image.arrayBuffer());
-    const normalizedImage = await normalizeImage(imageBytes, image.type);
+    const execution = await runGeneratePreviewJob(jobPreparation.job);
 
-    const job = await createGeneratePreviewJob({
-      generationId,
-      userId: session.user.id,
-      hairstyleId,
-      sourceImage: normalizedImage.buffer,
-      sourceMimeType: normalizedImage.mimeType,
-      salonClientId: salonClientId ?? null,
-    });
+    if (!execution.ok) {
+      await refundIfNeeded(execution.refundDescription);
 
-    await runGeneratePreviewJob(job);
+      return NextResponse.json(
+        {
+          success: false,
+          error: execution.error,
+        },
+        { status: execution.status }
+      );
+    }
 
-    return NextResponse.json({
-      generationId,
-      status: "COMPLETED",
-    });
+    // The server owns the final generation identifier. The client verifies it
+    // before beginning status polling.
+    return NextResponse.json(
+      {
+        success: true,
+        imageUrl: execution.imageUrl,
+        generationId: execution.generationId,
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("Generation request failed:", error);
-    await refundIfNeeded();
+    console.error("Generation API Error:", error);
+    await refundIfNeeded("Unexpected generation API error");
 
     return NextResponse.json(
-      { error: "Generation failed. Please try again." },
+      {
+        success: false,
+        error: "Internal Server Error",
+      },
       { status: 500 }
     );
   }
