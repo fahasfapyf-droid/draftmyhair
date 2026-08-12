@@ -42,3 +42,48 @@ export async function getContactMessages({
     hasNextPage: messages.length > CONTACT_MESSAGES_PAGE_SIZE,
   };
 }
+
+export async function getUserContactInbox(userId: string) {
+  return prisma.contactMessage.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      replies: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          senderRole: true,
+          message: true,
+          readAt: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+}
+
+export async function getUserContactConversation(
+  userId: string,
+  contactMessageId: string
+) {
+  return prisma.contactMessage.findFirst({
+    where: {
+      id: contactMessageId,
+      userId,
+    },
+    include: {
+      replies: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          senderId: true,
+          senderRole: true,
+          message: true,
+          readAt: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+}
