@@ -7,29 +7,17 @@ import { DashboardAnalyticsCard } from "@/components/dashboard/DashboardAnalytic
 import { GenerationCard } from "@/components/dashboard/GenerationCard";
 import { getUserGenerations } from "@/lib/services/generation.service";
 import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
+import { PromoCodeCard } from "@/components/dashboard/PromoCodeCard";
 
 export default async function DashboardPage() {
   const session = await auth();
-
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  if (session.user.role === "ADMIN") {
-    redirect("/dashboard/admin");
-  }
-
-  if (session.user.role === "SALON") {
-    redirect("/salon/dashboard");
-  }
-
+  if (!session?.user?.id) redirect("/login");
+  if (session.user.role === "ADMIN") redirect("/dashboard/admin");
+  if (session.user.role === "SALON") redirect("/salon/dashboard");
   const generations = await getUserGenerations(session.user.id);
 
   return (
-    <DashboardLayout
-      title="Overview"
-      description="Manage your Draft My Hair account."
-    >
+    <DashboardLayout title="Overview" description="Manage your Draft My Hair account.">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-brand-ink">Account</h2>
@@ -39,11 +27,10 @@ export default async function DashboardPage() {
             <div><p className="text-sm text-brand-muted">Role</p><p className="font-medium text-brand-ink">{session.user.role}</p></div>
           </div>
         </div>
-
         <CreditBalanceCard userId={session.user.id} />
         <QuickActionsCard />
         <DashboardAnalyticsCard userId={session.user.id} />
-
+        <div className="lg:col-span-3"><PromoCodeCard /></div>
         <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm lg:col-span-3">
           <h2 className="text-lg font-semibold text-brand-ink">Generation History</h2>
           {generations.length === 0 ? (
