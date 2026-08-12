@@ -17,6 +17,7 @@ export default async function AdminUsersPage() {
       id: true,
       name: true,
       email: true,
+      deletedEmail: true,
       role: true,
       isActive: true,
       isDeleted: true,
@@ -50,7 +51,9 @@ export default async function AdminUsersPage() {
             {users.map((user) => (
               <tr key={user.id} className="border-b border-brand-border last:border-0">
                 <td className="px-5 py-4 text-brand-ink">{user.name || "—"}</td>
-                <td className="px-5 py-4 text-brand-muted">{user.email || "—"}</td>
+                <td className="px-5 py-4 text-brand-muted">
+                  {user.email || user.deletedEmail || "—"}
+                </td>
                 <td className="px-5 py-4 text-brand-ink">{user.role}</td>
                 <td className="px-5 py-4 text-brand-ink">
                   {user.isDeleted ? "Deleted" : user.isActive ? "Active" : "Banned"}
