@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { checkContactRateLimit } from "@/lib/security/contact-rate-limit";
 
@@ -9,8 +10,6 @@ const ContactSchema = z.object({
   email: z.string().trim().email().max(255),
   subject: z.string().trim().min(2).max(150),
   message: z.string().trim().min(10).max(5000),
-
-  // Honeypot field (must stay empty)
   website: z.string().optional(),
 });
 
@@ -19,10 +18,7 @@ function getClientIpAddress(request: Request) {
 
   if (forwardedFor) {
     const ipAddress = forwardedFor.split(",")[0]?.trim();
-
-    if (ipAddress) {
-      return ipAddress;
-    }
+    if (ipAddress) return ipAddress;
   }
 
   return request.headers.get("x-real-ip")?.trim() || "unknown";
@@ -41,15 +37,12 @@ export async function POST(request: Request) {
         },
         {
           status: 429,
-          headers: {
-            "Retry-After": String(rateLimit.retryAfterSeconds),
-          },
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
         }
       );
     }
 
     const body = await request.json();
-
     const result = ContactSchema.safeParse(body);
 
     if (!result.success) {
@@ -63,24 +56,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const {
-      name,
-      email,
-      subject,
-      message,
-      website,
-    } = result.data;
+    const { name, email, subject, message, website } = result.data;
 
-    // Reject spam bot submissions
     if (website && website.trim() !== "") {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid submission.",
-        },
+        { success: false, error: "Invalid submission." },
         { status: 400 }
       );
     }
+
+    const session = await auth();
+    const userId = session?.user?.id ?? null;
 
     await prisma.contactMessage.create({
       data: {
@@ -88,9 +74,9 @@ export async function POST(request: Request) {
         email,
         subject,
         message,
+        userId,
         ipAddress: ipAddress === "unknown" ? null : ipAddress,
-        userAgent:
-          request.headers.get("user-agent") ?? null,
+        userAgent: request.headers.get("user-agent") ?? null,
       },
     });
 
@@ -99,16 +85,9 @@ export async function POST(request: Request) {
       message: "Message received successfully.",
     });
   } catch (error) {
-    console.error(
-      "Contact form submission failed:",
-      error
-    );
-
+    console.error("Contact form submission failed:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: "Internal server error.",
-      },
+      { success: false, error: "Internal server error." },
       { status: 500 }
     );
   }
