@@ -1,15 +1,276 @@
 import { Prisma, Wallet, WalletTransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
 const MAX_TRANSACTION_RETRIES = 3;
-const WELCOME_CREDITS = 1;
-function isRetryableTransactionError(error: unknown){return error instanceof Prisma.PrismaClientKnownRequestError&&(error.code==="P2034"||error.code==="P2002");}
-async function runWalletTransaction<T>(operation:(tx:Prisma.TransactionClient)=>Promise<T>):Promise<T>{for(let attempt=1;attempt<=MAX_TRANSACTION_RETRIES;attempt++){try{return await prisma.$transaction(operation,{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});}catch(error){if(!isRetryableTransactionError(error)||attempt===MAX_TRANSACTION_RETRIES)throw error;}}throw new Error("Wallet transaction could not be completed.");}
-export async function ensureWallet(userId:string):Promise<Wallet>{return runWalletTransaction(async tx=>{let wallet=await tx.wallet.findUnique({where:{userId}});if(!wallet){wallet=await tx.wallet.create({data:{userId,balance:WELCOME_CREDITS}});await tx.creditTransaction.create({data:{walletId:wallet.id,type:WalletTransactionType.BONUS,amount:WELCOME_CREDITS,balanceBefore:0,balanceAfter:WELCOME_CREDITS,description:"Welcome bonus"}});return wallet;}const transactionCount=await tx.creditTransaction.count({where:{walletId:wallet.id}});if(transactionCount===0){wallet=await tx.wallet.update({where:{id:wallet.id},data:{balance:{increment:WELCOME_CREDITS}}});await tx.creditTransaction.create({data:{walletId:wallet.id,type:WalletTransactionType.BONUS,amount:WELCOME_CREDITS,balanceBefore:0,balanceAfter:WELCOME_CREDITS,description:"Welcome bonus"}});}return wallet;});}
-export async function getWallet(userId:string){return ensureWallet(userId);}
-export async function getBalance(userId:string){return(await ensureWallet(userId)).balance;}
-interface AwardCreditsInput{userId:string;amount:number;type:WalletTransactionType;description?:string;generationId?:string;paymentId?:string;metadata?:Prisma.InputJsonValue;}
-export async function awardCredits({userId,amount,type,description,generationId,paymentId,metadata}:AwardCreditsInput){if(amount<=0)throw new Error("Credit amount must be greater than zero.");return runWalletTransaction(async tx=>{let wallet=await tx.wallet.findUnique({where:{userId}});if(!wallet)wallet=await tx.wallet.create({data:{userId,balance:0}});const balanceBefore=wallet.balance;const balanceAfter=balanceBefore+amount;const updatedWallet=await tx.wallet.update({where:{id:wallet.id},data:{balance:{increment:amount}}});const transaction=await tx.creditTransaction.create({data:{walletId:wallet.id,type,amount,balanceBefore,balanceAfter,description,generationId,paymentId,...(metadata!==undefined?{metadata}:{})}});return{wallet:updatedWallet,transaction};});}
-interface ConsumeCreditsInput{userId:string;amount?:number;description?:string;generationId?:string;metadata?:Prisma.InputJsonValue;}
-export async function consumeCredits({userId,amount=1,description="AI hairstyle generation",generationId,metadata}:ConsumeCreditsInput){if(amount<=0)throw new Error("Credit amount must be greater than zero.");await ensureWallet(userId);return runWalletTransaction(async tx=>{const wallet=await tx.wallet.findUnique({where:{userId}});if(!wallet)throw new Error("Unable to initialize wallet.");if(generationId){const existingDebit=await tx.creditTransaction.findFirst({where:{generationId,type:WalletTransactionType.DEBIT}});if(existingDebit)return{wallet,transaction:existingDebit,alreadyConsumed:true};}if(wallet.balance<amount)throw new Error("Insufficient credits.");const balanceBefore=wallet.balance;const balanceAfter=balanceBefore-amount;const updatedWallet=await tx.wallet.update({where:{id:wallet.id},data:{balance:{decrement:amount}}});const transaction=await tx.creditTransaction.create({data:{walletId:wallet.id,type:WalletTransactionType.DEBIT,amount,balanceBefore,balanceAfter,description,generationId,...(metadata!==undefined?{metadata}:{})}});return{wallet:updatedWallet,transaction,alreadyConsumed:false};});}
-interface RefundCreditsInput{userId:string;amount?:number;description?:string;generationId?:string;metadata?:Prisma.InputJsonValue;}
-export async function refundCredits({userId,amount=1,description="Generation refund",generationId,metadata}:RefundCreditsInput){if(amount<=0)throw new Error("Credit amount must be greater than zero.");return runWalletTransaction(async tx=>{let wallet=await tx.wallet.findUnique({where:{userId}});if(!wallet)wallet=await tx.wallet.create({data:{userId,balance:0}});if(generationId){const existingRefund=await tx.creditTransaction.findFirst({where:{generationId,type:WalletTransactionType.REFUND}});if(existingRefund)return{wallet,transaction:existingRefund,refunded:false};const debit=await tx.creditTransaction.findFirst({where:{generationId,type:WalletTransactionType.DEBIT}});if(!debit)return{wallet,transaction:null,refunded:false};amount=debit.amount;}const balanceBefore=wallet.balance;const balanceAfter=balanceBefore+amount;const updatedWallet=await tx.wallet.update({where:{id:wallet.id},data:{balance:{increment:amount}}});const transaction=await tx.creditTransaction.create({data:{walletId:wallet.id,type:WalletTransactionType.REFUND,amount,balanceBefore,balanceAfter,description,generationId,...(metadata!==undefined?{metadata}:{})}});return{wallet:updatedWallet,transaction,refunded:true};});}
+
+function isRetryableTransactionError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2034" || error.code === "P2002")
+  );
+}
+
+async function runWalletTransaction<T>(
+  operation: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    } catch (error) {
+      if (
+        !isRetryableTransactionError(error) ||
+        attempt === MAX_TRANSACTION_RETRIES
+      ) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Wallet transaction could not be completed.");
+}
+
+/**
+ * Ensures a wallet exists for the user.
+ *
+ * New accounts start with zero credits. Credits are awarded only through an
+ * explicit credit-awarding flow such as an admin-issued promo code or a
+ * future purchase. This function must never grant signup/welcome credits.
+ */
+export async function ensureWallet(userId: string): Promise<Wallet> {
+  return runWalletTransaction(async (tx) => {
+    const existingWallet = await tx.wallet.findUnique({ where: { userId } });
+
+    if (existingWallet) {
+      return existingWallet;
+    }
+
+    return tx.wallet.create({
+      data: {
+        userId,
+        balance: 0,
+      },
+    });
+  });
+}
+
+export async function getWallet(userId: string): Promise<Wallet> {
+  return ensureWallet(userId);
+}
+
+export async function getBalance(userId: string): Promise<number> {
+  return (await ensureWallet(userId)).balance;
+}
+
+interface AwardCreditsInput {
+  userId: string;
+  amount: number;
+  type: WalletTransactionType;
+  description?: string;
+  generationId?: string;
+  paymentId?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+export async function awardCredits({
+  userId,
+  amount,
+  type,
+  description,
+  generationId,
+  paymentId,
+  metadata,
+}: AwardCreditsInput) {
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
+
+  return runWalletTransaction(async (tx) => {
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
+
+    if (!wallet) {
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
+    }
+
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore + amount;
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: { increment: amount } },
+    });
+
+    const transaction = await tx.creditTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type,
+        amount,
+        balanceBefore,
+        balanceAfter,
+        description,
+        generationId,
+        paymentId,
+        ...(metadata !== undefined ? { metadata } : {}),
+      },
+    });
+
+    return { wallet: updatedWallet, transaction };
+  });
+}
+
+interface ConsumeCreditsInput {
+  userId: string;
+  amount?: number;
+  description?: string;
+  generationId?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+export async function consumeCredits({
+  userId,
+  amount = 1,
+  description = "AI hairstyle generation",
+  generationId,
+  metadata,
+}: ConsumeCreditsInput) {
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
+
+  return runWalletTransaction(async (tx) => {
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
+
+    if (!wallet) {
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
+    }
+
+    if (generationId) {
+      const existingDebit = await tx.creditTransaction.findFirst({
+        where: {
+          generationId,
+          type: WalletTransactionType.DEBIT,
+        },
+      });
+
+      if (existingDebit) {
+        return {
+          wallet,
+          transaction: existingDebit,
+          alreadyConsumed: true,
+        };
+      }
+    }
+
+    if (wallet.balance < amount) {
+      throw new Error("Insufficient credits. Redeem a promo code or purchase credits to continue.");
+    }
+
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore - amount;
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: { decrement: amount } },
+    });
+
+    const transaction = await tx.creditTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTransactionType.DEBIT,
+        amount,
+        balanceBefore,
+        balanceAfter,
+        description,
+        generationId,
+        ...(metadata !== undefined ? { metadata } : {}),
+      },
+    });
+
+    return {
+      wallet: updatedWallet,
+      transaction,
+      alreadyConsumed: false,
+    };
+  });
+}
+
+interface RefundCreditsInput {
+  userId: string;
+  amount?: number;
+  description?: string;
+  generationId?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+export async function refundCredits({
+  userId,
+  amount = 1,
+  description = "Generation refund",
+  generationId,
+  metadata,
+}: RefundCreditsInput) {
+  if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
+
+  return runWalletTransaction(async (tx) => {
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
+
+    if (!wallet) {
+      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
+    }
+
+    if (generationId) {
+      const existingRefund = await tx.creditTransaction.findFirst({
+        where: {
+          generationId,
+          type: WalletTransactionType.REFUND,
+        },
+      });
+
+      if (existingRefund) {
+        return {
+          wallet,
+          transaction: existingRefund,
+          refunded: false,
+        };
+      }
+
+      const debit = await tx.creditTransaction.findFirst({
+        where: {
+          generationId,
+          type: WalletTransactionType.DEBIT,
+        },
+      });
+
+      if (!debit) {
+        return {
+          wallet,
+          transaction: null,
+          refunded: false,
+        };
+      }
+
+      amount = debit.amount;
+    }
+
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore + amount;
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balance: { increment: amount } },
+    });
+
+    const transaction = await tx.creditTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTransactionType.REFUND,
+        amount,
+        balanceBefore,
+        balanceAfter,
+        description,
+        generationId,
+        ...(metadata !== undefined ? { metadata } : {}),
+      },
+    });
+
+    return {
+      wallet: updatedWallet,
+      transaction,
+      refunded: true,
+    };
+  });
+}
