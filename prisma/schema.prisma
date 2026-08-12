@@ -32,9 +32,10 @@ model User {
   passwordResetTokens PasswordResetToken[]
   payments            Payment[]
   sessions            Session[]
-  preference          UserPreference?
+  preference           UserPreference?
   wallet              Wallet?
   salonClients        SalonClient[]        @relation("SalonOwnerClients")
+  promoRedemptions    PromoRedemption[]
 
   @@index([email])
   @@index([role])
@@ -82,120 +83,397 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+  @@index([identifier])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
   userId    String
-  expires   DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([expires])
+  @@index([expiresAt])
+  @@index([usedAt])
 }
 
-model UserPreference {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Wallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  balance      Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  transactions CreditTransaction[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([balance])
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  walletId      String
+  type          WalletTransactionType
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  description   String?
+  generationId  String?
+  paymentId     String?
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+  generation    Generation?           @relation(fields: [generationId], references: [id])
+  payment       Payment?              @relation(fields: [paymentId], references: [id])
+  wallet        Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([paymentId])
+  @@index([generationId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Payment {
+  id                 String              @id @default(cuid())
+  userId             String
+  provider           PaymentProvider
+  type                 PaymentType
+  status               PaymentStatus       @default(PENDING)
+  amount             Decimal             @db.Decimal(10, 2)
+  currency            String              @default("USD")
+  providerPaymentId  String?             @unique
+  providerCustomerId String?
+  providerSessionId  String?
+  creditsPurchased   Int                 @default(0)
+  metadata           Json?
+  refundedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  creditTransactions CreditTransaction[]
+  generations        Generation[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([provider])
+  @@index([createdAt])
 }
 
 model Generation {
-  id              String           @id @default(cuid())
-  userId          String
-  inputImageUrl   String?
-  sourceStorageKey String?
-  resultImageUrl  String?
-  styleSlug       String
-  status          GenerationStatus @default(PROCESSING)
-  errorMessage    String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  image           Image?
-  creditTransactions CreditTransaction[]
+  id                  String              @id @default(cuid())
+  userId              String
+  salonClientId       String?
+  hairstyleId         String
+  paymentId           String?
+  status              GenerationStatus    @default(QUEUED)
+  promptKey           String
+  promptVersion       String
+  provider            String
+  providerModel       String
+  inputImageUrl       String?
+  outputImageUrl      String?
+  sourceStorageKey    String?
+  resultStorageKey    String?
+  errorMessage        String?
+  creditsUsed         Int                 @default(1)
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  processingTimeMs    Int?
+  metadata            Json?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  transactions        CreditTransaction[]
+  hairstyle           Hairstyle           @relation(fields: [hairstyleId], references: [id])
+  payment             Payment?            @relation(fields: [paymentId], references: [id])
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  salonClient         SalonClient?        @relation(fields: [salonClientId], references: [id], onDelete: SetNull)
+  images              Image[]
 
   @@index([userId])
+  @@index([salonClientId])
+  @@index([hairstyleId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([provider])
+  @@index([providerModel])
+  @@index([createdAt])
+}
+
+model SalonClient {
+  id          String       @id @default(cuid())
+  salonId     String
+  name        String
+  email       String?
+  phone       String?
+  notes       String?
+  consentAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  salon       User         @relation("SalonOwnerClients", fields: [salonId], references: [id], onDelete: Cascade)
+  generations Generation[]
+
+  @@index([salonId])
+  @@index([name])
+  @@index([createdAt])
+}
+
+model UserPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  preferredGender     String?
+  preferredHairLength String?
+  preferredHairColor  String?
+  preferredLanguage   String?
+  marketingEmails     Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContactMessage {
+  id         String        @id @default(cuid())
+  name       String
+  email      String
+  subject    String?
+  message    String
+  status     ContactStatus @default(NEW)
+  resolvedAt DateTime?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([email])
   @@index([status])
   @@index([createdAt])
 }
 
-model Image {
-  id           String     @id @default(cuid())
-  userId       String
-  generationId String?    @unique
-  blobUrl      String
-  storageKey   String
-  createdAt    DateTime   @default(now())
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generation   Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+model Hairstyle {
+  id           String             @id @default(cuid())
+  name         String
+  slug         String             @unique
+  serviceType  ServiceType        @default(HAIRSTYLE)
+  category     HairstyleCategory?
+  gender       GenderTarget
+  description  String?
+  thumbnailUrl String?
+  displayOrder Int                @default(0)
+  promptKey    String             @unique
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  feedbacks    Feedback[]
+  generations  Generation[]
 
-  @@index([userId])
+  @@index([slug])
+  @@index([promptKey])
+  @@index([serviceType])
+  @@index([category])
+  @@index([gender])
+  @@index([isActive])
+}
+
+model Image {
+  id               String      @id
+  ownerId          String
+  generationId     String?
+  type             ImageType
+  status            ImageStatus @default(ACTIVE)
+  storageKey       String      @unique
+  blobUrl          String      @unique
+  originalFilename String?
+  mimeType         String
+  fileSize         Int
+  width            Int?
+  height           Int?
+  checksum         String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  generation       Generation? @relation(fields: [generationId], references: [id])
+  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([generationId])
+  @@index([type])
+  @@index([status])
 }
 
 model Feedback {
-  id        String   @id @default(cuid())
-  userId    String?
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-}
+  id                 String             @id @default(cuid())
+  userId             String?
+  hairstyleId        String?
+  overallRating      Int
+  identityRating     Int
+  realismRating      Int
+  decisionConfidence DecisionConfidence
+  issues             FeedbackIssue[]
+  comment            String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  hairstyle          Hairstyle?         @relation(fields: [hairstyleId], references: [id])
+  user               User?              @relation(fields: [userId], references: [id])
 
-model Payment {
-  id        String   @id @default(cuid())
-  userId    String
-  amount    Int
-  status    String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model SalonClient {
-  id        String   @id @default(cuid())
-  salonId   String
-  name      String
-  email     String?
-  createdAt DateTime @default(now())
-  salon     User     @relation("SalonOwnerClients", fields: [salonId], references: [id], onDelete: Cascade)
-
-  @@index([salonId])
-}
-
-model Wallet {
-  id        String              @id @default(cuid())
-  userId    String              @unique
-  balance   Int                 @default(0)
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions CreditTransaction[]
-}
-
-model CreditTransaction {
-  id           String                @id @default(cuid())
-  walletId     String
-  type         WalletTransactionType
-  amount       Int
-  balanceBefore Int
-  balanceAfter Int
-  description  String?
-  generationId String?
-  paymentId    String?
-  metadata     Json?
-  createdAt    DateTime              @default(now())
-  wallet       Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  generation   Generation?           @relation(fields: [generationId], references: [id], onDelete: SetNull)
-
-  @@index([walletId])
-  @@index([generationId])
+  @@index([userId])
+  @@index([hairstyleId])
+  @@index([overallRating])
+  @@index([decisionConfidence])
   @@index([createdAt])
 }
 
-enum UserRole { USER SALON ADMIN }
-enum GenerationStatus { PROCESSING COMPLETED FAILED }
-enum WalletTransactionType { BONUS DEBIT REFUND PURCHASE }
+model PromoCode {
+  id             String            @id @default(cuid())
+  code           String            @unique
+  credits        Int
+  maxRedemptions Int?
+  redeemedCount  Int               @default(0)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  redemptions    PromoRedemption[]
+
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model PromoRedemption {
+  id             String   @id @default(cuid())
+  promoCodeId    String
+  userId         String
+  creditsGranted Int
+  redeemedAt     DateTime @default(now())
+  promoCode      PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, userId])
+  @@index([userId])
+  @@index([redeemedAt])
+}
+
+enum ImageType {
+  ORIGINAL
+  GENERATED
+}
+
+enum ImageStatus {
+  ACTIVE
+  FAILED
+  DELETED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SALON
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  REFUND
+  BONUS
+  PURCHASE
+  ADJUSTMENT
+}
+
+enum GenerationStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  LEMONSQUEEZY
+  MANUAL
+}
+
+enum PaymentType {
+  CREDIT_PURCHASE
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+enum ContactStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum HairstyleCategory {
+  BOB
+  LOB
+  PIXIE
+  BIXIE
+  LAYERS
+  SHAG
+  WOLF
+  MULLET
+  FADE
+  TAPER
+  UNDERCUT
+  CROP
+  CREW
+  QUIFF
+  POMPADOUR
+  SIDE_PART
+  COMB_OVER
+  MOHAWK
+  MAN_BUN
+  BRAIDS
+  LOCS
+  AFRO
+  CURLY
+  BANGS
+  UPDO
+}
+
+enum ServiceType {
+  HAIRSTYLE
+  HAIR_COLOR
+  BUZZ_CUT
+  BALD
+  BEARD
+  BEARD_REMOVAL
+}
+
+enum GenderTarget {
+  FEMALE
+  MALE
+  UNISEX
+}
+
+enum DecisionConfidence {
+  DEFINITELY_NOT
+  PROBABLY_NOT
+  UNSURE
+  PROBABLY_YES
+  DEFINITELY_YES
+}
+
+enum FeedbackIssue {
+  IDENTITY_DRIFT
+  HAIRLINE
+  LIGHTING
+  HAIR_COLOR
+  TEXTURE
+  BLENDING
+  BACKGROUND
+  OTHER
+}
