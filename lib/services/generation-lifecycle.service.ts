@@ -31,6 +31,19 @@ export async function createQueuedGeneration({
   });
 }
 
+export async function deleteQueuedGeneration(
+  generationId: string,
+  userId: string
+) {
+  await prisma.generation.deleteMany({
+    where: {
+      id: generationId,
+      userId,
+      status: GenerationStatus.QUEUED,
+    },
+  });
+}
+
 export async function markGenerationProcessing(generationId: string) {
   const processingStartedAt = new Date();
 
