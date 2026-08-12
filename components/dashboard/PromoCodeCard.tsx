@@ -11,11 +11,10 @@ export function PromoCodeCard() {
 
   async function submit() {
     setBusy(true); setMessage("");
-    const result = await redeemPromoCodeAction(new FormData());
     const formData = new FormData(); formData.set("code", code);
-    const finalResult = result.ok ? result : await redeemPromoCodeAction(formData);
-    setSuccess(finalResult.ok); setMessage(finalResult.message);
-    if (finalResult.ok) setCode("");
+    const result = await redeemPromoCodeAction(formData);
+    setSuccess(result.ok); setMessage(result.message);
+    if (result.ok) setCode("");
     setBusy(false);
   }
 
