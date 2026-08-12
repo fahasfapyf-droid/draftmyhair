@@ -5,7 +5,9 @@ const MAX_TRANSACTION_RETRIES = 3;
 
 export class InsufficientCreditsError extends Error {
   constructor() {
-    super("Insufficient credits. Redeem a promo code or purchase credits to continue.");
+    super(
+      "Insufficient credits. Redeem a promo code or purchase credits to continue."
+    );
     this.name = "InsufficientCreditsError";
   }
 }
@@ -258,8 +260,7 @@ export async function refundCredits({
     const balanceAfter = balanceBefore + amount;
     const updatedWallet = await tx.wallet.update({
       where: { id: wallet.id },
-      data: { balance: { increment: amount },
-      },
+      data: { balance: { increment: amount } },
     });
 
     const transaction = await tx.creditTransaction.create({
