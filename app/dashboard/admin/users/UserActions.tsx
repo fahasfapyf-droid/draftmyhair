@@ -40,7 +40,7 @@ export function UserActions({ userId, isActive, isDeleted }: Props) {
           onClick={() =>
             runAction(
               banUser,
-              "Ban this account? The user will be signed out and will not be able to log in until an admin unbans the account."
+              "Ban this account? The user will be signed out and will not be able to log in until an admin unbans the account. The email address will remain blocked from registering while the ban is active."
             )
           }
           className="rounded-full border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-ink transition hover:bg-brand-surface disabled:cursor-not-allowed disabled:opacity-50"
@@ -69,7 +69,7 @@ export function UserActions({ userId, isActive, isDeleted }: Props) {
         onClick={() =>
           runAction(
             deleteUser,
-            "DELETE this account? This will disable the account, sign out all sessions, permanently block the email from registering again, and mark the account deleted. This action cannot be undone from this screen."
+            "DELETE this account? The account will be permanently disabled and marked deleted, all sessions will be signed out, and the email address will be released so the person can register a new account again. Historical data remains retained for audit continuity."
           )
         }
         className="rounded-full border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
