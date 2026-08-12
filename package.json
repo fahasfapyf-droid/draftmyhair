@@ -7,7 +7,7 @@
     "predev": "npm run compile:prompts",
     "dev": "next dev",
     "prebuild": "npm run compile:prompts",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && (prisma migrate resolve --rolled-back 20260812000000_add_promo_codes || true) && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate"
@@ -58,6 +58,7 @@
     "esbuild@0.28.1": true,
     "protobufjs@7.6.4": true,
     "prisma@6.16.3": true,
+    "tsx@4.23.1": true,
     "unrs-resolver@1.12.2": true
   }
 }
