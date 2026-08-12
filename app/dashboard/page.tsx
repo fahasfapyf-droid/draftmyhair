@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -43,6 +44,19 @@ export default async function DashboardPage() {
 
         <DashboardAnalyticsCard userId={session.user.id} />
         <QuickActionsCard />
+
+        <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-brand-ink">Quick Message</h2>
+          <p className="mt-4 text-sm leading-6 text-brand-muted">
+            Need help with a preview, want to report an issue, or have a feature suggestion?
+          </p>
+          <Link
+            href="/contact"
+            className="mt-6 inline-flex w-full items-center justify-center rounded-md bg-brand-ink px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Contact Us
+          </Link>
+        </div>
 
         <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm lg:col-span-3">
           <h2 className="text-lg font-semibold text-brand-ink">Generation History</h2>
