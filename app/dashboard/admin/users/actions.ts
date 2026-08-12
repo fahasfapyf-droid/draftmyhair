@@ -23,7 +23,12 @@ async function requireAdmin() {
 async function getTargetUser(userId: string, adminId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, role: true, isDeleted: true },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      isDeleted: true,
+    },
   });
 
   if (!user) {
@@ -84,6 +89,8 @@ export async function deleteUser(formData: FormData) {
     await tx.user.update({
       where: { id: userId },
       data: {
+        email: null,
+        deletedEmail: user.email,
         isActive: false,
         isDeleted: true,
         deletedAt: new Date(),
