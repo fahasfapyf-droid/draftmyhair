@@ -170,10 +170,15 @@ export async function consumeCredits({
 }: ConsumeCreditsInput) {
   if (amount <= 0) throw new Error("Credit amount must be greater than zero.");
 
+  // Repair only a wallet with no credit history before attempting the debit.
+  // A wallet with existing transactions is never topped up here.
+  await ensureWallet(userId);
+
   return runWalletTransaction(async (tx) => {
-    let wallet = await tx.wallet.findUnique({ where: { userId } });
+    const wallet = await tx.wallet.findUnique({ where: { userId } });
+
     if (!wallet) {
-      wallet = await tx.wallet.create({ data: { userId, balance: 0 } });
+      throw new Error("Unable to initialize wallet.");
     }
 
     // A generation ID is the idempotency key for a generation charge.
