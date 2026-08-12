@@ -1,0 +1,42 @@
+"use client";
+
+import { useFormStatus } from "react-dom";
+import { saveGenerationQa } from "@/app/actions/admin/generation-qa-actions";
+
+function Stars({ name, label, value }: { name: string; label: string; value?: number }) {
+  return (
+    <fieldset>
+      <legend className="text-xs font-medium text-brand-muted">{label}</legend>
+      <div className="mt-1 flex gap-1">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <label key={rating} className="cursor-pointer">
+            <input className="sr-only" type="radio" name={name} value={rating} defaultChecked={value === rating} required />
+            <span className="text-lg text-brand-muted transition-colors hover:text-brand-ink">★</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function Submit() {
+  const { pending } = useFormStatus();
+  return <button disabled={pending} className="rounded-editorial bg-brand-ink px-4 py-2 text-xs font-medium text-brand-canvas disabled:opacity-50">{pending ? "Saving…" : "Save QA"}</button>;
+}
+
+export function GenerationQaForm({ generationId, qa }: { generationId: string; qa?: { overall?: number; identity?: number; integration?: number; realism?: number; notes?: string | null } }) {
+  const action = saveGenerationQa.bind(null, generationId);
+  return (
+    <form action={action} className="mt-4 rounded-editorial border border-brand-border bg-brand-canvas p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">Internal QA</p>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <Stars name="overall" label="Overall QA" value={qa?.overall} />
+        <Stars name="identity" label="Identity preservation" value={qa?.identity} />
+        <Stars name="integration" label="Hair integration" value={qa?.integration} />
+        <Stars name="realism" label="Photorealism" value={qa?.realism} />
+      </div>
+      <textarea name="notes" defaultValue={qa?.notes ?? ""} maxLength={1000} rows={2} placeholder="Optional QA notes…" className="mt-4 w-full rounded border border-brand-border bg-brand-surface px-3 py-2 text-xs text-brand-ink outline-none focus:border-brand-ink" />
+      <div className="mt-3"><Submit /></div>
+    </form>
+  );
+}
