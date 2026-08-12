@@ -41,7 +41,7 @@ export function ContactReplyForm({ contactId }: ContactReplyFormProps) {
           className="w-full rounded-editorial border border-brand-border bg-brand-canvas px-4 py-3 text-sm leading-relaxed text-brand-ink outline-none transition placeholder:text-brand-muted/70 focus:border-brand-ink"
         />
         <p className="mt-2 text-xs text-brand-muted">
-          The reply will be sent to the customer&apos;s email address.
+          The reply is saved to the customer&apos;s Inbox and sent to their email address.
         </p>
       </div>
 

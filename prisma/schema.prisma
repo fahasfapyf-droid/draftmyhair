@@ -36,6 +36,8 @@ model User {
   wallet              Wallet?
   salonClients        SalonClient[]        @relation("SalonOwnerClients")
   promoRedemptions    PromoRedemption[]
+  contactMessages     ContactMessage[]
+  contactReplies      ContactMessageReply[]
 
   @@index([email])
   @@index([role])
@@ -139,10 +141,10 @@ model Payment {
   id                 String              @id @default(cuid())
   userId             String
   provider           PaymentProvider
-  type                 PaymentType
-  status               PaymentStatus       @default(PENDING)
+  type               PaymentType
+  status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
-  currency            String              @default("USD")
+  currency           String              @default("USD")
   providerPaymentId  String?             @unique
   providerCustomerId String?
   providerSessionId  String?
@@ -242,12 +244,33 @@ model ContactMessage {
   resolvedAt DateTime?
   ipAddress  String?
   userAgent  String?
+  userId     String?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+  user       User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  replies    ContactMessageReply[]
 
   @@index([email])
   @@index([status])
+  @@index([userId])
   @@index([createdAt])
+}
+
+model ContactMessageReply {
+  id               String             @id @default(cuid())
+  contactMessageId String
+  senderId         String
+  senderRole       ContactReplySender
+  message          String
+  readAt           DateTime?
+  createdAt        DateTime           @default(now())
+  contactMessage   ContactMessage     @relation(fields: [contactMessageId], references: [id], onDelete: Cascade)
+  sender           User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([contactMessageId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([senderRole, readAt])
 }
 
 model Hairstyle {
@@ -282,7 +305,7 @@ model Image {
   type             ImageType
   status            ImageStatus @default(ACTIVE)
   storageKey       String      @unique
-  blobUrl          String      @unique
+  blobUrl           String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
@@ -319,7 +342,6 @@ model Feedback {
   @@index([hairstyleId])
   @@index([overallRating])
   @@index([decisionConfidence])
-  @@index([createdAt])
 }
 
 model PromoCode {
@@ -414,6 +436,11 @@ enum ContactStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+enum ContactReplySender {
+  USER
+  ADMIN
 }
 
 enum HairstyleCategory {

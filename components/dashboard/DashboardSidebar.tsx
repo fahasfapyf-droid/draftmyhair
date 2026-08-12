@@ -6,6 +6,7 @@ import {
   Home,
   User,
   Images,
+  MessageSquare,
   Wallet,
   CreditCard,
   Settings,
@@ -28,6 +29,12 @@ const navigation = [
     title: "Generations",
     href: "/dashboard/generations",
     icon: Images,
+    available: true,
+  },
+  {
+    title: "Inbox",
+    href: "/dashboard/inbox",
+    icon: MessageSquare,
     available: true,
   },
   {
@@ -56,23 +63,16 @@ export function DashboardSidebar() {
   return (
     <aside className="w-72 shrink-0 rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
       <div className="mb-8">
-        <h2 className="text-xl font-semibold text-brand-ink">
-          Dashboard
-        </h2>
-
-        <p className="mt-1 text-sm text-brand-muted">
-          Manage your account
-        </p>
+        <h2 className="text-xl font-semibold text-brand-ink">Dashboard</h2>
+        <p className="mt-1 text-sm text-brand-muted">Manage your account</p>
       </div>
 
       <nav className="space-y-2">
         {navigation.map((item) => {
           const Icon = item.icon;
-
           const active =
             pathname === item.href ||
-            (item.href !== "/dashboard" &&
-              pathname.startsWith(item.href));
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
           return (
             <Link
@@ -88,10 +88,7 @@ export function DashboardSidebar() {
             >
               <div className="flex items-center gap-3">
                 <Icon className="h-5 w-5" />
-
-                <span className="font-medium">
-                  {item.title}
-                </span>
+                <span className="font-medium">{item.title}</span>
               </div>
 
               {!item.available && (
