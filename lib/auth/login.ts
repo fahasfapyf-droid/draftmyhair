@@ -38,6 +38,11 @@ export async function loginUser(
     return { status: "INVALID_CREDENTIALS" };
   }
 
+  if (!user.isActive || user.isDeleted) {
+    await argon2.verify(DUMMY_PASSWORD_HASH, password).catch(() => false);
+    return { status: "INVALID_CREDENTIALS" };
+  }
+
   if (
     user.loginLockedUntil &&
     user.loginLockedUntil.getTime() > Date.now()

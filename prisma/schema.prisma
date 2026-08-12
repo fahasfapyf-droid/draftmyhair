@@ -11,6 +11,7 @@ model User {
   id                  String               @id @default(cuid())
   name                String?
   email               String?              @unique
+  deletedEmail        String?
   emailVerified       DateTime?
   image               String?
   role                UserRole             @default(USER)
@@ -36,6 +37,7 @@ model User {
   salonClients        SalonClient[]        @relation("SalonOwnerClients")
 
   @@index([email])
+  @@index([deletedEmail])
   @@index([role])
   @@index([isDeleted])
   @@index([createdAt])
@@ -136,19 +138,19 @@ model CreditTransaction {
 model Payment {
   id                 String              @id @default(cuid())
   userId             String
-  provider           PaymentProvider
-  type               PaymentType
-  status             PaymentStatus       @default(PENDING)
-  amount             Decimal             @db.Decimal(10, 2)
-  currency           String              @default("USD")
+  provider            PaymentProvider
+  type                PaymentType
+  status              PaymentStatus       @default(PENDING)
+  amount              Decimal             @db.Decimal(10, 2)
+  currency            String              @default("USD")
   providerPaymentId  String?             @unique
   providerCustomerId String?
   providerSessionId  String?
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -177,7 +179,7 @@ model Generation {
   errorMessage        String?
   creditsUsed         Int                 @default(1)
   processingStartedAt DateTime?
-  completedAt          DateTime?
+  completedAt         DateTime?
   processingTimeMs    Int?
   metadata            Json?
   createdAt           DateTime             @default(now())
@@ -280,12 +282,12 @@ model Image {
   type             ImageType
   status            ImageStatus @default(ACTIVE)
   storageKey       String      @unique
-  blobUrl           String      @unique
+  blobUrl          String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
   width            Int?
-  height            Int?
+  height           Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
