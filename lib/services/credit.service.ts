@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 const MAX_TRANSACTION_RETRIES = 3;
 
+export class InsufficientCreditsError extends Error {
+  constructor() {
+    super(
+      "Insufficient credits. Redeem a promo code or purchase credits to continue."
+    );
+    this.name = "InsufficientCreditsError";
+  }
+}
+
 function isRetryableTransactionError(error: unknown) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -158,7 +167,7 @@ export async function consumeCredits({
     }
 
     if (wallet.balance < amount) {
-      throw new Error("Insufficient credits. Redeem a promo code or purchase credits to continue.");
+      throw new InsufficientCreditsError();
     }
 
     const balanceBefore = wallet.balance;

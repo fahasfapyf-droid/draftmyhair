@@ -10,8 +10,10 @@ import {
 } from "@/lib/jobs/generate-preview.job";
 import {
   consumeCredits,
+  InsufficientCreditsError,
   refundCredits,
 } from "@/lib/services/credit.service";
+import { deleteQueuedGeneration } from "@/lib/services/generation-lifecycle.service";
 
 export const maxDuration = 300;
 
@@ -197,6 +199,32 @@ export async function POST(request: Request) {
       }
     }
 
+    // Normalize the source image and create the Generation before recording
+    // the credit debit. CreditTransaction.generationId is a foreign key to
+    // Generation.id, so the parent row must exist before the debit row.
+    const normalizedImage = await normalizeImage(
+      Buffer.from(await image.arrayBuffer()),
+      image.type
+    );
+
+    const jobPreparation = await createGeneratePreviewJob({
+      generationId,
+      userId,
+      promptKey: promptKey.trim(),
+      imageBuffer: normalizedImage.buffer,
+      mimeType: normalizedImage.mimeType,
+    });
+
+    if (!jobPreparation.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: jobPreparation.error,
+        },
+        { status: jobPreparation.status }
+      );
+    }
+
     if (!isAdmin(session)) {
       try {
         const consumption = await consumeCredits({
@@ -219,45 +247,35 @@ export async function POST(request: Request) {
 
         creditsConsumed = true;
       } catch (error) {
+        try {
+          await deleteQueuedGeneration(generationId, userId);
+        } catch (cleanupError) {
+          console.error(
+            "Failed to remove queued generation after credit failure:",
+            cleanupError
+          );
+        }
+
+        if (error instanceof InsufficientCreditsError) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: error.message,
+            },
+            { status: 402 }
+          );
+        }
+
+        console.error("Credit consumption failed:", error);
+
         return NextResponse.json(
           {
             success: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Unable to consume credits.",
+            error: "Unable to process generation credits.",
           },
-          { status: 402 }
+          { status: 500 }
         );
       }
-    }
-
-    // Bake EXIF orientation into the pixels before the generation model sees
-    // them. The normalized bytes remain in memory for the synchronous job;
-    // only the generated result is persisted to Blob.
-    const normalizedImage = await normalizeImage(
-      Buffer.from(await image.arrayBuffer()),
-      image.type
-    );
-
-    const jobPreparation = await createGeneratePreviewJob({
-      generationId,
-      userId,
-      promptKey: promptKey.trim(),
-      imageBuffer: normalizedImage.buffer,
-      mimeType: normalizedImage.mimeType,
-    });
-
-    if (!jobPreparation.ok) {
-      await refundIfNeeded(jobPreparation.refundDescription);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: jobPreparation.error,
-        },
-        { status: jobPreparation.status }
-      );
     }
 
     if (salonClientId) {
