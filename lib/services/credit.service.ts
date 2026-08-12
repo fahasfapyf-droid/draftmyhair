@@ -7,6 +7,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 const MAX_TRANSACTION_RETRIES = 3;
+const WELCOME_CREDITS = 5;
 
 function isRetryableTransactionError(error: unknown) {
   return (
@@ -36,17 +37,59 @@ async function runWalletTransaction<T>(
   throw new Error("Wallet transaction could not be completed.");
 }
 
+/**
+ * Ensures the wallet exists and repairs only the specific legacy/broken state
+ * where a wallet has never had a credit transaction. This does not restore
+ * credits to users who have already spent, purchased, or otherwise transacted
+ * credits.
+ */
 export async function ensureWallet(userId: string): Promise<Wallet> {
-  const wallet = await prisma.wallet.findUnique({ where: { userId } });
-  if (wallet) return wallet;
+  return runWalletTransaction(async (tx) => {
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
 
-  return runWalletTransaction(async (tx) =>
-    tx.wallet.upsert({
-      where: { userId },
-      update: {},
-      create: { userId, balance: 0 },
-    })
-  );
+    if (!wallet) {
+      wallet = await tx.wallet.create({
+        data: { userId, balance: WELCOME_CREDITS },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTransactionType.BONUS,
+          amount: WELCOME_CREDITS,
+          balanceBefore: 0,
+          balanceAfter: WELCOME_CREDITS,
+          description: "Welcome bonus",
+        },
+      });
+
+      return wallet;
+    }
+
+    const transactionCount = await tx.creditTransaction.count({
+      where: { walletId: wallet.id },
+    });
+
+    if (transactionCount === 0) {
+      wallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: WELCOME_CREDITS } },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTransactionType.BONUS,
+          amount: WELCOME_CREDITS,
+          balanceBefore: 0,
+          balanceAfter: WELCOME_CREDITS,
+          description: "Welcome bonus",
+        },
+      });
+    }
+
+    return wallet;
+  });
 }
 
 export async function getWallet(userId: string): Promise<Wallet> {
