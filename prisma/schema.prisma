@@ -23,8 +23,8 @@ model User {
   isActive            Boolean              @default(true)
   isDeleted           Boolean              @default(false)
   deletedAt           DateTime?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
   accounts             Account[]
   feedbacks            Feedback[]
   generations         Generation[]
@@ -143,9 +143,9 @@ model Payment {
   provider            PaymentProvider
   type                PaymentType
   status              PaymentStatus      @default(PENDING)
-  amount             Decimal             @db.Decimal(10, 2)
-  currency           String              @default("USD")
-  providerPaymentId  String?             @unique
+  amount              Decimal             @db.Decimal(10, 2)
+  currency            String              @default("USD")
+  providerPaymentId  String?              @unique
   providerCustomerId String?
   providerSessionId  String?
   creditsPurchased   Int                 @default(0)
@@ -303,9 +303,9 @@ model Image {
   ownerId          String
   generationId     String?
   type             ImageType
-  status            ImageStatus @default(ACTIVE)
+  status           ImageStatus @default(ACTIVE)
   storageKey       String      @unique
-  blobUrl           String      @unique
+  blobUrl          String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
@@ -351,13 +351,15 @@ model PromoCode {
   code           String            @unique
   credits        Int
   maxRedemptions Int?
-  redeemedCount  Int               @default(0)
   startsAt       DateTime?
   expiresAt      DateTime?
   isActive       Boolean           @default(true)
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   redemptions    PromoRedemption[]
+
+  @@index([isActive])
+  @@index([expiresAt])
 }
 
 model PromoRedemption {
@@ -377,6 +379,7 @@ model PromoRedemption {
 enum ImageType {
   ORIGINAL
   GENERATED
+  
 }
 
 enum ImageStatus {
