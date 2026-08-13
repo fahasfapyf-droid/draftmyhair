@@ -6,6 +6,33 @@ import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 import { CustomerRatingSummary } from "@/components/dashboard/admin/CustomerRatingSummary";
 import { prisma } from "@/lib/prisma";
 
+const SERVICE_ORDER = [
+  "HAIRSTYLE",
+  "HAIR_COLOR",
+  "BUZZ_CUT",
+  "BALD",
+  "BEARD",
+  "BEARD_REMOVAL",
+];
+
+const HAIRSTYLE_CATEGORY_ORDER = [
+  "BOB",
+  "LOB",
+  "PIXIE",
+  "BIXIE",
+  "LAYERS",
+  "SHAG",
+  "WOLF",
+  "MULLET",
+  "BANGS",
+  "UPDO",
+];
+
+function orderedIndex(value: string, order: string[]) {
+  const index = order.indexOf(value);
+  return index === -1 ? order.length : index;
+}
+
 function getMetadata(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -95,10 +122,7 @@ export default async function AdminGenerationsPage() {
 
   const legacyFeedbackById = new Map(legacyFeedbackRows.map((feedback) => [feedback.id, feedback]));
 
-  const grouped = new Map<
-    string,
-    Map<string, Map<string, typeof generations>>
-  >();
+  const grouped = new Map<string, Map<string, Map<string, typeof generations>>>();
 
   for (const generation of generations) {
     const service = generation.hairstyle.serviceType;
@@ -115,6 +139,10 @@ export default async function AdminGenerationsPage() {
     grouped.set(service, serviceGroup);
   }
 
+  const serviceEntries = [...grouped.entries()].sort(
+    ([a], [b]) => orderedIndex(a, SERVICE_ORDER) - orderedIndex(b, SERVICE_ORDER)
+  );
+
   return (
     <DashboardLayout
       sidebar={<AdminSidebar />}
@@ -128,141 +156,156 @@ export default async function AdminGenerationsPage() {
           No generations found.
         </p>
       ) : (
-        <div className="space-y-10">
-          {[...grouped.entries()].map(([serviceType, categories]) => (
-            <section key={serviceType}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-muted">Service</p>
-                  <h2 className="mt-1 text-xl font-semibold text-brand-ink">{label(serviceType)}</h2>
+        <div className="space-y-12">
+          {serviceEntries.map(([serviceType, categories]) => {
+            const categoryEntries = [...categories.entries()].sort(([a], [b]) => {
+              const order = serviceType === "HAIRSTYLE" ? HAIRSTYLE_CATEGORY_ORDER : [];
+              const ordered = orderedIndex(a, order) - orderedIndex(b, order);
+              return ordered !== 0 ? ordered : a.localeCompare(b);
+            });
+
+            const serviceGenerationCount = [...categories.values()].reduce(
+              (total, styles) =>
+                total + [...styles.values()].reduce((count, items) => count + items.length, 0),
+              0
+            );
+
+            return (
+              <section key={serviceType}>
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-brand-border pb-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-muted">Service</p>
+                    <h2 className="mt-1 text-2xl font-semibold text-brand-ink">{label(serviceType)}</h2>
+                  </div>
+                  <span className="rounded-full border border-brand-border bg-brand-canvas px-3 py-1 text-xs text-brand-muted">
+                    {serviceGenerationCount} generation{serviceGenerationCount === 1 ? "" : "s"}
+                  </span>
                 </div>
-                <span className="rounded-full border border-brand-border bg-brand-canvas px-3 py-1 text-xs text-brand-muted">
-                  {[...categories.values()].reduce((total, styles) => total + [...styles.values()].reduce((count, items) => count + items.length, 0), 0)} generations
-                </span>
-              </div>
 
-              <div className="mt-5 space-y-6">
-                {[...categories.entries()].map(([category, styles]) => (
-                  <div key={category}>
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-brand-ink px-3 py-1.5 text-xs font-medium text-white">
-                        {label(category)}
-                      </span>
-                      {[...styles.keys()].sort((a, b) => a.localeCompare(b)).map((style) => (
-                        <span
-                          key={style}
-                          className="rounded-full border border-brand-border bg-brand-surface px-3 py-1.5 text-xs text-brand-ink"
-                        >
-                          {style}
-                        </span>
-                      ))}
-                    </div>
+                <div className="mt-6 space-y-8">
+                  {categoryEntries.map(([category, styles]) => {
+                    const styleEntries = [...styles.entries()].sort(([a], [b]) => a.localeCompare(b));
+                    const categoryGenerationCount = styleEntries.reduce(
+                      (total, [, items]) => total + items.length,
+                      0
+                    );
 
-                    <div className="space-y-4">
-                      {[...styles.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([style, styleGenerations]) => (
-                        <details
-                          key={style}
-                          open={serviceType === "HAIRSTYLE" && category === "BOB"}
-                          className="group rounded-editorial border border-brand-border bg-brand-surface shadow-sm"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4">
-                            <div>
-                              <h3 className="font-medium text-brand-ink">{style}</h3>
-                              <p className="mt-1 text-xs text-brand-muted">
-                                {styleGenerations.length} generation{styleGenerations.length === 1 ? "" : "s"}
-                              </p>
-                            </div>
-                            <span className="text-sm text-brand-muted transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
-                          </summary>
+                    return (
+                      <section key={category}>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="rounded-full bg-brand-ink px-4 py-2 text-sm font-medium text-white">
+                            {label(category)}
+                          </h3>
+                          <span className="text-xs text-brand-muted">
+                            {categoryGenerationCount} generation{categoryGenerationCount === 1 ? "" : "s"}
+                          </span>
+                        </div>
 
-                          <div className="border-t border-brand-border p-4">
-                            <div className="space-y-3">
-                              {styleGenerations.map((generation) => {
-                                const metadata = getMetadata(generation.metadata);
-                                const legacyFeedbackId = typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
-                                const userFeedback = generation.feedback ?? (legacyFeedbackId ? legacyFeedbackById.get(legacyFeedbackId) : undefined);
+                        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                          {styleEntries.map(([style, styleGenerations]) => (
+                            <details
+                              key={style}
+                              className="group overflow-hidden rounded-editorial border border-brand-border bg-brand-surface shadow-sm"
+                            >
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
+                                <div className="min-w-0">
+                                  <h4 className="truncate font-medium text-brand-ink">{style}</h4>
+                                  <p className="mt-1 text-xs text-brand-muted">
+                                    {styleGenerations.length} generation{styleGenerations.length === 1 ? "" : "s"}
+                                  </p>
+                                </div>
+                                <span
+                                  className="shrink-0 rounded-full border border-brand-border px-2.5 py-1 text-xs text-brand-muted transition-transform group-open:rotate-180"
+                                  aria-hidden="true"
+                                >
+                                  ↓
+                                </span>
+                              </summary>
 
-                                return (
-                                  <div
-                                    key={generation.id}
-                                    className="rounded-editorial border border-brand-border bg-brand-canvas p-4"
-                                  >
-                                    <div className="grid gap-4 lg:grid-cols-7">
-                                      <div>
-                                        <p className="text-xs text-brand-muted">Customer</p>
-                                        <p className="mt-1 text-sm font-medium text-brand-ink">
-                                          {generation.user.name || generation.user.email || "—"}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-brand-muted">Status</p>
-                                        <p className="mt-1 text-sm text-brand-ink">{generation.status}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-brand-muted">Provider</p>
-                                        <p className="mt-1 text-sm text-brand-muted">{generation.providerModel || generation.provider}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-brand-muted">Created</p>
-                                        <p className="mt-1 text-sm text-brand-muted">{generation.createdAt.toLocaleDateString()}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-brand-muted">Processing</p>
-                                        <p className="mt-1 text-sm text-brand-muted">
-                                          {generation.processingTimeMs != null
-                                            ? `${generation.processingTimeMs} ms`
-                                            : generation.completedAt
-                                              ? "Completed"
-                                              : "—"}
-                                        </p>
-                                      </div>
-                                      <div className="lg:col-span-2">
-                                        <p className="text-xs text-brand-muted">Customer rating</p>
-                                        <div className="mt-1">
+                              <div className="border-t border-brand-border bg-brand-canvas p-4">
+                                <div className="space-y-3">
+                                  {styleGenerations.map((generation) => {
+                                    const metadata = getMetadata(generation.metadata);
+                                    const legacyFeedbackId =
+                                      typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
+                                    const userFeedback =
+                                      generation.feedback ??
+                                      (legacyFeedbackId ? legacyFeedbackById.get(legacyFeedbackId) : undefined);
+
+                                    return (
+                                      <div
+                                        key={generation.id}
+                                        className="rounded-editorial border border-brand-border bg-brand-surface p-4"
+                                      >
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                          <div>
+                                            <p className="text-xs text-brand-muted">Customer</p>
+                                            <p className="mt-1 text-sm font-medium text-brand-ink">
+                                              {generation.user.name || generation.user.email || "—"}
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs text-brand-muted">Status</p>
+                                            <p className="mt-1 text-sm text-brand-ink">{generation.status}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs text-brand-muted">Created</p>
+                                            <p className="mt-1 text-sm text-brand-muted">
+                                              {generation.createdAt.toLocaleDateString()}
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs text-brand-muted">Processing</p>
+                                            <p className="mt-1 text-sm text-brand-muted">
+                                              {generation.processingTimeMs != null
+                                                ? `${generation.processingTimeMs} ms`
+                                                : generation.completedAt
+                                                  ? "Completed"
+                                                  : "—"}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="mt-4 border-t border-brand-border pt-3">
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">
+                                            Customer rating
+                                          </p>
                                           {userFeedback ? (
-                                            <Stars value={userFeedback.overallRating} />
+                                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs text-brand-muted">Overall</span>
+                                                <Stars value={userFeedback.overallRating} />
+                                              </div>
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs text-brand-muted">Identity</span>
+                                                <Stars value={userFeedback.identityRating} />
+                                              </div>
+                                              <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs text-brand-muted">Realism</span>
+                                                <Stars value={userFeedback.realismRating} />
+                                              </div>
+                                            </div>
                                           ) : (
-                                            <span className="text-xs text-brand-muted">Not rated</span>
+                                            <p className="mt-2 text-xs text-brand-muted">
+                                              Customer has not rated this generation yet.
+                                            </p>
                                           )}
                                         </div>
                                       </div>
-                                    </div>
-
-                                    {generation.status === "COMPLETED" && (
-                                      <div className="mt-4 border-t border-brand-border pt-3">
-                                        {userFeedback ? (
-                                          <div className="grid gap-3 md:grid-cols-3">
-                                            <div className="flex items-center justify-between gap-3">
-                                              <span className="text-xs text-brand-muted">Overall</span>
-                                              <Stars value={userFeedback.overallRating} />
-                                            </div>
-                                            <div className="flex items-center justify-between gap-3">
-                                              <span className="text-xs text-brand-muted">Identity</span>
-                                              <Stars value={userFeedback.identityRating} />
-                                            </div>
-                                            <div className="flex items-center justify-between gap-3">
-                                              <span className="text-xs text-brand-muted">Realism</span>
-                                              <Stars value={userFeedback.realismRating} />
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <p className="text-xs text-brand-muted">Customer has not rated this generation yet.</p>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </DashboardLayout>
