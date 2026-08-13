@@ -8,13 +8,17 @@ function Stars({ name, label, value }: { name: string; label: string; value?: nu
     <fieldset>
       <legend className="text-xs font-medium text-brand-muted">{label}</legend>
       <div className="mt-1 flex gap-1">
-        {[1, 2, 3, 4, 5].map((rating) => (
-          <label key={rating} className="cursor-pointer">
-            <input className="sr-only" type="radio" name={name} value={rating} defaultChecked={value === rating} required />
-            <span className="text-lg text-brand-muted transition-colors hover:text-brand-ink">★</span>
-          </label>
-        ))}
+        {[1, 2, 3, 4, 5].map((rating) => {
+          const selected = value !== undefined && rating <= value;
+          return (
+            <label key={rating} className="cursor-pointer rounded p-0.5 focus-within:outline-none focus-within:ring-2 focus-within:ring-brand-ink focus-within:ring-offset-1">
+              <input className="sr-only" type="radio" name={name} value={rating} defaultChecked={value === rating} required aria-label={`${rating} out of 5 stars`} />
+              <span className={`text-lg transition-colors ${selected ? "text-brand-ink" : "text-brand-border"}`} aria-hidden="true">★</span>
+            </label>
+          );
+        })}
       </div>
+      {value !== undefined && <p className="mt-1 text-xs text-brand-muted">Current QA rating: {value}/5</p>}
     </fieldset>
   );
 }
