@@ -47,21 +47,35 @@ export default async function AdminGenerationsPage() {
       metadata: true,
       user: { select: { email: true, name: true } },
       hairstyle: { select: { name: true, serviceType: true } },
+      feedback: {
+        select: {
+          id: true,
+          userId: true,
+          overallRating: true,
+          identityRating: true,
+          realismRating: true,
+          decisionConfidence: true,
+          issues: true,
+          comment: true,
+          createdAt: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
 
-  // Feedback is linked to its exact generation through metadata.feedbackId.
-  // Never query by hairstyle alone: a hairstyle can have many generations and ratings.
+  // Legacy feedback rows created before the direct generation relation are still
+  // recoverable through metadata.feedbackId. New rows use generation.feedback.
   const feedbackIds = generations
+    .filter((generation) => !generation.feedback)
     .map((generation) => {
       const metadata = getMetadata(generation.metadata);
       return typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
     })
     .filter((id): id is string => Boolean(id));
 
-  const feedbackRows = feedbackIds.length
+  const legacyFeedbackRows = feedbackIds.length
     ? await prisma.feedback.findMany({
         where: { id: { in: feedbackIds } },
         select: {
@@ -78,7 +92,7 @@ export default async function AdminGenerationsPage() {
       })
     : [];
 
-  const feedbackById = new Map(feedbackRows.map((feedback) => [feedback.id, feedback]));
+  const legacyFeedbackById = new Map(legacyFeedbackRows.map((feedback) => [feedback.id, feedback]));
 
   return (
     <DashboardLayout
@@ -93,8 +107,8 @@ export default async function AdminGenerationsPage() {
           const qa = rawQa && typeof rawQa === "object" && !Array.isArray(rawQa)
             ? (rawQa as Record<string, unknown>)
             : undefined;
-          const feedbackId = typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
-          const userFeedback = feedbackId ? feedbackById.get(feedbackId) : undefined;
+          const legacyFeedbackId = typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
+          const userFeedback = generation.feedback ?? (legacyFeedbackId ? legacyFeedbackById.get(legacyFeedbackId) : undefined);
 
           return (
             <div
