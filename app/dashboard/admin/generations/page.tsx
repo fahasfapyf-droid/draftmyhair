@@ -3,19 +3,13 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
-import { GenerationQaForm } from "@/components/dashboard/admin/GenerationQaForm";
+import { CustomerRatingSummary } from "@/components/dashboard/admin/CustomerRatingSummary";
 import { prisma } from "@/lib/prisma";
 
 function getMetadata(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function rating(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5
-    ? value
-    : undefined;
 }
 
 function Stars({ value }: { value: number }) {
@@ -98,15 +92,13 @@ export default async function AdminGenerationsPage() {
     <DashboardLayout
       sidebar={<AdminSidebar />}
       title="AI Generations"
-      description="Monitor AI hairstyle generations and internal quality."
+      description="Monitor AI hairstyle generations and customer feedback."
     >
+      <CustomerRatingSummary />
+
       <div className="space-y-4">
         {generations.map((generation) => {
           const metadata = getMetadata(generation.metadata);
-          const rawQa = metadata.qa;
-          const qa = rawQa && typeof rawQa === "object" && !Array.isArray(rawQa)
-            ? (rawQa as Record<string, unknown>)
-            : undefined;
           const legacyFeedbackId = typeof metadata.feedbackId === "string" ? metadata.feedbackId : null;
           const userFeedback = generation.feedback ?? (legacyFeedbackId ? legacyFeedbackById.get(legacyFeedbackId) : undefined);
 
@@ -159,7 +151,7 @@ export default async function AdminGenerationsPage() {
               </div>
 
               {generation.status === "COMPLETED" && (
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-4">
                   <div className="rounded-editorial border border-brand-border bg-brand-canvas p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">
                       Customer Feedback
@@ -191,17 +183,6 @@ export default async function AdminGenerationsPage() {
                       <p className="mt-3 text-sm text-brand-muted">Customer has not rated this generation yet.</p>
                     )}
                   </div>
-
-                  <GenerationQaForm
-                    generationId={generation.id}
-                    qa={{
-                      overall: rating(qa?.overall),
-                      identity: rating(qa?.identity),
-                      integration: rating(qa?.integration),
-                      realism: rating(qa?.realism),
-                      notes: typeof qa?.notes === "string" ? qa.notes : null,
-                    }}
-                  />
                 </div>
               )}
             </div>
