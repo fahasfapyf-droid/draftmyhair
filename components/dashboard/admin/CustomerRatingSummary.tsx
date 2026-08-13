@@ -1,5 +1,32 @@
 import { prisma } from "@/lib/prisma";
 
+const SERVICE_ORDER = [
+  "HAIRSTYLE",
+  "HAIR_COLOR",
+  "BUZZ_CUT",
+  "BALD",
+  "BEARD",
+  "BEARD_REMOVAL",
+];
+
+const HAIRSTYLE_CATEGORY_ORDER = [
+  "BOB",
+  "LOB",
+  "PIXIE",
+  "BIXIE",
+  "LAYERS",
+  "SHAG",
+  "WOLF",
+  "MULLET",
+  "BANGS",
+  "UPDO",
+];
+
+function orderedIndex(value: string, order: string[]) {
+  const index = order.indexOf(value);
+  return index === -1 ? order.length : index;
+}
+
 function label(value: string | null | undefined) {
   if (!value) return "Other";
   return value
@@ -75,7 +102,9 @@ export async function CustomerRatingSummary() {
     services.set(style.serviceType, service);
   }
 
-  const serviceEntries = [...services.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const serviceEntries = [...services.entries()].sort(
+    ([a], [b]) => orderedIndex(a, SERVICE_ORDER) - orderedIndex(b, SERVICE_ORDER)
+  );
 
   return (
     <section className="mb-6 rounded-editorial border border-brand-border bg-brand-surface p-5 shadow-sm">
@@ -90,52 +119,59 @@ export async function CustomerRatingSummary() {
         <p className="mt-5 text-sm text-brand-muted">No completed generations are available yet.</p>
       ) : (
         <div className="mt-6 space-y-6">
-          {serviceEntries.map(([serviceType, categories]) => (
-            <div key={serviceType}>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-brand-ink">{label(serviceType)}</h3>
-              <div className="mt-3 space-y-4">
-                {[...categories.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryStyles]) => (
-                  <div key={category}>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">{label(category)}</p>
-                    <div className="mt-2 overflow-x-auto rounded-editorial border border-brand-border">
-                      <table className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="border-b border-brand-border bg-brand-canvas text-brand-muted">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Hairstyle</th>
-                            <th className="px-4 py-3 font-medium">Generations</th>
-                            <th className="px-4 py-3 font-medium">Ratings</th>
-                            <th className="px-4 py-3 font-medium">Overall</th>
-                            <th className="px-4 py-3 font-medium">Identity</th>
-                            <th className="px-4 py-3 font-medium">Realism</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...categoryStyles].sort((a, b) => a.name.localeCompare(b.name)).map((style) => {
-                            const ratings = feedbackByStyle.get(style.id) ?? [];
-                            const count = ratings.length;
-                            const overall = count ? ratings.reduce((sum, row) => sum + row.overallRating, 0) / count : null;
-                            const identity = count ? ratings.reduce((sum, row) => sum + row.identityRating, 0) / count : null;
-                            const realism = count ? ratings.reduce((sum, row) => sum + row.realismRating, 0) / count : null;
+          {serviceEntries.map(([serviceType, categories]) => {
+            const categoryOrder = serviceType === "HAIRSTYLE" ? HAIRSTYLE_CATEGORY_ORDER : [];
+            const categoryEntries = [...categories.entries()].sort(
+              ([a], [b]) => orderedIndex(a, categoryOrder) - orderedIndex(b, categoryOrder)
+            );
 
-                            return (
-                              <tr key={style.id} className="border-b border-brand-border last:border-0">
-                                <td className="px-4 py-3 font-medium text-brand-ink">{style.name}</td>
-                                <td className="px-4 py-3 text-brand-muted">{counts.get(style.id) ?? 0}</td>
-                                <td className="px-4 py-3 text-brand-muted">{count}</td>
-                                <td className="px-4 py-3"><AverageStars value={overall} /></td>
-                                <td className="px-4 py-3"><AverageStars value={identity} /></td>
-                                <td className="px-4 py-3"><AverageStars value={realism} /></td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+            return (
+              <div key={serviceType}>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-brand-ink">{label(serviceType)}</h3>
+                <div className="mt-3 space-y-4">
+                  {categoryEntries.map(([category, categoryStyles]) => (
+                    <div key={category}>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">{label(category)}</p>
+                      <div className="mt-2 overflow-x-auto rounded-editorial border border-brand-border">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead className="border-b border-brand-border bg-brand-canvas text-brand-muted">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Hairstyle</th>
+                              <th className="px-4 py-3 font-medium">Generations</th>
+                              <th className="px-4 py-3 font-medium">Ratings</th>
+                              <th className="px-4 py-3 font-medium">Overall</th>
+                              <th className="px-4 py-3 font-medium">Identity</th>
+                              <th className="px-4 py-3 font-medium">Realism</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...categoryStyles].sort((a, b) => a.name.localeCompare(b.name)).map((style) => {
+                              const ratings = feedbackByStyle.get(style.id) ?? [];
+                              const count = ratings.length;
+                              const overall = count ? ratings.reduce((sum, row) => sum + row.overallRating, 0) / count : null;
+                              const identity = count ? ratings.reduce((sum, row) => sum + row.identityRating, 0) / count : null;
+                              const realism = count ? ratings.reduce((sum, row) => sum + row.realismRating, 0) / count : null;
+
+                              return (
+                                <tr key={style.id} className="border-b border-brand-border last:border-0">
+                                  <td className="px-4 py-3 font-medium text-brand-ink">{style.name}</td>
+                                  <td className="px-4 py-3 text-brand-muted">{counts.get(style.id) ?? 0}</td>
+                                  <td className="px-4 py-3 text-brand-muted">{count}</td>
+                                  <td className="px-4 py-3"><AverageStars value={overall} /></td>
+                                  <td className="px-4 py-3"><AverageStars value={identity} /></td>
+                                  <td className="px-4 py-3"><AverageStars value={realism} /></td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
