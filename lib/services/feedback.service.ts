@@ -88,7 +88,7 @@ export function validateFeedbackInput(value: unknown): FeedbackValidationResult 
 export async function createFeedback(input: CreateFeedbackInput, userId: string): Promise<CreateFeedbackResult> {
   const generation = await prisma.generation.findFirst({
     where: { id: input.generationId, userId, hairstyleId: input.hairstyleId },
-    select: { id: true, metadata: true },
+    select: { id: true },
   });
 
   if (!generation) return { created: false };
@@ -97,26 +97,13 @@ export async function createFeedback(input: CreateFeedbackInput, userId: string)
     data: {
       userId,
       hairstyleId: input.hairstyleId,
+      generationId: generation.id,
       overallRating: input.overallRating,
       identityRating: input.identityRating,
       realismRating: input.realismRating,
       decisionConfidence: input.decisionConfidence,
       issues: input.issues,
       comment: input.comment,
-    },
-  });
-
-  const currentMetadata = generation.metadata && typeof generation.metadata === "object" && !Array.isArray(generation.metadata)
-    ? generation.metadata as Record<string, unknown>
-    : {};
-
-  await prisma.generation.update({
-    where: { id: generation.id },
-    data: {
-      metadata: {
-        ...currentMetadata,
-        feedbackId: feedback.id,
-      },
     },
   });
 
