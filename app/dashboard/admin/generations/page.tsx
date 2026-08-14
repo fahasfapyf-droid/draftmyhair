@@ -5,6 +5,15 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 import { prisma } from "@/lib/prisma";
 
+function RatingStars({ rating }: { rating: number | null }) {
+  if (rating === null) return <span className="text-brand-muted">Not rated</span>;
+  return (
+    <span className="whitespace-nowrap text-brand-ink" aria-label={`${rating} out of 5 stars`}>
+      {"★".repeat(rating)}{"☆".repeat(5 - rating)} <span className="text-xs text-brand-muted">{rating}.0</span>
+    </span>
+  );
+}
+
 export default async function AdminGenerationsPage() {
   const session = await auth();
 
@@ -22,6 +31,13 @@ export default async function AdminGenerationsPage() {
       processingTimeMs: true,
       user: { select: { email: true, name: true } },
       hairstyle: { select: { name: true, serviceType: true } },
+      userFeedback: {
+        select: {
+          overallRating: true,
+          identityRating: true,
+          realismRating: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -31,16 +47,19 @@ export default async function AdminGenerationsPage() {
     <DashboardLayout
       sidebar={<AdminSidebar />}
       title="AI Generations"
-      description="Monitor AI hairstyle generations."
+      description="Monitor AI hairstyle generations and customer feedback."
     >
       <div className="overflow-x-auto rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
-        <table className="w-full min-w-[1000px] text-left text-sm">
+        <table className="w-full min-w-[1250px] text-left text-sm">
           <thead className="border-b border-brand-border text-brand-muted">
             <tr>
               <th className="px-5 py-4 font-medium">Customer</th>
               <th className="px-5 py-4 font-medium">Style</th>
               <th className="px-5 py-4 font-medium">Service</th>
               <th className="px-5 py-4 font-medium">Status</th>
+              <th className="px-5 py-4 font-medium">Customer Rating</th>
+              <th className="px-5 py-4 font-medium">Identity</th>
+              <th className="px-5 py-4 font-medium">Realism</th>
               <th className="px-5 py-4 font-medium">Provider</th>
               <th className="px-5 py-4 font-medium">Created</th>
               <th className="px-5 py-4 font-medium">Processing</th>
@@ -55,6 +74,9 @@ export default async function AdminGenerationsPage() {
                 <td className="px-5 py-4 text-brand-ink">{generation.hairstyle.name}</td>
                 <td className="px-5 py-4 text-brand-muted">{generation.hairstyle.serviceType}</td>
                 <td className="px-5 py-4 text-brand-ink">{generation.status}</td>
+                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.overallRating ?? null} /></td>
+                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.identityRating ?? null} /></td>
+                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.realismRating ?? null} /></td>
                 <td className="px-5 py-4 text-brand-muted">
                   {generation.providerModel || generation.provider}
                 </td>
