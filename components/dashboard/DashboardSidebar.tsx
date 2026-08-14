@@ -10,17 +10,15 @@ import {
   MessageSquare,
   Wallet,
   CreditCard,
-  Settings,
 } from "lucide-react";
 
 const navigation = [
-  { title: "Overview", href: "/dashboard", icon: Home, available: true },
-  { title: "Profile", href: "/dashboard/profile", icon: User, available: true },
-  { title: "Generations", href: "/dashboard/generations", icon: Images, available: true },
-  { title: "Inbox", href: "/dashboard/inbox", icon: MessageSquare, available: true },
-  { title: "Wallet", href: "/dashboard/payments", icon: Wallet, available: true },
-  { title: "Buy Credits", href: "/dashboard/buy-credits", icon: CreditCard, available: true },
-  { title: "Settings", href: "/dashboard/settings", icon: Settings, available: false },
+  { title: "Overview", href: "/dashboard", icon: Home },
+  { title: "Profile", href: "/dashboard/profile", icon: User },
+  { title: "Generations", href: "/dashboard/generations", icon: Images },
+  { title: "Inbox", href: "/dashboard/inbox", icon: MessageSquare },
+  { title: "Wallet", href: "/dashboard/payments", icon: Wallet },
+  { title: "Buy Credits", href: "/dashboard/buy-credits", icon: CreditCard },
 ];
 
 export function DashboardSidebar() {
@@ -73,13 +71,12 @@ export function DashboardSidebar() {
           return (
             <Link
               key={item.href}
-              href={item.available ? item.href : "#"}
+              href={item.href}
               className={[
                 "flex items-center justify-between rounded-editorial border px-4 py-3 transition-all duration-200",
                 active
                   ? "border-brand-ink bg-brand-ink text-white"
                   : "border-transparent text-brand-muted hover:border-brand-border hover:bg-brand-canvas hover:text-brand-ink",
-                !item.available && "cursor-default opacity-70",
               ].join(" ")}
             >
               <div className="flex items-center gap-3">
@@ -95,12 +92,6 @@ export function DashboardSidebar() {
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
-
-              {!item.available && (
-                <span className="rounded-full bg-brand-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide">
-                  Soon
-                </span>
-              )}
             </Link>
           );
         })}
