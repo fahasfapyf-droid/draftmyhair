@@ -38,6 +38,18 @@ export default async function ContactDetailsPage({
 
   if (!message) notFound();
 
+  // Opening a conversation counts as the admin reading the customer's unread replies.
+  await prisma.contactMessageReply.updateMany({
+    where: {
+      contactMessageId: id,
+      senderRole: "USER",
+      readAt: null,
+    },
+    data: {
+      readAt: new Date(),
+    },
+  });
+
   return (
     <DashboardLayout
       title="Contact Message"
