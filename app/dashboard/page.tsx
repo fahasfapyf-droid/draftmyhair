@@ -9,6 +9,8 @@ import { getUserGenerations } from "@/lib/services/generation.service";
 import { QuickActionsCard } from "@/components/dashboard/QuickActionsCard";
 import { PromoCodeCard } from "@/components/dashboard/PromoCodeCard";
 
+const DASHBOARD_HISTORY_LIMIT = 6;
+
 export default async function DashboardPage() {
   const session = await auth();
 
@@ -16,7 +18,9 @@ export default async function DashboardPage() {
   if (session.user.role === "ADMIN") redirect("/dashboard/admin");
   if (session.user.role === "SALON") redirect("/salon/dashboard");
 
-  const generations = await getUserGenerations(session.user.id);
+  const generations = await getUserGenerations(session.user.id, undefined, {
+    limit: DASHBOARD_HISTORY_LIMIT,
+  });
 
   return (
     <DashboardLayout title="Overview" description="Manage your Draft My Hair account.">
@@ -59,7 +63,19 @@ export default async function DashboardPage() {
         </div>
 
         <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm lg:col-span-3">
-          <h2 className="text-lg font-semibold text-brand-ink">Generation History</h2>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-brand-ink">Recent Generations</h2>
+              <p className="mt-1 text-sm text-brand-muted">Your six most recent previews.</p>
+            </div>
+            <Link
+              href="/dashboard/generations"
+              className="rounded border border-brand-border px-4 py-2 text-sm font-medium text-brand-ink transition-colors hover:bg-brand-canvas"
+            >
+              View all
+            </Link>
+          </div>
+
           {generations.length === 0 ? (
             <div className="mt-6 rounded border border-dashed border-brand-border p-6 text-center">
               <p className="text-brand-muted">You haven't created any hairstyle previews yet.</p>
