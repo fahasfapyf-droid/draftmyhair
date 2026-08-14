@@ -47,6 +47,7 @@
     "postcss": "^8.4.35",
     "prisma": "^6.16.3",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.1",
     "typescript": "^5.4.2"
   },
   "allowScripts": {
