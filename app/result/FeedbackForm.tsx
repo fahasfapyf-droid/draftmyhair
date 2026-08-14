@@ -30,6 +30,15 @@ const ISSUE_OPTIONS = [
 type DecisionConfidence = (typeof DECISION_OPTIONS)[number]["value"];
 type FeedbackIssue = (typeof ISSUE_OPTIONS)[number]["value"];
 
+export interface ExistingFeedback {
+  overallRating: number;
+  identityRating: number;
+  realismRating: number;
+  decisionConfidence: DecisionConfidence;
+  issues: FeedbackIssue[];
+  comment: string | null;
+}
+
 interface FeedbackResponse {
   error?: string;
   details?: string[];
@@ -39,11 +48,12 @@ interface RatingInputProps {
   label: string;
   value: number | null;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }
 
-function RatingInput({ label, value, onChange }: RatingInputProps) {
+function RatingInput({ label, value, onChange, disabled = false }: RatingInputProps) {
   return (
-    <fieldset>
+    <fieldset disabled={disabled}>
       <legend className="text-base font-medium text-brand-ink">{label}</legend>
       <div className="mt-3 flex gap-1" role="group" aria-label={label}>
         {RATING_VALUES.map((rating) => {
@@ -52,7 +62,11 @@ function RatingInput({ label, value, onChange }: RatingInputProps) {
             <button
               key={rating}
               type="button"
-              className="rounded p-1 text-brand-muted transition-colors hover:text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-2 focus-visible:ring-offset-brand-surface"
+              disabled={disabled}
+              className={cn(
+                "rounded p-1 text-brand-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ink focus-visible:ring-offset-2 focus-visible:ring-offset-brand-surface",
+                disabled ? "cursor-default opacity-100" : "hover:text-brand-ink"
+              )}
               onClick={() => onChange(rating)}
               aria-label={`${rating} out of 5 stars`}
               aria-pressed={value === rating}
@@ -66,7 +80,60 @@ function RatingInput({ label, value, onChange }: RatingInputProps) {
   );
 }
 
-export function FeedbackForm({ generationId, hairstyleId }: { generationId: string; hairstyleId: string | null }) {
+function LockedFeedback({ feedback }: { feedback: ExistingFeedback }) {
+  return (
+    <section className="mx-auto mt-16 max-w-2xl rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm sm:p-10" aria-labelledby="feedback-heading">
+      <div className="flex items-center gap-3">
+        <Check className="h-6 w-6 text-brand-ink" aria-hidden="true" />
+        <div>
+          <h2 id="feedback-heading" className="text-2xl font-semibold text-brand-ink">Your feedback</h2>
+          <p className="mt-1 text-sm text-brand-muted">Already submitted and locked.</p>
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-6">
+        <RatingInput label="Overall satisfaction" value={feedback.overallRating} onChange={() => undefined} disabled />
+        <RatingInput label="How much does this still look like you?" value={feedback.identityRating} onChange={() => undefined} disabled />
+        <RatingInput label="How realistic does this hairstyle look?" value={feedback.realismRating} onChange={() => undefined} disabled />
+
+        <div>
+          <p className="text-base font-medium text-brand-ink">Would you consider this hairstyle in real life?</p>
+          <p className="mt-2 text-sm text-brand-muted">
+            {DECISION_OPTIONS.find((option) => option.value === feedback.decisionConfidence)?.label ?? feedback.decisionConfidence}
+          </p>
+        </div>
+
+        {feedback.issues.length > 0 && (
+          <div>
+            <p className="text-base font-medium text-brand-ink">What could be improved?</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-brand-muted">
+              {feedback.issues.map((issue) => (
+                <li key={issue}>{ISSUE_OPTIONS.find((option) => option.value === issue)?.label ?? issue}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {feedback.comment && (
+          <div>
+            <p className="text-base font-medium text-brand-ink">Additional comments</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-brand-muted">{feedback.comment}</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function FeedbackForm({
+  generationId,
+  hairstyleId,
+  existingFeedback,
+}: {
+  generationId: string;
+  hairstyleId: string | null;
+  existingFeedback?: ExistingFeedback | null;
+}) {
   const [overallRating, setOverallRating] = useState<number | null>(null);
   const [identityRating, setIdentityRating] = useState<number | null>(null);
   const [realismRating, setRealismRating] = useState<number | null>(null);
@@ -125,11 +192,12 @@ export function FeedbackForm({ generationId, hairstyleId }: { generationId: stri
     }
   };
 
+  if (existingFeedback) return <LockedFeedback feedback={existingFeedback} />;
   if (isSkipped) return null;
 
   if (isSubmitted) {
     return (
-      <section className="mx-auto mt-16 max-w-2xl rounded-editorial border border-brand-border bg-brand-surface px-6 py-10 text-center shadow-sm sm:px-10" aria-live="polite">
+      <section className="mx-auto mt-16 max-w-2xl rounded-editorial border border-brand-border bg-brand-surface px-6 py-10 text-center shadow-sm" aria-live="polite">
         <Check className="mx-auto h-7 w-7 text-brand-ink" aria-hidden="true" />
         <h2 className="mt-4 text-2xl font-semibold text-brand-ink">Thank you for your feedback.</h2>
         <p className="mt-3 leading-relaxed text-brand-muted">Your feedback helps us improve future hairstyle previews.</p>
