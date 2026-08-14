@@ -1,0 +1,5 @@
+-- Reconciliation migration.
+-- The Feedback.generationId column, unique index, and foreign key were
+-- already created by 20260813090000_add_feedback_generation_link.
+-- This migration is intentionally a no-op so the failed duplicate migration
+-- can be safely reconciled as applied in the existing production database.
