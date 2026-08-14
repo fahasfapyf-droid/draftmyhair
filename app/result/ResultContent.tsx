@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Download, RefreshCcw, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { FeedbackForm, ExistingFeedback } from "./FeedbackForm";
+import { FeedbackForm, type ExistingFeedback } from "./FeedbackForm";
 
 export interface ResultGeneration {
   id: string;
