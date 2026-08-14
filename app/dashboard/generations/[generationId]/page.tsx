@@ -37,7 +37,7 @@ export default async function GenerationDetailPage({
           name: true,
         },
       },
-      userFeedback: {
+      feedback: {
         select: {
           overallRating: true,
           identityRating: true,
@@ -62,7 +62,7 @@ export default async function GenerationDetailPage({
           generation.resultStorageKey
         )}`,
         hairstyle: generation.hairstyle,
-        existingFeedback: generation.userFeedback,
+        existingFeedback: generation.feedback,
       }}
     />
   );
