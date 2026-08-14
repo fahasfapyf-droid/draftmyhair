@@ -5,16 +5,6 @@ type GenerationListOptions = {
   skip?: number;
 };
 
-function mapGeneration(generation: Awaited<ReturnType<typeof prisma.generation.findMany>>[number]) {
-  return {
-    ...generation,
-    outputImageUrl: generation.resultStorageKey
-      ? `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`
-      : null,
-    userFeedback: "feedback" in generation ? generation.feedback : null,
-  };
-}
-
 export async function getUserGenerations(
   userId: string,
   salonClientId?: string,
@@ -46,7 +36,13 @@ export async function getUserGenerations(
     },
   });
 
-  return generations.map(mapGeneration);
+  return generations.map((generation) => ({
+    ...generation,
+    outputImageUrl: generation.resultStorageKey
+      ? `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`
+      : null,
+    userFeedback: generation.feedback,
+  }));
 }
 
 export async function getUserGenerationsPage(
