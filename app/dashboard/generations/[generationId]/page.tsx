@@ -37,6 +37,16 @@ export default async function GenerationDetailPage({
           name: true,
         },
       },
+      userFeedback: {
+        select: {
+          overallRating: true,
+          identityRating: true,
+          realismRating: true,
+          decisionConfidence: true,
+          issues: true,
+          comment: true,
+        },
+      },
     },
   });
 
@@ -52,6 +62,7 @@ export default async function GenerationDetailPage({
           generation.resultStorageKey
         )}`,
         hairstyle: generation.hairstyle,
+        existingFeedback: generation.userFeedback,
       }}
     />
   );
