@@ -28,6 +28,7 @@ export default async function GenerationDetailPage({
       userId: session.user.id,
     },
     select: {
+      id: true,
       outputImageUrl: true,
       resultStorageKey: true,
       hairstyle: {
@@ -46,6 +47,7 @@ export default async function GenerationDetailPage({
   return (
     <ResultContent
       generation={{
+        id: generation.id,
         imageUrl: `/api/blob?pathname=${encodeURIComponent(
           generation.resultStorageKey
         )}`,
