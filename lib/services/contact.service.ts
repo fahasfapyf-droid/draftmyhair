@@ -30,8 +30,22 @@ export async function getContactMessages({
 
   const messages = await prisma.contactMessage.findMany({
     where,
-    orderBy: {
-      createdAt: "desc",
+    orderBy: [
+      { updatedAt: "desc" },
+      { createdAt: "desc" },
+    ],
+    include: {
+      replies: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          senderRole: true,
+          message: true,
+          readAt: true,
+          createdAt: true,
+        },
+      },
     },
     skip: (page - 1) * CONTACT_MESSAGES_PAGE_SIZE,
     take: CONTACT_MESSAGES_PAGE_SIZE + 1,
