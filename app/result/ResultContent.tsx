@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Download, RefreshCcw, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { FeedbackForm } from "./FeedbackForm";
+import { FeedbackForm, ExistingFeedback } from "./FeedbackForm";
 
 export interface ResultGeneration {
   id: string;
@@ -14,6 +14,7 @@ export interface ResultGeneration {
     id: string;
     name: string;
   };
+  existingFeedback?: ExistingFeedback | null;
 }
 
 interface ResultContentProps {
@@ -56,7 +57,11 @@ export default function ResultContent({ generation }: ResultContentProps) {
           </Button>
         </motion.div>
 
-        <FeedbackForm generationId={generation.id} hairstyleId={generation.hairstyle.id} />
+        <FeedbackForm
+          generationId={generation.id}
+          hairstyleId={generation.hairstyle.id}
+          existingFeedback={generation.existingFeedback}
+        />
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 1.35 }} className="mt-10 flex flex-col sm:flex-row justify-center gap-8">
           <Link href="/style-selection" className="inline-flex items-center justify-center text-brand-muted hover:text-brand-ink transition-colors duration-300">
