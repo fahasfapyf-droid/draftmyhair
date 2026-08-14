@@ -31,7 +31,7 @@ export default async function AdminGenerationsPage() {
       processingTimeMs: true,
       user: { select: { email: true, name: true } },
       hairstyle: { select: { name: true, serviceType: true } },
-      userFeedback: {
+      feedback: {
         select: {
           overallRating: true,
           identityRating: true,
@@ -74,9 +74,9 @@ export default async function AdminGenerationsPage() {
                 <td className="px-5 py-4 text-brand-ink">{generation.hairstyle.name}</td>
                 <td className="px-5 py-4 text-brand-muted">{generation.hairstyle.serviceType}</td>
                 <td className="px-5 py-4 text-brand-ink">{generation.status}</td>
-                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.overallRating ?? null} /></td>
-                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.identityRating ?? null} /></td>
-                <td className="px-5 py-4"><RatingStars rating={generation.userFeedback?.realismRating ?? null} /></td>
+                <td className="px-5 py-4"><RatingStars rating={generation.feedback?.overallRating ?? null} /></td>
+                <td className="px-5 py-4"><RatingStars rating={generation.feedback?.identityRating ?? null} /></td>
+                <td className="px-5 py-4"><RatingStars rating={generation.feedback?.realismRating ?? null} /></td>
                 <td className="px-5 py-4 text-brand-muted">
                   {generation.providerModel || generation.provider}
                 </td>
