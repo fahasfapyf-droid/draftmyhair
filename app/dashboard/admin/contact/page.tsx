@@ -7,6 +7,8 @@ import { ContactMessagesTable } from "@/components/dashboard/admin/ContactMessag
 import { getContactMessages } from "@/lib/services/contact.service";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 
+export const dynamic = "force-dynamic";
+
 interface ContactMessagesPageProps {
   searchParams: Promise<{
     page?: string | string[];
@@ -53,9 +55,9 @@ export default async function ContactMessagesPage({
 
   return (
     <DashboardLayout
-  sidebar={<AdminSidebar />}
+      sidebar={<AdminSidebar />}
       title="Contact Messages"
-      description="Manage customer enquiries."
+      description="Manage customer enquiries and support conversations."
     >
       <ContactMessagesTable
         messages={messages}
