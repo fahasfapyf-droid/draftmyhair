@@ -3,8 +3,18 @@ import { ContactMessage, ContactStatus } from "@prisma/client";
 
 import { ContactStatusBadge } from "./ContactStatusBadge";
 
+type AdminContactMessage = ContactMessage & {
+  replies: Array<{
+    id: string;
+    senderRole: "USER" | "ADMIN";
+    message: string;
+    readAt: Date | null;
+    createdAt: Date;
+  }>;
+};
+
 type ContactMessagesTableProps = {
-  messages: ContactMessage[];
+  messages: AdminContactMessage[];
   search: string;
   status?: ContactStatus;
   page: number;
@@ -100,7 +110,7 @@ export function ContactMessagesTable({
               </th>
 
               <th className="px-6 py-4 text-left text-sm font-semibold text-brand-ink">
-                Submitted
+                Latest Activity
               </th>
 
               <th className="px-6 py-4 text-left text-sm font-semibold text-brand-ink">
@@ -110,41 +120,71 @@ export function ContactMessagesTable({
           </thead>
 
           <tbody>
-            {messages.map((message) => (
-              <tr
-                key={message.id}
-                className="border-b border-brand-border last:border-0 hover:bg-brand-background"
-              >
-                <td className="px-6 py-4">
-                  <ContactStatusBadge status={message.status} />
-                </td>
+            {messages.map((message) => {
+              const latestReply = message.replies[0];
+              const hasUnreadCustomerReply =
+                latestReply?.senderRole === "USER" && latestReply.readAt === null;
 
-                <td className="px-6 py-4 text-sm font-medium text-brand-ink">
-                  {message.name}
-                </td>
+              return (
+                <tr
+                  key={message.id}
+                  className="border-b border-brand-border last:border-0 hover:bg-brand-background"
+                >
+                  <td className="px-6 py-4">
+                    <ContactStatusBadge status={message.status} />
+                  </td>
 
-                <td className="px-6 py-4 text-sm text-brand-muted">
-                  {message.email}
-                </td>
+                  <td className="px-6 py-4 text-sm font-medium text-brand-ink">
+                    {message.name}
+                  </td>
 
-                <td className="px-6 py-4 text-sm text-brand-muted">
-                  {message.subject}
-                </td>
+                  <td className="px-6 py-4 text-sm text-brand-muted">
+                    {message.email}
+                  </td>
 
-                <td className="px-6 py-4 text-sm text-brand-muted">
-                  {message.createdAt.toLocaleString()}
-                </td>
+                  <td className="px-6 py-4 text-sm text-brand-muted">
+                    {message.subject}
+                  </td>
 
-                <td className="px-6 py-4">
-                  <Link
-                    href={`/dashboard/admin/contact/${message.id}`}
-                    className="inline-flex rounded-editorial border border-brand-border px-3 py-2 text-sm font-medium text-brand-ink transition-colors hover:bg-brand-background"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-6 py-4 text-sm text-brand-muted">
+                    {latestReply ? (
+                      <div className="max-w-sm space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-brand-ink">
+                            {latestReply.senderRole === "USER" ? "Customer" : "Draft My Hair Support"}
+                          </span>
+                          {hasUnreadCustomerReply ? (
+                            <span className="rounded-full bg-brand-ink px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-canvas">
+                              New
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="truncate">{latestReply.message}</p>
+                        <p className="text-xs text-brand-muted/80">
+                          {latestReply.createdAt.toLocaleString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p>Original enquiry</p>
+                        <p className="text-xs text-brand-muted/80">
+                          {message.createdAt.toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    <Link
+                      href={`/dashboard/admin/contact/${message.id}`}
+                      className="inline-flex rounded-editorial border border-brand-border px-3 py-2 text-sm font-medium text-brand-ink transition-colors hover:bg-brand-background"
+                    >
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
