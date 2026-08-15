@@ -96,9 +96,9 @@ export default async function AdminFeedbackPage() {
                   <tr key={group.id} className="border-b border-brand-border align-middle last:border-0">
                     <td className="px-5 py-4 font-medium text-brand-ink">{group.name}</td>
                     <td className="px-5 py-4 text-brand-muted">{group.count}</td>
-                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.identity)}</td>
-                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.realism)}</td>
-                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.haircutAccuracy)}</td>
+                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.identityTotal, group.count)}</td>
+                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.realismTotal, group.count)}</td>
+                    <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.haircutAccuracyTotal, group.count)}</td>
                     <td className="px-5 py-4">
                       <a
                         href={`#feedback-${group.id}`}
@@ -130,7 +130,7 @@ export default async function AdminFeedbackPage() {
                   <span className="ml-2 text-sm text-brand-muted">{group.count} review{group.count === 1 ? "" : "s"}</span>
                 </div>
                 <span className="text-sm text-brand-muted">
-                  Identity {formatAverage(group.identity)} · Realism {formatAverage(group.realism)} · Haircut Accuracy {formatAverage(group.haircutAccuracy)}
+                  Identity {formatAverage(group.identityTotal, group.count)} · Realism {formatAverage(group.realismTotal, group.count)} · Haircut Accuracy {formatAverage(group.haircutAccuracyTotal, group.count)}
                 </span>
               </div>
             </summary>
@@ -181,7 +181,15 @@ export default async function AdminFeedbackPage() {
 function groupByHairstyle(items: FeedbackItem[]) {
   const groups = new Map<
     string,
-    { id: string; name: string; count: number; identity: number; realism: number; haircutAccuracy: number; items: FeedbackItem[] }
+    {
+      id: string;
+      name: string;
+      count: number;
+      identityTotal: number;
+      realismTotal: number;
+      haircutAccuracyTotal: number;
+      items: FeedbackItem[];
+    }
   >();
 
   for (const item of items) {
@@ -191,18 +199,18 @@ function groupByHairstyle(items: FeedbackItem[]) {
 
     if (existing) {
       existing.count += 1;
-      existing.identity += item.identityRating;
-      existing.realism += item.realismRating;
-      existing.haircutAccuracy += item.overallRating;
+      existing.identityTotal += item.identityRating;
+      existing.realismTotal += item.realismRating;
+      existing.haircutAccuracyTotal += item.overallRating;
       existing.items.push(item);
     } else {
       groups.set(id, {
         id,
         name,
         count: 1,
-        identity: item.identityRating,
-        realism: item.realismRating,
-        haircutAccuracy: item.overallRating,
+        identityTotal: item.identityRating,
+        realismTotal: item.realismRating,
+        haircutAccuracyTotal: item.overallRating,
         items: [item],
       });
     }
@@ -211,8 +219,8 @@ function groupByHairstyle(items: FeedbackItem[]) {
   return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function formatAverage(total: number) {
-  return `${(total / 1).toFixed(1)}/5`;
+function formatAverage(total: number, count: number) {
+  return `${(total / count).toFixed(1)}/5`;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
