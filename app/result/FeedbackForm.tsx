@@ -30,6 +30,17 @@ const ISSUE_OPTIONS = [
 type DecisionConfidence = (typeof DECISION_OPTIONS)[number]["value"];
 type FeedbackIssue = (typeof ISSUE_OPTIONS)[number]["value"];
 
+export interface SavedFeedback {
+  id: string;
+  overallRating: number;
+  identityRating: number;
+  realismRating: number;
+  decisionConfidence: string;
+  issues: string[];
+  comment: string | null;
+  createdAt: Date | string;
+}
+
 interface FeedbackResponse {
   error?: string;
   details?: string[];
@@ -66,7 +77,29 @@ function RatingInput({ label, value, onChange }: RatingInputProps) {
   );
 }
 
-export function FeedbackForm({ generationId, hairstyleId }: { generationId: string; hairstyleId: string | null }) {
+function ReadOnlyRating({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-brand-ink">{label}</p>
+      <div className="mt-2 flex items-center gap-1" aria-label={`${value} out of 5 stars`}>
+        {RATING_VALUES.map((rating) => (
+          <Star key={rating} className={cn("h-5 w-5", rating <= value ? "fill-current text-brand-ink" : "text-brand-border")} aria-hidden="true" />
+        ))}
+        <span className="ml-2 text-sm text-brand-muted">{value}/5</span>
+      </div>
+    </div>
+  );
+}
+
+export function FeedbackForm({
+  generationId,
+  hairstyleId,
+  initialFeedback,
+}: {
+  generationId: string;
+  hairstyleId: string | null;
+  initialFeedback?: SavedFeedback | null;
+}) {
   const [overallRating, setOverallRating] = useState<number | null>(null);
   const [identityRating, setIdentityRating] = useState<number | null>(null);
   const [realismRating, setRealismRating] = useState<number | null>(null);
@@ -124,6 +157,52 @@ export function FeedbackForm({ generationId, hairstyleId }: { generationId: stri
       setIsSubmitting(false);
     }
   };
+
+  if (initialFeedback) {
+    const decisionLabel = DECISION_OPTIONS.find((option) => option.value === initialFeedback.decisionConfidence)?.label ?? initialFeedback.decisionConfidence;
+    const issueLabels = initialFeedback.issues
+      .map((issue) => ISSUE_OPTIONS.find((option) => option.value === issue)?.label ?? issue)
+      .filter(Boolean);
+
+    return (
+      <section className="mx-auto mt-16 max-w-2xl rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm sm:p-10" aria-labelledby="feedback-heading">
+        <div className="flex items-start gap-3">
+          <Check className="mt-1 h-6 w-6 shrink-0 text-brand-ink" aria-hidden="true" />
+          <div>
+            <h2 id="feedback-heading" className="text-2xl font-semibold text-brand-ink">Your feedback</h2>
+            <p className="mt-2 text-sm text-brand-muted">Submitted feedback is saved and locked for this generation.</p>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 sm:grid-cols-3">
+          <ReadOnlyRating label="Overall satisfaction" value={initialFeedback.overallRating} />
+          <ReadOnlyRating label="Looks like you" value={initialFeedback.identityRating} />
+          <ReadOnlyRating label="Realism" value={initialFeedback.realismRating} />
+        </div>
+
+        <div className="mt-8 rounded-lg border border-brand-border bg-brand-canvas px-4 py-4">
+          <p className="text-sm font-medium text-brand-ink">Would you consider this hairstyle?</p>
+          <p className="mt-1 text-sm text-brand-muted">{decisionLabel}</p>
+        </div>
+
+        {issueLabels.length > 0 && (
+          <div className="mt-6">
+            <p className="text-sm font-medium text-brand-ink">Issues reported</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-brand-muted">
+              {issueLabels.map((issue) => <li key={issue}>{issue}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {initialFeedback.comment && (
+          <div className="mt-6">
+            <p className="text-sm font-medium text-brand-ink">Additional comments</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-brand-muted">{initialFeedback.comment}</p>
+          </div>
+        )}
+      </section>
+    );
+  }
 
   if (isSkipped) return null;
 
