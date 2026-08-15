@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 const navigation = [
   { href: "/dashboard/admin", label: "Dashboard" },
   { href: "/dashboard/admin/contact", label: "Contact Messages" },
+  { href: "/dashboard/admin/feedback", label: "Customer Feedback" },
   { href: "/dashboard/admin/users", label: "Users" },
   { href: "/dashboard/admin/payments", label: "Payments" },
   { href: "/dashboard/admin/generations", label: "AI Generations" },
