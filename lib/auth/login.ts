@@ -22,7 +22,8 @@ export type LoginResult =
       status:
         | "INVALID_CREDENTIALS"
         | "EMAIL_NOT_VERIFIED"
-        | "RATE_LIMITED";
+        | "RATE_LIMITED"
+        | "ACCOUNT_DISABLED";
     };
 
 export async function loginUser(
@@ -69,6 +70,10 @@ export async function loginUser(
     }
 
     return { status: "INVALID_CREDENTIALS" };
+  }
+
+  if (user.isDeleted || !user.isActive) {
+    return { status: "ACCOUNT_DISABLED" };
   }
 
   if (!user.emailVerified) {
