@@ -25,6 +25,17 @@ type FeedbackItem = {
   } | null;
 };
 
+type FeedbackGroup = {
+  id: string;
+  name: string;
+  count: number;
+  identityTotal: number;
+  realismTotal: number;
+  haircutAccuracyTotal: number;
+  latestCreatedAt: Date;
+  items: FeedbackItem[];
+};
+
 export default async function AdminFeedbackPage() {
   const session = await auth();
 
@@ -100,10 +111,7 @@ export default async function AdminFeedbackPage() {
                     <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.realismTotal, group.count)}</td>
                     <td className="px-5 py-4 font-medium text-brand-ink">{formatAverage(group.haircutAccuracyTotal, group.count)}</td>
                     <td className="px-5 py-4">
-                      <a
-                        href={`#feedback-${group.id}`}
-                        className="inline-flex rounded-full border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-ink transition hover:bg-brand-canvas"
-                      >
+                      <a href={`#feedback-${group.id}`} className="inline-flex rounded-full border border-brand-border px-3 py-1.5 text-xs font-medium text-brand-ink transition hover:bg-brand-canvas">
                         View reviews
                       </a>
                     </td>
@@ -112,17 +120,11 @@ export default async function AdminFeedbackPage() {
               </tbody>
             </table>
           </div>
-          {grouped.length === 0 && (
-            <p className="p-6 text-sm text-brand-muted">No customer feedback has been submitted yet.</p>
-          )}
+          {grouped.length === 0 && <p className="p-6 text-sm text-brand-muted">No customer feedback has been submitted yet.</p>}
         </div>
 
         {grouped.map((group) => (
-          <details
-            key={group.id}
-            id={`feedback-${group.id}`}
-            className="scroll-mt-24 rounded-editorial border border-brand-border bg-brand-surface shadow-sm"
-          >
+          <details key={group.id} id={`feedback-${group.id}`} className="scroll-mt-24 rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
             <summary className="cursor-pointer list-none px-5 py-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -143,30 +145,12 @@ export default async function AdminFeedbackPage() {
                     <Metric label="Haircut Accuracy" value={`${item.overallRating}/5`} />
                   </div>
                   <div className="mt-4 grid gap-4 text-sm md:grid-cols-2">
-                    <div>
-                      <div className="font-medium text-brand-ink">Customer</div>
-                      <div className="mt-1 text-brand-muted">{item.user?.name || item.user?.email || "Deleted account"}</div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-brand-ink">Decision confidence</div>
-                      <div className="mt-1 text-brand-muted">{formatDecision(item.decisionConfidence)}</div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-brand-ink">Issues</div>
-                      <div className="mt-1 break-words text-brand-muted">{item.issues.length > 0 ? item.issues.join(", ") : "None"}</div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-brand-ink">Comment</div>
-                      <div className="mt-1 whitespace-pre-wrap break-words text-brand-muted">{item.comment || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-brand-ink">Generation</div>
-                      <div className="mt-1 break-all font-mono text-xs text-brand-muted">{item.generation?.id || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-brand-ink">Submitted</div>
-                      <div className="mt-1 text-brand-muted">{item.createdAt.toLocaleString()}</div>
-                    </div>
+                    <div><div className="font-medium text-brand-ink">Customer</div><div className="mt-1 text-brand-muted">{item.user?.name || item.user?.email || "Deleted account"}</div></div>
+                    <div><div className="font-medium text-brand-ink">Decision confidence</div><div className="mt-1 text-brand-muted">{formatDecision(item.decisionConfidence)}</div></div>
+                    <div><div className="font-medium text-brand-ink">Issues</div><div className="mt-1 break-words text-brand-muted">{item.issues.length > 0 ? item.issues.join(", ") : "None"}</div></div>
+                    <div><div className="font-medium text-brand-ink">Comment</div><div className="mt-1 whitespace-pre-wrap break-words text-brand-muted">{item.comment || "—"}</div></div>
+                    <div><div className="font-medium text-brand-ink">Generation</div><div className="mt-1 break-all font-mono text-xs text-brand-muted">{item.generation?.id || "—"}</div></div>
+                    <div><div className="font-medium text-brand-ink">Submitted</div><div className="mt-1 text-brand-muted">{item.createdAt.toLocaleString()}</div></div>
                   </div>
                 </article>
               ))}
@@ -178,19 +162,8 @@ export default async function AdminFeedbackPage() {
   );
 }
 
-function groupByHairstyle(items: FeedbackItem[]) {
-  const groups = new Map<
-    string,
-    {
-      id: string;
-      name: string;
-      count: number;
-      identityTotal: number;
-      realismTotal: number;
-      haircutAccuracyTotal: number;
-      items: FeedbackItem[];
-    }
-  >();
+function groupByHairstyle(items: FeedbackItem[]): FeedbackGroup[] {
+  const groups = new Map<string, FeedbackGroup>();
 
   for (const item of items) {
     const id = item.hairstyle?.id ?? "unknown";
@@ -203,6 +176,7 @@ function groupByHairstyle(items: FeedbackItem[]) {
       existing.realismTotal += item.realismRating;
       existing.haircutAccuracyTotal += item.overallRating;
       existing.items.push(item);
+      if (item.createdAt > existing.latestCreatedAt) existing.latestCreatedAt = item.createdAt;
     } else {
       groups.set(id, {
         id,
@@ -211,12 +185,17 @@ function groupByHairstyle(items: FeedbackItem[]) {
         identityTotal: item.identityRating,
         realismTotal: item.realismRating,
         haircutAccuracyTotal: item.overallRating,
+        latestCreatedAt: item.createdAt,
         items: [item],
       });
     }
   }
 
-  return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+  for (const group of groups.values()) {
+    group.items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  return Array.from(groups.values()).sort((a, b) => b.latestCreatedAt.getTime() - a.latestCreatedAt.getTime());
 }
 
 function formatAverage(total: number, count: number) {
@@ -224,18 +203,9 @@ function formatAverage(total: number, count: number) {
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-editorial border border-brand-border bg-brand-canvas p-4">
-      <div className="text-xs uppercase tracking-wide text-brand-muted">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-brand-ink">{value}</div>
-    </div>
-  );
+  return <div className="rounded-editorial border border-brand-border bg-brand-canvas p-4"><div className="text-xs uppercase tracking-wide text-brand-muted">{label}</div><div className="mt-1 text-lg font-semibold text-brand-ink">{value}</div></div>;
 }
 
 function formatDecision(value: string) {
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return value.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
