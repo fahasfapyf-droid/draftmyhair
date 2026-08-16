@@ -39,17 +39,10 @@ export function AdminSidebar() {
   }, []);
 
   const loadUnreadFeedbackCount = useCallback(async () => {
-    if (pathname.startsWith("/dashboard/admin/feedback")) {
-      const now = new Date().toISOString();
-      window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, now);
-      setUnreadFeedbackCount(0);
-      return;
-    }
-
     try {
       const stored = window.localStorage.getItem(FEEDBACK_LAST_SEEN_KEY);
 
-      // Do not show historical feedback as unread the first time this feature is used.
+      // Establish a baseline on first use without surfacing historical feedback.
       if (!stored) {
         window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, new Date().toISOString());
         setUnreadFeedbackCount(0);
@@ -70,9 +63,17 @@ export function AdminSidebar() {
     } catch {
       // Notification state must never break the admin navigation.
     }
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
+    // Visiting the feedback page establishes the read baseline once.
+    // The polling below must NOT keep moving this timestamp, otherwise new
+    // feedback received while the page is open would never become unread.
+    if (pathname.startsWith("/dashboard/admin/feedback")) {
+      window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, new Date().toISOString());
+      setUnreadFeedbackCount(0);
+    }
+
     void loadUnreadMessageCount();
     void loadUnreadFeedbackCount();
 
@@ -82,7 +83,7 @@ export function AdminSidebar() {
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [loadUnreadMessageCount, loadUnreadFeedbackCount]);
+  }, [pathname, loadUnreadMessageCount, loadUnreadFeedbackCount]);
 
   return (
     <aside className="w-64 shrink-0 rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
