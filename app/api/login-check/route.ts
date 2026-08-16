@@ -36,6 +36,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (result.status === "ACCOUNT_DISABLED") {
+      return NextResponse.json(
+        {
+          status: "ACCOUNT_DISABLED",
+          message:
+            "You are banned from using this service. Please contact the administrator.",
+        },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ status: result.status });
   } catch {
     return NextResponse.json(

@@ -31,6 +31,18 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
       outputImageUrl: true,
       resultStorageKey: true,
       hairstyle: { select: { id: true, name: true } },
+      feedback: {
+        select: {
+          id: true,
+          overallRating: true,
+          identityRating: true,
+          realismRating: true,
+          decisionConfidence: true,
+          issues: true,
+          comment: true,
+          createdAt: true,
+        },
+      },
     },
   }).catch(() => notFound());
 
@@ -42,6 +54,7 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
         id: generation.id,
         imageUrl: `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`,
         hairstyle: generation.hairstyle,
+        feedback: generation.feedback,
       }}
     />
   );

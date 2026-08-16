@@ -52,12 +52,28 @@ export async function deleteUser(formData: FormData) {
   const user = await getTargetUser(userId, adminId);
   if (user.isDeleted) return;
 
+  let deletedEmail = user.email;
+
+  if (deletedEmail) {
+    const existingDeletedAccount = await prisma.user.findFirst({
+      where: {
+        deletedEmail,
+        id: { not: userId },
+      },
+      select: { id: true },
+    });
+
+    if (existingDeletedAccount) {
+      deletedEmail = `${deletedEmail}#deleted-${userId}`;
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: userId },
       data: {
         email: null,
-        deletedEmail: user.email,
+        deletedEmail,
         isActive: false,
         isDeleted: true,
         deletedAt: new Date(),
