@@ -17,6 +17,12 @@ const SUCCESS_MESSAGE =
   "If an account exists with that email address, a password reset link has been sent.";
 
 function getAppBaseUrl() {
+  // Preview deployments must generate links back to the exact preview being tested.
+  // Otherwise a configured production URL can send QA reset emails to production.
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
   const configuredUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.AUTH_URL;
   if (configuredUrl) return configuredUrl.replace(/\/$/, "");
 
