@@ -14,11 +14,14 @@ const navigation = [
   { href: "/dashboard/admin/promo-codes", label: "Promo Codes" },
 ];
 
+const FEEDBACK_LAST_SEEN_KEY = "draftmyhair:admin-feedback-last-seen";
+
 export function AdminSidebar() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [unreadFeedbackCount, setUnreadFeedbackCount] = useState(0);
 
-  const loadUnreadCount = useCallback(async () => {
+  const loadUnreadMessageCount = useCallback(async () => {
     try {
       const response = await fetch("/api/dashboard/admin/contact/unread", {
         cache: "no-store",
@@ -27,7 +30,7 @@ export function AdminSidebar() {
       if (!response.ok) return;
 
       const data = (await response.json()) as { count?: number };
-      setUnreadCount(
+      setUnreadMessageCount(
         Number.isFinite(data.count) ? Math.max(0, data.count ?? 0) : 0
       );
     } catch {
@@ -35,15 +38,51 @@ export function AdminSidebar() {
     }
   }, []);
 
+  const loadUnreadFeedbackCount = useCallback(async () => {
+    if (pathname.startsWith("/dashboard/admin/feedback")) {
+      const now = new Date().toISOString();
+      window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, now);
+      setUnreadFeedbackCount(0);
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(FEEDBACK_LAST_SEEN_KEY);
+
+      // Do not show historical feedback as unread the first time this feature is used.
+      if (!stored) {
+        window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, new Date().toISOString());
+        setUnreadFeedbackCount(0);
+        return;
+      }
+
+      const response = await fetch(
+        `/api/dashboard/admin/feedback/unread?since=${encodeURIComponent(stored)}`,
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) return;
+
+      const data = (await response.json()) as { count?: number };
+      setUnreadFeedbackCount(
+        Number.isFinite(data.count) ? Math.max(0, data.count ?? 0) : 0
+      );
+    } catch {
+      // Notification state must never break the admin navigation.
+    }
+  }, [pathname]);
+
   useEffect(() => {
-    void loadUnreadCount();
+    void loadUnreadMessageCount();
+    void loadUnreadFeedbackCount();
 
     const interval = window.setInterval(() => {
-      void loadUnreadCount();
+      void loadUnreadMessageCount();
+      void loadUnreadFeedbackCount();
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [loadUnreadCount]);
+  }, [loadUnreadMessageCount, loadUnreadFeedbackCount]);
 
   return (
     <aside className="w-64 shrink-0 rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
@@ -53,8 +92,10 @@ export function AdminSidebar() {
           const active =
             pathname === item.href ||
             (item.href !== "/dashboard/admin" && pathname.startsWith(item.href));
-          const showUnread =
-            item.href === "/dashboard/admin/contact" && unreadCount > 0;
+          const showUnreadMessages =
+            item.href === "/dashboard/admin/contact" && unreadMessageCount > 0;
+          const showUnreadFeedback =
+            item.href === "/dashboard/admin/feedback" && unreadFeedbackCount > 0;
 
           return (
             <Link
@@ -67,12 +108,20 @@ export function AdminSidebar() {
               }`}
             >
               <span>{item.label}</span>
-              {showUnread ? (
+              {showUnreadMessages ? (
                 <span
-                  aria-label={`${unreadCount} unread customer message${unreadCount === 1 ? "" : "s"}`}
+                  aria-label={`${unreadMessageCount} unread customer message${unreadMessageCount === 1 ? "" : "s"}`}
                   className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
                 >
-                  {unreadCount > 99 ? "99+" : unreadCount}
+                  {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                </span>
+              ) : null}
+              {showUnreadFeedback ? (
+                <span
+                  aria-label={`${unreadFeedbackCount} new customer feedback${unreadFeedbackCount === 1 ? "" : "s"}`}
+                  className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white"
+                >
+                  {unreadFeedbackCount > 99 ? "99+" : unreadFeedbackCount}
                 </span>
               ) : null}
             </Link>
