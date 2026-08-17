@@ -12,7 +12,7 @@ export default async function AdminContentPage() {
   return (
     <DashboardLayout
       title="Content Library"
-      description="Manage hairstyles, production prompts and public transformation gallery content."
+      description="Manage hairstyles, hair colours, buzz cuts, bald looks, beards, clean shaves, production prompts and public transformations."
       sidebar={<AdminSidebar />}
     >
       <AdminContentLibrary />
