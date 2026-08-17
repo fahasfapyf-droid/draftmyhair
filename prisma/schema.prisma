@@ -145,7 +145,7 @@ model Payment {
   status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
-  providerPaymentId  String?             @unique
+  providerPaymentId  String?              @unique
   providerCustomerId String?
   providerSessionId  String?
   creditsPurchased   Int                 @default(0)
@@ -205,7 +205,7 @@ model Generation {
 }
 
 model SalonClient {
-  id          String       @id
+  id          String       @id @default(cuid())
   salonId     String
   name        String
   email       String?
@@ -320,17 +320,17 @@ model PromptVersion {
 }
 
 model GalleryItem {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   hairstyleId  String?
   title        String
   category     String
-  beforeUrl   String
-  afterUrl    String
-  featured     Boolean   @default(false)
-  isPublished  Boolean   @default(false)
-  displayOrder Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  beforeUrl    String
+  afterUrl     String
+  featured     Boolean    @default(false)
+  isPublished  Boolean    @default(false)
+  displayOrder Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   hairstyle    Hairstyle? @relation(fields: [hairstyleId], references: [id], onDelete: SetNull)
 
   @@index([hairstyleId])
@@ -352,7 +352,7 @@ model Image {
   mimeType         String
   fileSize         Int
   width            Int?
-  height            Int?
+  height           Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -419,144 +419,20 @@ model PromoRedemption {
   @@index([redeemedAt])
 }
 
-enum ImageType {
-  ORIGINAL
-  GENERATED
-}
-
-enum ImageStatus {
-  ACTIVE
-  FAILED
-  DELETED
-}
-
-enum UserRole {
-  USER
-  ADMIN
-  SALON
-}
-
-enum WalletTransactionType {
-  CREDIT
-  DEBIT
-  REFUND
-  BONUS
-  PURCHASE
-  ADJUSTMENT
-}
-
-enum GenerationStatus {
-  QUEUED
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  PROCESSING
-  SUCCEEDED
-  FAILED
-  REFUNDED
-  CANCELLED
-}
-
-enum PaymentProvider {
-  STRIPE
-  PAYPAL
-  LEMONSQUEEZY
-  MANUAL
-}
-
-enum PaymentType {
-  CREDIT_PURCHASE
-  SUBSCRIPTION
-  ONE_TIME
-}
-
-enum ContactStatus {
-  NEW
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum ContactReplySender {
-  USER
-  ADMIN
-}
-
-enum HairstyleCategory {
-  BOB
-  LOB
-  PIXIE
-  BIXIE
-  LAYERS
-  SHAG
-  WOLF
-  MULLET
-  FADE
-  TAPER
-  UNDERCUT
-  CROP
-  CREW
-  QUIFF
-  POMPADOUR
-  SIDE_PART
-  COMB_OVER
-  MOHAWK
-  MAN_BUN
-  BRAIDS
-  LOCS
-  AFRO
-  CURLY
-  BANGS
-  UPDO
-}
-
-enum ServiceType {
-  HAIRSTYLE
-  HAIR_COLOR
-  BUZZ_CUT
-  BALD
-  BEARD
-  BEARD_REMOVAL
-}
-
-enum GenderTarget {
-  FEMALE
-  MALE
-  UNISEX
-}
-
-enum PromptStatus {
-  DRAFT
-  ACTIVE
-  ARCHIVED
-}
-
-enum PromptQAStatus {
-  DRAFT
-  TESTING
-  PASSED
-}
-
-enum DecisionConfidence {
-  DEFINITELY_NOT
-  PROBABLY_NOT
-  UNSURE
-  PROBABLY_YES
-  DEFINITELY_YES
-}
-
-enum FeedbackIssue {
-  IDENTITY_DRIFT
-  HAIRLINE
-  LIGHTING
-  HAIR_COLOR
-  TEXTURE
-  BLENDING
-  BACKGROUND
-  OTHER
-}
+enum ImageType { ORIGINAL GENERATED }
+enum ImageStatus { ACTIVE FAILED DELETED }
+enum UserRole { USER ADMIN SALON }
+enum WalletTransactionType { CREDIT DEBIT REFUND BONUS PURCHASE ADJUSTMENT }
+enum GenerationStatus { QUEUED PROCESSING COMPLETED FAILED CANCELLED }
+enum PaymentStatus { PENDING PROCESSING SUCCEEDED FAILED REFUNDED CANCELLED }
+enum PaymentProvider { STRIPE PAYPAL LEMONSQUEEZY MANUAL }
+enum PaymentType { CREDIT_PURCHASE SUBSCRIPTION ONE_TIME }
+enum ContactStatus { NEW IN_PROGRESS RESOLVED CLOSED }
+enum ContactReplySender { USER ADMIN }
+enum HairstyleCategory { BOB LOB PIXIE BIXIE LAYERS SHAG WOLF MULLET FADE TAPER UNDERCUT CROP CREW QUIFF POMPADOUR SIDE_PART COMB_OVER MOHAWK MAN_BUN BRAIDS LOCS AFRO CURLY BANGS UPDO }
+enum ServiceType { HAIRSTYLE HAIR_COLOR BUZZ_CUT BALD BEARD BEARD_REMOVAL }
+enum GenderTarget { FEMALE MALE UNISEX }
+enum PromptStatus { DRAFT ACTIVE ARCHIVED }
+enum PromptQAStatus { DRAFT TESTING PASSED }
+enum DecisionConfidence { DEFINITELY_NOT PROBABLY_NOT UNSURE PROBABLY_YES DEFINITELY_YES }
+enum FeedbackIssue { IDENTITY_DRIFT HAIRLINE LIGHTING HAIR_COLOR TEXTURE BLENDING BACKGROUND OTHER }
