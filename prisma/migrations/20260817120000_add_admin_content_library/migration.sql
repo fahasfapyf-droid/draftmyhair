@@ -1,7 +1,14 @@
-CREATE TYPE "PromptStatus" AS ENUM ('DRAFT', 'ACTIVE', 'ARCHIVED');
-CREATE TYPE "PromptQAStatus" AS ENUM ('DRAFT', 'TESTING', 'PASSED');
+DO $$ BEGIN
+  CREATE TYPE "PromptStatus" AS ENUM ('DRAFT', 'ACTIVE', 'ARCHIVED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE "PromptVersion" (
+DO $$ BEGIN
+  CREATE TYPE "PromptQAStatus" AS ENUM ('DRAFT', 'TESTING', 'PASSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS "PromptVersion" (
     "id" TEXT NOT NULL,
     "hairstyleId" TEXT NOT NULL,
     "version" INTEGER NOT NULL DEFAULT 1,
@@ -14,7 +21,7 @@ CREATE TABLE "PromptVersion" (
     CONSTRAINT "PromptVersion_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "GalleryItem" (
+CREATE TABLE IF NOT EXISTS "GalleryItem" (
     "id" TEXT NOT NULL,
     "hairstyleId" TEXT,
     "title" TEXT NOT NULL,
@@ -29,15 +36,22 @@ CREATE TABLE "GalleryItem" (
     CONSTRAINT "GalleryItem_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "PromptVersion_hairstyleId_version_key" ON "PromptVersion"("hairstyleId", "version");
-CREATE INDEX "PromptVersion_hairstyleId_status_idx" ON "PromptVersion"("hairstyleId", "status");
-CREATE INDEX "PromptVersion_status_idx" ON "PromptVersion"("status");
-CREATE INDEX "PromptVersion_qaStatus_idx" ON "PromptVersion"("qaStatus");
-CREATE INDEX "GalleryItem_hairstyleId_idx" ON "GalleryItem"("hairstyleId");
-CREATE INDEX "GalleryItem_category_idx" ON "GalleryItem"("category");
-CREATE INDEX "GalleryItem_isPublished_idx" ON "GalleryItem"("isPublished");
-CREATE INDEX "GalleryItem_featured_idx" ON "GalleryItem"("featured");
-CREATE INDEX "GalleryItem_displayOrder_idx" ON "GalleryItem"("displayOrder");
+CREATE UNIQUE INDEX IF NOT EXISTS "PromptVersion_hairstyleId_version_key" ON "PromptVersion"("hairstyleId", "version");
+CREATE INDEX IF NOT EXISTS "PromptVersion_hairstyleId_status_idx" ON "PromptVersion"("hairstyleId", "status");
+CREATE INDEX IF NOT EXISTS "PromptVersion_status_idx" ON "PromptVersion"("status");
+CREATE INDEX IF NOT EXISTS "PromptVersion_qaStatus_idx" ON "PromptVersion"("qaStatus");
+CREATE INDEX IF NOT EXISTS "GalleryItem_hairstyleId_idx" ON "GalleryItem"("hairstyleId");
+CREATE INDEX IF NOT EXISTS "GalleryItem_category_idx" ON "GalleryItem"("category");
+CREATE INDEX IF NOT EXISTS "GalleryItem_isPublished_idx" ON "GalleryItem"("isPublished");
+CREATE INDEX IF NOT EXISTS "GalleryItem_featured_idx" ON "GalleryItem"("featured");
+CREATE INDEX IF NOT EXISTS "GalleryItem_displayOrder_idx" ON "GalleryItem"("displayOrder");
 
-ALTER TABLE "PromptVersion" ADD CONSTRAINT "PromptVersion_hairstyleId_fkey" FOREIGN KEY ("hairstyleId") REFERENCES "Hairstyle"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "GalleryItem" ADD CONSTRAINT "GalleryItem_hairstyleId_fkey" FOREIGN KEY ("hairstyleId") REFERENCES "Hairstyle"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "PromptVersion" ADD CONSTRAINT "PromptVersion_hairstyleId_fkey" FOREIGN KEY ("hairstyleId") REFERENCES "Hairstyle"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "GalleryItem" ADD CONSTRAINT "GalleryItem_hairstyleId_fkey" FOREIGN KEY ("hairstyleId") REFERENCES "Hairstyle"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
