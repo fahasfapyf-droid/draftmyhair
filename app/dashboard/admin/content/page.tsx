@@ -44,6 +44,18 @@ export default function AdminContentPage() {
     setMessage("Saved."); await load(); return true;
   };
 
+  const importProductionPrompts = async () => {
+    setMessage("");
+    const response = await fetch("/api/dashboard/admin/content/migrate-prompts", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error ?? "Production prompt import failed.");
+      return;
+    }
+    setMessage(`Imported ${data.created ?? 0} production prompts. ${data.skipped ?? 0} were already present.`);
+    await load();
+  };
+
   const remove = async (type: string, id: string) => {
     if (!window.confirm("Remove this item?")) return;
     const response = await fetch("/api/dashboard/admin/content", {
@@ -70,7 +82,7 @@ export default function AdminContentPage() {
       {message && <div className="rounded-lg border border-brand-border bg-brand-surface px-4 py-3 text-sm text-brand-ink">{message}</div>}
 
       {tab === "styles" && <StylesTab styles={styles} onSave={save} onRemove={remove} />}
-      {tab === "prompts" && <PromptsTab styles={styleOptions} prompts={prompts} onSave={save} onRemove={remove} />}
+      {tab === "prompts" && <PromptsTab styles={styleOptions} prompts={prompts} onSave={save} onRemove={remove} onImport={importProductionPrompts} />}
       {tab === "gallery" && <GalleryTab styles={styleOptions} gallery={gallery} onSave={save} onRemove={remove} />}
     </section>
   );
@@ -94,12 +106,13 @@ function StylesTab({ styles, onSave, onRemove }: { styles: Style[]; onSave: Admi
   </div>;
 }
 
-function PromptsTab({ styles, prompts, onSave, onRemove }: { styles: Style[]; prompts: Prompt[]; onSave: AdminContentPageProps['save']; onRemove: AdminContentPageProps['remove'] }) {
+function PromptsTab({ styles, prompts, onSave, onRemove, onImport }: { styles: Style[]; prompts: Prompt[]; onSave: AdminContentPageProps['save']; onRemove: AdminContentPageProps['remove']; onImport: () => Promise<void> }) {
   const [form, setForm] = useState({ hairstyleId: styles[0]?.id ?? '', version: 'v1', prompt: '', notes: '', qaStatus: 'DRAFT', isActive: false });
   return <div className="space-y-6">
     <div className="rounded-xl border border-brand-border bg-brand-surface p-5"><h2 className="text-xl font-semibold">Add Prompt Version</h2><p className="mt-1 text-sm text-brand-muted">Only QA Passed or Published prompts marked Active are used by the generation engine. Existing code prompts remain the fallback.</p>
       <div className="mt-4 space-y-3"><select className={inputClass} value={form.hairstyleId} onChange={e => setForm({ ...form, hairstyleId: e.target.value })}>{styles.map(s => <option key={s.id} value={s.id}>{s.name} — {s.promptKey}</option>)}</select><input className={inputClass} placeholder="version, e.g. v2" value={form.version} onChange={e => setForm({ ...form, version: e.target.value })}/><textarea className={`${inputClass} min-h-48`} placeholder="Style prompt" value={form.prompt} onChange={e => setForm({ ...form, prompt: e.target.value })}/><input className={inputClass} placeholder="QA notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}/><select className={inputClass} value={form.qaStatus} onChange={e => setForm({ ...form, qaStatus: e.target.value })}>{['DRAFT','TESTING','QA_PASSED','PUBLISHED','ARCHIVED'].map(v => <option key={v}>{v}</option>)}</select><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })}/> Make active</label></div><button className="mt-4 rounded-lg bg-brand-ink px-4 py-2 text-sm font-medium text-white" onClick={() => onSave('prompt', form)}>Create prompt version</button>
     </div>
+    {prompts.length === 0 && <div className="rounded-xl border border-brand-border bg-brand-surface p-5"><h2 className="text-lg font-semibold">Existing production prompts are not imported yet</h2><p className="mt-2 text-sm text-brand-muted">Import the compiled production hairstyle prompt library as version 1 records. Prompt text is copied verbatim; existing database records are never overwritten.</p><button className="mt-4 rounded-lg bg-brand-ink px-4 py-2 text-sm font-medium text-white" onClick={() => void onImport()}>Import Production Prompts</button></div>}
     <div className="space-y-4">{prompts.map(prompt => <div key={prompt.id} className="rounded-xl border border-brand-border bg-brand-surface p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{prompt.hairstyle.name} — {prompt.version}</h3><p className="text-xs text-brand-muted">{prompt.qaStatus} · {prompt.isActive ? 'ACTIVE' : 'inactive'}</p></div><button className="text-red-600 text-sm" onClick={() => onRemove('prompt', prompt.id)}>Delete version</button></div><pre className="mt-4 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-brand-canvas p-4 text-xs">{prompt.prompt}</pre><div className="mt-3 flex gap-2"><button className="rounded-lg border border-brand-border px-3 py-2 text-xs" onClick={() => onSave('prompt', { id: prompt.id, qaStatus: 'TESTING', isActive: false }, 'PATCH')}>Testing</button><button className="rounded-lg border border-brand-border px-3 py-2 text-xs" onClick={() => onSave('prompt', { id: prompt.id, qaStatus: 'QA_PASSED', isActive: true }, 'PATCH')}>Activate QA Passed</button></div></div>)}</div>
   </div>;
 }
