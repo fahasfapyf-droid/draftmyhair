@@ -205,7 +205,7 @@ model Generation {
 }
 
 model SalonClient {
-  id          String       @id @default(cuid())
+  id          String       @id
   salonId     String
   name        String
   email       String?
@@ -275,21 +275,23 @@ model ContactMessageReply {
 }
 
 model Hairstyle {
-  id           String             @id @default(cuid())
-  name         String
-  slug         String             @unique
-  serviceType  ServiceType        @default(HAIRSTYLE)
-  category     HairstyleCategory?
-  gender       GenderTarget
-  description  String?
-  thumbnailUrl String?
-  displayOrder Int                @default(0)
-  promptKey    String             @unique
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  feedbacks    Feedback[]
-  generations  Generation[]
+  id             String             @id @default(cuid())
+  name           String
+  slug           String             @unique
+  serviceType    ServiceType        @default(HAIRSTYLE)
+  category       HairstyleCategory?
+  gender         GenderTarget
+  description    String?
+  thumbnailUrl   String?
+  displayOrder   Int                @default(0)
+  promptKey      String             @unique
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  feedbacks      Feedback[]
+  generations    Generation[]
+  promptVersions PromptVersion[]
+  galleryItems   GalleryItem[]
 
   @@index([slug])
   @@index([promptKey])
@@ -299,6 +301,45 @@ model Hairstyle {
   @@index([isActive])
 }
 
+model PromptVersion {
+  id          String          @id @default(cuid())
+  hairstyleId String
+  version     Int             @default(1)
+  prompt      String          @db.Text
+  status      PromptStatus    @default(DRAFT)
+  qaStatus    PromptQAStatus  @default(DRAFT)
+  notes       String?         @db.Text
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  hairstyle   Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+
+  @@unique([hairstyleId, version])
+  @@index([hairstyleId, status])
+  @@index([status])
+  @@index([qaStatus])
+}
+
+model GalleryItem {
+  id           String    @id @default(cuid())
+  hairstyleId  String?
+  title        String
+  category     String
+  beforeUrl   String
+  afterUrl    String
+  featured     Boolean   @default(false)
+  isPublished  Boolean   @default(false)
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  hairstyle    Hairstyle? @relation(fields: [hairstyleId], references: [id], onDelete: SetNull)
+
+  @@index([hairstyleId])
+  @@index([category])
+  @@index([isPublished])
+  @@index([featured])
+  @@index([displayOrder])
+}
+
 model Image {
   id               String      @id
   ownerId          String
@@ -306,12 +347,12 @@ model Image {
   type             ImageType
   status            ImageStatus @default(ACTIVE)
   storageKey       String      @unique
-  blobUrl           String      @unique
+  blobUrl          String      @unique
   originalFilename String?
   mimeType         String
   fileSize         Int
   width            Int?
-  height           Int?
+  height            Int?
   checksum         String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -487,6 +528,18 @@ enum GenderTarget {
   FEMALE
   MALE
   UNISEX
+}
+
+enum PromptStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PromptQAStatus {
+  DRAFT
+  TESTING
+  PASSED
 }
 
 enum DecisionConfidence {
