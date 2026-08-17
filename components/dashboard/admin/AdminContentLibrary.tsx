@@ -11,7 +11,7 @@ type ContentItem = {
 };
 
 type Prompt = { id: string; hairstyleId: string; version: number; prompt: string; status: string; qaStatus: string; notes: string | null; hairstyle: { id: string; name: string; promptKey: string } };
-type GalleryItem = { id: string; title: string; category: string; beforeUrl: string; afterUrl: string; featured: boolean; isPublished: boolean; displayOrder: number; hairstyle: { id: string; name: string } | null };
+type GalleryItem = { id: string; title: string; category: string; beforeUrl: string; afterUrl: string; featured: boolean; isPublished: boolean; displayOrder: number; hairstyleId?: string | null; hairstyle: { id: string; name: string } | null };
 
 const SERVICE_TYPES = [["ALL", "All content"], ["HAIRSTYLE", "Hairstyle"], ["HAIR_COLOR", "Hair Colour"], ["BUZZ_CUT", "Buzz Cut"], ["BALD", "Bald"], ["BEARD", "Beard"], ["BEARD_REMOVAL", "Clean Shave / Beard Removal"]] as const;
 const GENDERS = ["FEMALE", "MALE", "UNISEX"] as const;
