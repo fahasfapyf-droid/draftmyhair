@@ -43,3 +43,12 @@ ALTER TABLE "StylePrompt" ADD CONSTRAINT "StylePrompt_hairstyleId_fkey"
 
 ALTER TABLE "GalleryItem" ADD CONSTRAINT "GalleryItem_hairstyleId_fkey"
   FOREIGN KEY ("hairstyleId") REFERENCES "Hairstyle"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+INSERT INTO "GalleryItem" ("id","hairstyleId","title","category","beforeUrl","afterUrl","displayOrder","featured","isPublished","createdAt","updatedAt")
+SELECT 'gallery-french-bob', id, 'French Bob', 'bob', '/portfolio/bob/french-bob-before.webp', '/portfolio/bob/french-bob-after.webp', 1, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM "Hairstyle" WHERE "slug"='french-bob' ON CONFLICT ("id") DO NOTHING;
+INSERT INTO "GalleryItem" ("id","hairstyleId","title","category","beforeUrl","afterUrl","displayOrder","featured","isPublished","createdAt","updatedAt")
+SELECT 'gallery-old-money-bob', id, 'Old Money Bob', 'bob', '/portfolio/bob/old-money-bob-before.webp', '/portfolio/bob/old-money-bob-after.webp', 2, false, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM "Hairstyle" WHERE "slug"='old-money-bob' ON CONFLICT ("id") DO NOTHING;
+INSERT INTO "GalleryItem" ("id","hairstyleId","title","category","beforeUrl","afterUrl","displayOrder","featured","isPublished","createdAt","updatedAt")
+SELECT 'gallery-soft-layered-bob', id, 'Soft Layered Bob', 'bob', '/portfolio/bob/soft-layered-bob-before.webp', '/portfolio/bob/soft-layered-bob-after.webp', 3, false, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM "Hairstyle" WHERE "slug"='soft-layered-bob' ON CONFLICT ("id") DO NOTHING;
+INSERT INTO "GalleryItem" ("id","hairstyleId","title","category","beforeUrl","afterUrl","displayOrder","featured","isPublished","createdAt","updatedAt")
+SELECT 'gallery-blunt-bob', id, 'Blunt Bob', 'bob', '/portfolio/bob/blunt-bob-before.webp', '/portfolio/bob/blunt-bob-after.webp', 4, false, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM "Hairstyle" WHERE "slug"='blunt-bob' ON CONFLICT ("id") DO NOTHING;
