@@ -56,6 +56,9 @@ export async function POST(request: Request) {
       notes: notes || null,
       consentAt: body.consent === true ? new Date() : null,
     },
+    include: {
+      _count: { select: { generations: true } },
+    },
   });
 
   return NextResponse.json({ success: true, client }, { status: 201 });
