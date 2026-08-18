@@ -27,11 +27,15 @@ export async function POST(request: Request) {
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
   const pathname = `content/gallery/${Date.now()}-${safeName}`;
+
+  // The project's Blob store is private. Keep gallery originals private in storage
+  // and expose only the explicitly gallery-scoped media route to the public site.
   const blob = await put(pathname, file, {
-    access: "public",
+    access: "private",
     addRandomSuffix: false,
     contentType: file.type,
   });
 
-  return NextResponse.json({ url: blob.url });
+  const publicUrl = `/api/gallery/media?pathname=${encodeURIComponent(blob.pathname)}`;
+  return NextResponse.json({ url: publicUrl, pathname: blob.pathname });
 }
