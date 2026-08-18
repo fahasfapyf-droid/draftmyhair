@@ -21,8 +21,11 @@ export async function POST(request: Request) {
   const pathname = `content/gallery/${crypto.randomUUID()}.${extension}`;
 
   try {
-    const blob = await put(pathname, file, { access: "public", addRandomSuffix: false, contentType: file.type });
-    return NextResponse.json({ url: blob.url, pathname: blob.pathname });
+    // The attached Blob store is private. Keep objects private in storage and
+    // expose gallery media only through the controlled server-side media route.
+    const blob = await put(pathname, file, { access: "private", addRandomSuffix: false, contentType: file.type });
+    const url = `/api/gallery/media?pathname=${encodeURIComponent(blob.pathname)}`;
+    return NextResponse.json({ url, pathname: blob.pathname });
   } catch (error) {
     console.error("Admin content upload failed:", error);
     return NextResponse.json({ error: "Unable to upload image." }, { status: 500 });
