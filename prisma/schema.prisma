@@ -20,14 +20,14 @@ model User {
   lastLoginAt         DateTime?
   failedLoginAttempts Int                  @default(0)
   loginLockedUntil    DateTime?
-  isActive             Boolean              @default(true)
-  isDeleted            Boolean              @default(false)
-  deletedAt            DateTime?
+  isActive            Boolean              @default(true)
+  isDeleted           Boolean              @default(false)
+  deletedAt           DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   accounts             Account[]
   feedbacks            Feedback[]
-  generations         Generation[]
+  generations          Generation[]
   images              Image[]
   passwordResetTokens PasswordResetToken[]
   payments            Payment[]
@@ -141,7 +141,7 @@ model Payment {
   id                 String              @id @default(cuid())
   userId             String
   provider           PaymentProvider
-  type               PaymentType
+  type                PaymentType        
   status             PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
@@ -290,6 +290,8 @@ model Hairstyle {
   updatedAt    DateTime           @updatedAt
   feedbacks    Feedback[]
   generations  Generation[]
+  prompts      StylePrompt[]
+  galleryItems GalleryItem[]
 
   @@index([slug])
   @@index([promptKey])
@@ -297,6 +299,43 @@ model Hairstyle {
   @@index([category])
   @@index([gender])
   @@index([isActive])
+}
+
+model StylePrompt {
+  id          String       @id @default(cuid())
+  hairstyleId String
+  version     String
+  prompt      String
+  notes       String?
+  qaStatus    PromptQAStatus @default(DRAFT)
+  isActive    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  hairstyle   Hairstyle    @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+
+  @@unique([hairstyleId, version])
+  @@index([hairstyleId, isActive])
+  @@index([qaStatus])
+}
+
+model GalleryItem {
+  id           String    @id @default(cuid())
+  hairstyleId  String
+  title        String
+  category     String?
+  beforeUrl    String
+  afterUrl     String
+  caption      String?
+  displayOrder Int       @default(0)
+  featured     Boolean   @default(false)
+  isPublished  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  hairstyle    Hairstyle @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+
+  @@index([hairstyleId])
+  @@index([isPublished, displayOrder])
+  @@index([featured])
 }
 
 model Image {
@@ -376,6 +415,14 @@ model PromoRedemption {
   @@unique([promoCodeId, userId])
   @@index([userId])
   @@index([redeemedAt])
+}
+
+enum PromptQAStatus {
+  DRAFT
+  TESTING
+  QA_PASSED
+  PUBLISHED
+  ARCHIVED
 }
 
 enum ImageType {
