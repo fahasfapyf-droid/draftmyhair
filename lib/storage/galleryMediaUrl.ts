@@ -1,4 +1,5 @@
 import { issueSignedToken, presignUrl } from "@vercel/blob";
+import type { IssuedSignedToken } from "@vercel/blob";
 
 const GALLERY_PREFIX = "content/gallery/";
 const GALLERY_MEDIA_ROUTE = "/api/gallery/media";
@@ -18,7 +19,10 @@ function extractGalleryPath(value: string) {
   }
 }
 
-export async function toGalleryMediaUrl(value: string, delegationToken?: string) {
+export async function toGalleryMediaUrl(
+  value: string,
+  delegationToken?: IssuedSignedToken,
+) {
   const pathname = extractGalleryPath(value);
   if (!pathname) return value;
 
@@ -28,7 +32,7 @@ export async function toGalleryMediaUrl(value: string, delegationToken?: string)
       operations: ["get"],
       validUntil: Date.now() + 60 * 60 * 1000,
     })
-  ).delegationToken;
+  );
 
   const { presignedUrl } = await presignUrl(token, {
     operation: "get",
