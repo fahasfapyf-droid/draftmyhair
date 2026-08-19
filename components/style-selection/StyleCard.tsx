@@ -41,6 +41,7 @@ export const StyleCard: React.FC<StyleCardProps> = ({
             alt={`Preview of ${style.name}`}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            unoptimized={style.thumbnailUrl.startsWith("/api/gallery/media")}
             className={cn(
               "object-cover transition-transform duration-1000 ease-[0.16,1,0.3,1]",
               isSelected ? "scale-105" : "group-hover:scale-105",
