@@ -58,6 +58,7 @@
     "esbuild@0.28.1": true,
     "protobufjs@7.6.4": true,
     "unrs-resolver@1.12.2": true,
-    "prisma@6.16.3": true
+    "prisma@6.16.3": true,
+    "sharp": true
   }
 }
