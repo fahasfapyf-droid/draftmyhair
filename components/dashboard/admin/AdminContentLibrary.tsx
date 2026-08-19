@@ -21,6 +21,16 @@ const GENDERS = ["FEMALE", "MALE", "UNISEX"] as const;
 const CATEGORIES = ["BOB", "LOB", "PIXIE", "BIXIE", "LAYERS", "SHAG", "WOLF", "MULLET", "FADE", "TAPER", "UNDERCUT", "CROP", "CREW", "QUIFF", "POMPADOUR", "SIDE_PART", "COMB_OVER", "MOHAWK", "MAN_BUN", "BRAIDS", "LOCS", "AFRO", "CURLY", "BANGS", "UPDO"];
 const labelForService = (value: string) => SERVICE_TYPES.find(([key]) => key === value)?.[1] ?? value;
 
+function slugify(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) } });
   const data = await response.json();
@@ -62,11 +72,17 @@ export function AdminContentLibrary() {
   const filteredContent = useMemo(() => filter === "ALL" ? content : content.filter((item) => item.serviceType === filter), [content, filter]);
   const activePromptByContent = useMemo(() => new Map(content.map((item) => [item.id, item.promptVersions[0]])), [content]);
 
+  const updateGeneratedFields = (name: string, field: "slug" | "promptKey") => {
+    const generated = slugify(name);
+    setNewContent((current) => ({ ...current, [field]: generated }));
+  };
+
   const createContent = async () => {
     setError(""); setNotice("");
     try {
-      if (!newContent.name.trim() || !newContent.slug.trim() || !newContent.promptKey.trim()) throw new Error("Name, slug and production prompt key are required.");
-      await json("/api/dashboard/admin/content/styles", { method: "POST", body: JSON.stringify(newContent) });
+      if (!newContent.name.trim()) throw new Error("Name is required.");
+      const payload = { ...newContent, slug: newContent.slug.trim() || slugify(newContent.name), promptKey: newContent.promptKey.trim() || slugify(newContent.name) };
+      await json("/api/dashboard/admin/content/styles", { method: "POST", body: JSON.stringify(payload) });
       setNewContent({ ...emptyContent }); setShowCreate(false); await loadAll(); setNotice("Content item created. Add its production prompt from the Prompts tab.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to create content item."); }
   };
@@ -129,7 +145,7 @@ export function AdminContentLibrary() {
 
     {tab === "content" ? <div className="space-y-5">
       {showCreate ? <div className="rounded-editorial border border-brand-border bg-brand-surface p-5 shadow-sm"><h3 className="text-lg font-semibold text-brand-ink">Add new content</h3><p className="mt-1 text-sm text-brand-muted">One content model handles all six customer services.</p><div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <input value={newContent.name} onChange={(e)=>setNewContent({...newContent,name:e.target.value})} placeholder="Name" className="rounded-lg border border-brand-border px-3 py-2" />
+        <input value={newContent.name} onChange={(e)=>setNewContent({...newContent,name:e.target.value,slug:slugify(e.target.value),promptKey:slugify(e.target.value)})} placeholder="Name" className="rounded-lg border border-brand-border px-3 py-2" />
         <input value={newContent.slug} onChange={(e)=>setNewContent({...newContent,slug:e.target.value})} placeholder="Slug" className="rounded-lg border border-brand-border px-3 py-2" />
         <input value={newContent.promptKey} onChange={(e)=>setNewContent({...newContent,promptKey:e.target.value})} placeholder="Production prompt key" className="rounded-lg border border-brand-border px-3 py-2" />
         <select value={newContent.serviceType} onChange={(e)=>setNewContent({...newContent,serviceType:e.target.value})} className="rounded-lg border border-brand-border px-3 py-2">{SERVICE_TYPES.filter(([key])=>key!=="ALL").map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
