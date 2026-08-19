@@ -28,7 +28,7 @@ export async function toGalleryMediaUrl(
 
   const token = delegationToken ?? (
     await issueSignedToken({
-      pathname: `${GALLERY_PREFIX}*`,
+      pathname,
       operations: ["get"],
       validUntil: Date.now() + 60 * 60 * 1000,
     })
