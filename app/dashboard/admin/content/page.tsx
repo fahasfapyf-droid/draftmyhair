@@ -3,7 +3,6 @@ import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 import { AdminContentLibrary } from "@/components/dashboard/admin/AdminContentLibrary";
-import { StylePhotoManager } from "@/components/dashboard/admin/StylePhotoManager";
 
 export default async function AdminContentPage() {
   const session = await auth();
@@ -16,10 +15,7 @@ export default async function AdminContentPage() {
       description="Manage hairstyles, hair colours, buzz cuts, bald looks, beards, clean shaves, production prompts and public transformations."
       sidebar={<AdminSidebar />}
     >
-      <div className="space-y-6">
-        <StylePhotoManager />
-        <AdminContentLibrary />
-      </div>
+      <AdminContentLibrary />
     </DashboardLayout>
   );
 }
