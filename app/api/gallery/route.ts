@@ -10,19 +10,17 @@ export async function GET() {
     select: { id: true, title: true, category: true, beforeUrl: true, afterUrl: true, featured: true },
   });
 
-  const delegationToken = (
-    await issueSignedToken({
-      pathname: "content/gallery/*",
-      operations: ["get"],
-      validUntil: Date.now() + 60 * 60 * 1000,
-    })
-  ).delegationToken;
+  const signedToken = await issueSignedToken({
+    pathname: "content/gallery/*",
+    operations: ["get"],
+    validUntil: Date.now() + 60 * 60 * 1000,
+  });
 
   const galleryItems = await Promise.all(
     items.map(async (item) => ({
       ...item,
-      beforeUrl: await toGalleryMediaUrl(item.beforeUrl, delegationToken),
-      afterUrl: await toGalleryMediaUrl(item.afterUrl, delegationToken),
+      beforeUrl: await toGalleryMediaUrl(item.beforeUrl, signedToken),
+      afterUrl: await toGalleryMediaUrl(item.afterUrl, signedToken),
     })),
   );
 
