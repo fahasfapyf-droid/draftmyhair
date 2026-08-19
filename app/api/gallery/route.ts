@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { issueSignedToken } from "@vercel/blob";
 import { toGalleryMediaUrl } from "@/lib/storage/galleryMediaUrl";
 
 export async function GET() {
@@ -10,17 +9,11 @@ export async function GET() {
     select: { id: true, title: true, category: true, beforeUrl: true, afterUrl: true, featured: true },
   });
 
-  const signedToken = await issueSignedToken({
-    pathname: "content/gallery/*",
-    operations: ["get"],
-    validUntil: Date.now() + 60 * 60 * 1000,
-  });
-
   const galleryItems = await Promise.all(
     items.map(async (item) => ({
       ...item,
-      beforeUrl: await toGalleryMediaUrl(item.beforeUrl, signedToken),
-      afterUrl: await toGalleryMediaUrl(item.afterUrl, signedToken),
+      beforeUrl: await toGalleryMediaUrl(item.beforeUrl),
+      afterUrl: await toGalleryMediaUrl(item.afterUrl),
     })),
   );
 
