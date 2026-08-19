@@ -7,7 +7,7 @@
     "predev": "npm run compile:prompts",
     "dev": "next dev",
     "prebuild": "npm run compile:prompts",
-    "build": "prisma generate && (prisma migrate resolve --rolled-back 20260812000000_add_promo_codes || true) && (prisma migrate resolve --rolled-back 20260812140000_add_deleted_email || true) && (prisma migrate resolve --rolled-back 20260817120000_add_admin_content_library || true) && prisma migrate deploy && next build",
+    "build": "prisma generate && (prisma migrate resolve --rolled-back 20260812000000_add_promo_codes || true) && (prisma migrate resolve --rolled-back 20260812140000_add_deleted_email || true) && (prisma migrate resolve --rolled-back 20260817120000_add_admin_content_library || true) && prisma migrate deploy && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate"
