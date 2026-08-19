@@ -2,13 +2,43 @@ import { NextResponse } from "next/server";
 import { PromptQAStatus, PromptStatus } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 
 async function requireAdmin() { const session = await auth(); return session?.user?.id && session.user.role === "ADMIN"; }
 
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const prompts = await prisma.promptVersion.findMany({ orderBy: [{ hairstyle: { name: "asc" } }, { version: "desc" }], include: { hairstyle: { select: { id: true, name: true, promptKey: true } } } });
-  return NextResponse.json({ prompts }, { headers: { "Cache-Control": "no-store" } });
+
+  const [prompts, styles] = await Promise.all([
+    prisma.promptVersion.findMany({
+      orderBy: [{ hairstyle: { name: "asc" } }, { version: "desc" }],
+      include: { hairstyle: { select: { id: true, name: true, promptKey: true } } },
+    }),
+    prisma.hairstyle.findMany({
+      select: { id: true, name: true, promptKey: true, promptVersions: { where: { status: PromptStatus.ACTIVE }, select: { id: true } } },
+    }),
+  ]);
+
+  // The production engine already has compiled style prompts in source control.
+  // Expose those prompts in the admin UI when a hairstyle has no active database
+  // override, without changing the generation fallback or creating database rows.
+  const compiledPrompts = styles.flatMap((style) => {
+    if (style.promptVersions.length > 0) return [];
+    const compiled = STYLE_PROMPTS[style.promptKey];
+    if (!compiled) return [];
+    return [{
+      id: `compiled:${style.id}`,
+      hairstyleId: style.id,
+      version: 0,
+      prompt: compiled.prompt,
+      status: "COMPILED",
+      qaStatus: "PASSED",
+      notes: "Compiled production prompt from the source style library. Editing or activating it creates a database prompt version without changing the compiled source file.",
+      hairstyle: { id: style.id, name: style.name, promptKey: style.promptKey },
+    }];
+  });
+
+  return NextResponse.json({ prompts: [...prompts, ...compiledPrompts] }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
