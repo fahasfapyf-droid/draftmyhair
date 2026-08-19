@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_SIZE = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "File is required." }, { status: 400 });
   if (!ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: "Only JPG, PNG and WebP images are allowed." }, { status: 400 });
-  if (file.size === 0 || file.size > MAX_SIZE) return NextResponse.json({ error: "Image must be between 1 byte and 10 MB." }, { status: 400 });
+  if (file.size === 0 || file.size > MAX_SIZE) return NextResponse.json({ error: "Image must be between 1 byte and 4 MB." }, { status: 400 });
 
   const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/png" ? "png" : "webp";
   const pathname = `content/gallery/${crypto.randomUUID()}.${extension}`;
