@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024;
+
 type StyleItem = {
   id: string;
   name: string;
@@ -9,10 +11,24 @@ type StyleItem = {
   serviceType: string;
 };
 
+async function readResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {} as Record<string, unknown>;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      response.status === 413
+        ? "Image is too large for this upload. Please use an image under 4 MB."
+        : `Upload request failed (${response.status}).`
+    );
+  }
+}
+
 async function getStyles(): Promise<StyleItem[]> {
   const response = await fetch("/api/dashboard/admin/content/styles", { cache: "no-store" });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? "Unable to load hairstyles.");
+  const data = await readResponse(response);
+  if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Unable to load hairstyles.");
   return data.styles as StyleItem[];
 }
 
@@ -49,8 +65,8 @@ export function StylePhotoManager() {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
         throw new Error("Use JPG, PNG or WebP.");
       }
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error("Image must be 10 MB or smaller.");
+      if (file.size === 0 || file.size > MAX_UPLOAD_SIZE) {
+        throw new Error("Image must be between 1 byte and 4 MB.");
       }
 
       const form = new FormData();
@@ -59,16 +75,19 @@ export function StylePhotoManager() {
         method: "POST",
         body: form,
       });
-      const uploadData = await uploadResponse.json();
-      if (!uploadResponse.ok) throw new Error(uploadData.error ?? "Upload failed.");
+      const uploadData = await readResponse(uploadResponse);
+      if (!uploadResponse.ok) throw new Error(typeof uploadData.error === "string" ? uploadData.error : "Upload failed.");
+
+      const uploadUrl = typeof uploadData.url === "string" ? uploadData.url : "";
+      if (!uploadUrl) throw new Error("Upload completed without a media URL.");
 
       const patchResponse = await fetch(`/api/dashboard/admin/content/styles/${style.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thumbnailUrl: uploadData.url }),
+        body: JSON.stringify({ thumbnailUrl: uploadUrl }),
       });
-      const patchData = await patchResponse.json();
-      if (!patchResponse.ok) throw new Error(patchData.error ?? "Unable to save style photo.");
+      const patchData = await readResponse(patchResponse);
+      if (!patchResponse.ok) throw new Error(typeof patchData.error === "string" ? patchData.error : "Unable to save style photo.");
 
       const updated = patchData.style as StyleItem;
       setStyles((current) => current.map((item) => item.id === style.id ? { ...item, thumbnailUrl: updated.thumbnailUrl } : item));
@@ -89,7 +108,7 @@ export function StylePhotoManager() {
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-brand-ink">Style Photos</h2>
         <p className="mt-1 text-sm text-brand-muted">
-          Upload or replace the reference thumbnail for an existing hairstyle. This changes only its thumbnail photo.
+          Upload or replace the reference thumbnail for an existing hairstyle. JPG, PNG or WebP up to 4 MB. This changes only its thumbnail photo.
         </p>
       </div>
 
