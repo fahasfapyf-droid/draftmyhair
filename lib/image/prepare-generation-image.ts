@@ -2,7 +2,8 @@
 
 const MAX_GENERATION_DIMENSION = 2048;
 const MAX_GENERATION_BYTES = 3.5 * 1024 * 1024;
-const JPEG_QUALITY_STEPS = [0.86, 0.78, 0.7, 0.62];
+const PRIMARY_JPEG_QUALITY = 0.82;
+const FALLBACK_JPEG_QUALITY = 0.68;
 
 type SourceDimensions = {
   width: number;
@@ -65,9 +66,10 @@ function canvasToBlob(
 /**
  * Prepare an image before it crosses Vercel's request-size boundary.
  *
- * Files already below the safe payload threshold and working resolution
- * are returned unchanged. Larger files are proportionally resized and/or
- * JPEG-compressed in the browser so the server receives a safe payload.
+ * Files already below the safe payload threshold are returned unchanged.
+ * Larger files are resized to the controlled working resolution and encoded
+ * once at the primary quality. A single lower-quality fallback is used only
+ * when the first encoded payload is still above the safe threshold.
  */
 export async function prepareGenerationImage(file: File): Promise<File> {
   if (file.size <= MAX_GENERATION_BYTES) {
@@ -91,15 +93,22 @@ export async function prepareGenerationImage(file: File): Promise<File> {
 
   context.drawImage(image, 0, 0, width, height);
 
-  for (const quality of JPEG_QUALITY_STEPS) {
-    const blob = await canvasToBlob(canvas, quality);
+  const primaryBlob = await canvasToBlob(canvas, PRIMARY_JPEG_QUALITY);
 
-    if (blob.size <= MAX_GENERATION_BYTES) {
-      return new File([blob], "generation-source.jpg", {
-        type: "image/jpeg",
-        lastModified: Date.now(),
-      });
-    }
+  if (primaryBlob.size <= MAX_GENERATION_BYTES) {
+    return new File([primaryBlob], "generation-source.jpg", {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  }
+
+  const fallbackBlob = await canvasToBlob(canvas, FALLBACK_JPEG_QUALITY);
+
+  if (fallbackBlob.size <= MAX_GENERATION_BYTES) {
+    return new File([fallbackBlob], "generation-source.jpg", {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
   }
 
   throw new Error(
