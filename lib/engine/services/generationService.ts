@@ -93,7 +93,7 @@ export async function generatePreview(
     // Step 2 — Build Prompt
     // ============================================================
 
-    const promptResult = buildPrompt({
+    const promptResult = await buildPrompt({
       promptKey: context.promptKey,
     });
 

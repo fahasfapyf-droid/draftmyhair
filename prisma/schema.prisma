@@ -142,7 +142,7 @@ model Payment {
   userId             String
   provider           PaymentProvider
   type               PaymentType
-  status             PaymentStatus       @default(PENDING)
+  status              PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
   providerPaymentId  String?             @unique
@@ -151,8 +151,8 @@ model Payment {
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -275,21 +275,23 @@ model ContactMessageReply {
 }
 
 model Hairstyle {
-  id           String             @id @default(cuid())
-  name         String
-  slug         String             @unique
-  serviceType  ServiceType        @default(HAIRSTYLE)
-  category     HairstyleCategory?
-  gender       GenderTarget
-  description  String?
-  thumbnailUrl String?
-  displayOrder Int                @default(0)
-  promptKey    String             @unique
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  feedbacks    Feedback[]
-  generations  Generation[]
+  id             String             @id @default(cuid())
+  name           String
+  slug           String             @unique
+  serviceType    ServiceType        @default(HAIRSTYLE)
+  category       HairstyleCategory?
+  gender         GenderTarget
+  description    String?
+  thumbnailUrl   String?
+  displayOrder   Int                @default(0)
+  promptKey      String             @unique
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  feedbacks      Feedback[]
+  generations    Generation[]
+  promptVersions PromptVersion[]
+  galleryItems   GalleryItem[]
 
   @@index([slug])
   @@index([promptKey])
@@ -297,6 +299,45 @@ model Hairstyle {
   @@index([category])
   @@index([gender])
   @@index([isActive])
+}
+
+model PromptVersion {
+  id          String          @id @default(cuid())
+  hairstyleId String
+  version     Int             @default(1)
+  prompt      String          @db.Text
+  status      PromptStatus    @default(DRAFT)
+  qaStatus    PromptQAStatus  @default(DRAFT)
+  notes       String?         @db.Text
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  hairstyle   Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+
+  @@unique([hairstyleId, version])
+  @@index([hairstyleId, status])
+  @@index([status])
+  @@index([qaStatus])
+}
+
+model GalleryItem {
+  id           String     @id @default(cuid())
+  hairstyleId  String?
+  title        String
+  category     String
+  beforeUrl    String
+  afterUrl     String
+  featured     Boolean    @default(false)
+  isPublished  Boolean    @default(false)
+  displayOrder Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  hairstyle    Hairstyle? @relation(fields: [hairstyleId], references: [id], onDelete: SetNull)
+
+  @@index([hairstyleId])
+  @@index([category])
+  @@index([isPublished])
+  @@index([featured])
+  @@index([displayOrder])
 }
 
 model Image {
@@ -487,6 +528,18 @@ enum GenderTarget {
   FEMALE
   MALE
   UNISEX
+}
+
+enum PromptStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum PromptQAStatus {
+  DRAFT
+  TESTING
+  PASSED
 }
 
 enum DecisionConfidence {

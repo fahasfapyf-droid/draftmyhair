@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GenerationStatus } from "./GenerationStatus";
 import { useGenerationSession } from "@/lib/context/GenerationSession";
 import { useGenerationPolling } from "@/hooks/useGenerationPolling";
+import { prepareGenerationImage } from "@/lib/image/prepare-generation-image";
 
 export default function PreviewContent() {
   const router = useRouter();
@@ -47,20 +48,28 @@ export default function PreviewContent() {
     async function generate() {
       setGenerationStatus("generating");
       try {
+        const generationImage = await prepareGenerationImage(uploadedFile);
         const formData = new FormData();
-        formData.append("image", uploadedFile);
+        formData.append("image", generationImage);
         formData.append("promptKey", selectedStyle.promptKey);
         formData.append("generationId", nextGenerationId);
         if (salonClientId) formData.append("salonClientId", salonClientId);
 
         const response = await fetch("/api/generate", { method: "POST", body: formData });
-        const result = await response.json();
-        if (!response.ok || !result.success) throw new Error(result.error ?? "Generation failed.");
-        if (result.generationId !== nextGenerationId) throw new Error("Generation identifier mismatch.");
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.error ?? "Generation failed. Please try again.");
+        }
+
+        if (result.generationId !== nextGenerationId) {
+          throw new Error("Generation identifier mismatch.");
+        }
       } catch (error) {
         handleFailed(error instanceof Error ? error.message : "Unexpected error.");
       }
     }
+
     generate();
   }, [router, session.uploadedFile, session.selectedStyle, session.salonClientId, setGenerationStatus, handleFailed, attempt]);
 
