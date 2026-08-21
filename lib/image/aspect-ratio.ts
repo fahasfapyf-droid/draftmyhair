@@ -25,8 +25,16 @@ const RATIOS: Ratio[] = [
     aspectRatio: "3:4",
   },
   {
+    value: 2 / 3,
+    aspectRatio: "2:3",
+  },
+  {
     value: 4 / 3,
     aspectRatio: "4:3",
+  },
+  {
+    value: 3 / 2,
+    aspectRatio: "3:2",
   },
   {
     value: 9 / 16,
