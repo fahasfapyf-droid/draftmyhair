@@ -8,7 +8,9 @@
 export type SupportedAspectRatio =
   | "1:1"
   | "3:4"
+  | "2:3"
   | "4:3"
+  | "3:2"
   | "9:16"
   | "16:9";
 
