@@ -2,8 +2,10 @@ import { MASTER_PROMPT } from "../prompts/master";
 import { MASTER_PROMPT_V2 } from "../prompts/master-v2";
 import { MASTER_PROMPT_V3 } from "../prompts/master-v3";
 import { MASTER_PROMPT_V3_SINGLE } from "../prompts/master-v3-single";
+import { POSE_PROMPT } from "../prompts/pose";
 import { STYLE_PROMPTS } from "../prompts/styles";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { PromptBuildRequest, PromptBuildResult } from "../types";
 
 const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3";
@@ -19,6 +21,32 @@ function getMasterPrompt(): string {
   }
 }
 
+type ActivePosePromptRow = {
+  name: string;
+  slug: string;
+  version: number;
+  prompt: string;
+};
+
+async function getActivePosePrompt(): Promise<ActivePosePromptRow | null> {
+  try {
+    const rows = await prisma.$queryRaw<ActivePosePromptRow[]>(Prisma.sql`
+      SELECT "name", "slug", "version", "prompt"
+      FROM "PosePromptVersion"
+      WHERE "status" = 'ACTIVE'
+      ORDER BY "version" DESC
+      LIMIT 1
+    `);
+
+    return rows[0] ?? null;
+  } catch (error) {
+    // The pose layer is intentionally non-blocking. If its migration is not
+    // deployed yet, preserve the existing generation prompt unchanged.
+    if (DEBUG_PROMPTS) console.warn("Pose prompt layer unavailable; using existing generation prompt.", error);
+    return null;
+  }
+}
+
 export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBuildResult> {
   const databaseStyle = await prisma.promptVersion.findFirst({
     where: { status: "ACTIVE", hairstyle: { promptKey: request.promptKey, isActive: true } },
@@ -30,8 +58,27 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
   if (!stylePrompt) throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
 
   const masterPrompt = getMasterPrompt();
-  const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
+  const activePosePrompt = await getActivePosePrompt();
 
-  if (DEBUG_PROMPTS) console.debug("Prompt build diagnostics", { version: ACTIVE_PROMPT_VERSION, stylePromptSource: databaseStyle ? `database-v${databaseStyle.version}` : "compiled", masterPromptLength: masterPrompt.length, finalPromptLength: prompt.length });
+  // IMPORTANT: with no ACTIVE pose prompt, this produces the exact same final
+  // prompt structure as before this feature. The new layer is therefore opt-in
+  // through the existing admin prompt status rather than silently changing the
+  // production generation behavior.
+  const poseSection = activePosePrompt
+    ? `\n\n------------------------------------------------------------\n\n# POSE & CAMERA OPTIMIZATION\n\n${activePosePrompt.prompt}`
+    : "";
+
+  const prompt = `${masterPrompt}${poseSection}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
+
+  if (DEBUG_PROMPTS) console.debug("Prompt build diagnostics", {
+    version: ACTIVE_PROMPT_VERSION,
+    stylePromptSource: databaseStyle ? `database-v${databaseStyle.version}` : "compiled",
+    posePromptSource: activePosePrompt ? `database:${activePosePrompt.slug}-v${activePosePrompt.version}` : "none",
+    posePromptVersion: activePosePrompt?.version ?? null,
+    compiledPosePromptVersion: POSE_PROMPT ? "available" : "missing",
+    masterPromptLength: masterPrompt.length,
+    finalPromptLength: prompt.length,
+  });
+
   return { prompt };
 }

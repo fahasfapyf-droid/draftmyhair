@@ -1,0 +1,45 @@
+POSE & CAMERA LOCK — EDITABLE OPTIMIZATION LAYER
+
+The uploaded photograph is the authoritative source for geometry.
+
+Preserve the exact photographed pose and camera. The final image must appear to have been photographed in the same second, from the same camera, with only the hairstyle changed.
+
+Preserve exactly:
+
+• head position
+• head tilt
+• head rotation
+• face orientation
+• body orientation
+• shoulder alignment
+• torso alignment
+• gaze
+• facial expression
+• camera distance
+• camera angle
+• perspective
+• focal length
+• framing
+• crop
+• zoom
+• composition
+
+The subject must occupy the same position and size within the frame.
+
+The hairstyle must adapt to the photographed pose. The photograph must never adapt to the hairstyle.
+
+Do not:
+
+• zoom in
+• zoom out
+• crop
+• rotate
+• reframe
+• change camera distance
+• change perspective
+• straighten the head
+• correct posture
+• shift the shoulders
+• change the pose
+
+Pose fidelity overrides hairstyle aesthetics.
