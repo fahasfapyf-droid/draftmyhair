@@ -7,26 +7,17 @@ export async function GET() {
   const session = await auth();
 
   if (!session?.user?.id || session.user.role !== "ADMIN") {
-    return NextResponse.json({ count: 0 }, { status: 401 });
+    return NextResponse.json({ count: 0 }, { status: 403 });
   }
 
-  const unreadReplies = await prisma.contactMessageReply.findMany({
+  // A newly submitted contact form is represented by ContactMessage itself.
+  // Replies are conversation entries and must not be used to determine whether
+  // the original customer enquiry is new.
+  const count = await prisma.contactMessage.count({
     where: {
-      senderRole: "USER",
-      readAt: null,
-    },
-    distinct: ["contactMessageId"],
-    select: {
-      contactMessageId: true,
+      status: "NEW",
     },
   });
 
-  return NextResponse.json(
-    { count: unreadReplies.length },
-    {
-      headers: {
-        "Cache-Control": "no-store, max-age=0",
-      },
-    }
-  );
+  return NextResponse.json({ count });
 }
