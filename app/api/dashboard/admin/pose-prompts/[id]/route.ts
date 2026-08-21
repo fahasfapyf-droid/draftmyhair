@@ -58,7 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await tx.$executeRaw(Prisma.sql`
           INSERT INTO "PosePromptVersion" ("id", "name", "slug", "version", "prompt", "status", "qaStatus", "notes", "createdAt", "updatedAt")
           VALUES (${newId}, ${nextName}, ${nextSlug}, ${version}, ${nextPrompt}, ${nextStatus}, ${qaStatus ?? PromptQAStatus.PASSED}, ${notes ?? "Imported from compiled production pose prompt."}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `;
+        `);
         const created = await tx.$queryRaw<PosePromptRow[]>(Prisma.sql`
           SELECT "id", "name", "slug", "version", "prompt", "status", "qaStatus", "notes", "createdAt", "updatedAt"
           FROM "PosePromptVersion" WHERE "id" = ${newId}
