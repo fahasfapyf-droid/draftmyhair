@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       const id = crypto.randomUUID();
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "PosePromptVersion" ("id", "name", "slug", "version", "prompt", "status", "qaStatus", "notes", "createdAt", "updatedAt")
-        VALUES (${id}, ${name}, ${slug}, ${version}, ${prompt}, ${status}, ${qaStatus}, ${notes}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (${id}, ${name}, ${slug}, ${version}, ${prompt}, CAST(${status} AS "PromptStatus"), CAST(${qaStatus} AS "PromptQAStatus"), ${notes}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
       const created = await tx.$queryRaw<PosePromptRow[]>(Prisma.sql`
