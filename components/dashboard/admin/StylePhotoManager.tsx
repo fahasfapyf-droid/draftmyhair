@@ -150,6 +150,29 @@ export function StylePhotoManager() {
     }
   };
 
+  const removePhoto = async (style: StyleItem) => {
+    if (!style.thumbnailUrl) return;
+    if (!window.confirm(`Remove the thumbnail for ${style.name}? The hairstyle itself will remain.`)) return;
+    setBusyId(style.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/dashboard/admin/content/styles/${style.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thumbnailUrl: null }),
+      });
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Unable to remove style photo.");
+      setStyles((current) => current.map((item) => item.id === style.id ? { ...item, thumbnailUrl: null } : item));
+      setNotice(`${style.name} thumbnail removed.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to remove style photo.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (loading) return <div className="rounded-editorial border border-brand-border bg-brand-surface p-5 shadow-sm">Loading style photos…</div>;
 
   return (
@@ -181,7 +204,10 @@ export function StylePhotoManager() {
                     <div className="aspect-[4/5] bg-brand-surface">{style.thumbnailUrl ? <img src={style.thumbnailUrl} alt={style.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center p-6 text-center text-sm text-brand-muted">No style photo</div>}</div>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold text-brand-ink">{style.name}</h4><p className="mt-1 text-xs text-brand-muted">{GENDER_LABELS[style.gender] || formatLabel(style.gender)}</p></div><span className="rounded-full border border-brand-border px-2 py-1 text-[11px] text-brand-muted">{style.thumbnailUrl ? "Uploaded" : "Missing"}</span></div>
-                      <label className="mt-3 inline-flex cursor-pointer rounded-lg bg-brand-ink px-3 py-2 text-sm font-semibold text-white">{busyId === style.id ? "Uploading…" : style.thumbnailUrl ? "Replace Photo" : "Upload Photo"}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busyId !== null} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void replacePhoto(style, file); }} /></label>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <label className="inline-flex cursor-pointer rounded-lg bg-brand-ink px-3 py-2 text-sm font-semibold text-white">{busyId === style.id ? "Working…" : style.thumbnailUrl ? "Replace Photo" : "Upload Photo"}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busyId !== null} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void replacePhoto(style, file); }} /></label>
+                        {style.thumbnailUrl ? <button type="button" onClick={() => void removePhoto(style)} disabled={busyId !== null} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Remove Photo</button> : null}
+                      </div>
                     </div>
                   </article>
                 ))}

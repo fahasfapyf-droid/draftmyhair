@@ -69,3 +69,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Unable to update prompt version." }, { status: 400 });
   }
 }
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  if (id.startsWith("compiled:")) return NextResponse.json({ error: "Compiled production prompts cannot be deleted. Create a database version first if you need to retire or replace it." }, { status: 409 });
+
+  try {
+    const prompt = await prisma.promptVersion.findUnique({ where: { id }, select: { id: true, hairstyle: { select: { name: true } } } });
+    if (!prompt) return NextResponse.json({ error: "Prompt version not found." }, { status: 404 });
+    await prisma.promptVersion.delete({ where: { id } });
+    return NextResponse.json({ deleted: true, name: prompt.hairstyle.name });
+  } catch (error) {
+    console.error("Admin prompt delete failed:", error);
+    return NextResponse.json({ error: "Unable to delete prompt version." }, { status: 400 });
+  }
+}
