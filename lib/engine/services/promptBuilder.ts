@@ -29,15 +29,22 @@ type ActivePosePromptRow = {
 };
 
 async function getActivePosePrompt(): Promise<ActivePosePromptRow | null> {
-  const rows = await prisma.$queryRaw<ActivePosePromptRow[]>(Prisma.sql`
-    SELECT "name", "slug", "version", "prompt"
-    FROM "PosePromptVersion"
-    WHERE "status" = 'ACTIVE'
-    ORDER BY "version" DESC
-    LIMIT 1
-  `);
+  try {
+    const rows = await prisma.$queryRaw<ActivePosePromptRow[]>(Prisma.sql`
+      SELECT "name", "slug", "version", "prompt"
+      FROM "PosePromptVersion"
+      WHERE "status" = 'ACTIVE'
+      ORDER BY "version" DESC
+      LIMIT 1
+    `);
 
-  return rows[0] ?? null;
+    return rows[0] ?? null;
+  } catch (error) {
+    // The pose layer is intentionally non-blocking. If its migration is not
+    // deployed yet, preserve the existing generation prompt unchanged.
+    if (DEBUG_PROMPTS) console.warn("Pose prompt layer unavailable; using existing generation prompt.", error);
+    return null;
+  }
 }
 
 export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBuildResult> {
