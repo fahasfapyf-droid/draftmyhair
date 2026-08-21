@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { Prisma, PromptQAStatus, PromptStatus } from "@prisma/client";
 import { auth } from "@/auth";
