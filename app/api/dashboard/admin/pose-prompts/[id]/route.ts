@@ -41,6 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const nextSlug = slug || "strict-pose-lock";
     const nextPrompt = prompt || POSE_PROMPT.trim();
     const nextStatus = status === PromptStatus.ACTIVE ? PromptStatus.ACTIVE : PromptStatus.DRAFT;
+    const nextQaStatus = qaStatus ?? PromptQAStatus.PASSED;
 
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -57,7 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const newId = crypto.randomUUID();
         await tx.$executeRaw(Prisma.sql`
           INSERT INTO "PosePromptVersion" ("id", "name", "slug", "version", "prompt", "status", "qaStatus", "notes", "createdAt", "updatedAt")
-          VALUES (${newId}, ${nextName}, ${nextSlug}, ${version}, ${nextPrompt}, ${nextStatus}, ${qaStatus ?? PromptQAStatus.PASSED}, ${notes ?? "Imported from compiled production pose prompt."}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (${newId}, ${nextName}, ${nextSlug}, ${version}, ${nextPrompt}, CAST(${nextStatus} AS "PromptStatus"), CAST(${nextQaStatus} AS "PromptQAStatus"), ${notes ?? "Imported from compiled production pose prompt."}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `);
         const created = await tx.$queryRaw<PosePromptRow[]>(Prisma.sql`
           SELECT "id", "name", "slug", "version", "prompt", "status", "qaStatus", "notes", "createdAt", "updatedAt"
@@ -96,7 +97,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       await tx.$executeRaw(Prisma.sql`
         UPDATE "PosePromptVersion"
-        SET "name" = ${nextName}, "slug" = ${nextSlug}, "prompt" = ${nextPrompt}, "status" = ${nextStatus}, "qaStatus" = ${nextQaStatus}, "notes" = ${nextNotes}, "updatedAt" = CURRENT_TIMESTAMP
+        SET "name" = ${nextName}, "slug" = ${nextSlug}, "prompt" = ${nextPrompt}, "status" = CAST(${nextStatus} AS "PromptStatus"), "qaStatus" = CAST(${nextQaStatus} AS "PromptQAStatus"), "notes" = ${nextNotes}, "updatedAt" = CURRENT_TIMESTAMP
         WHERE "id" = ${id}
       `);
     });
