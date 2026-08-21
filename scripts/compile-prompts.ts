@@ -42,6 +42,13 @@ const PROMPT_SETS: PromptSet[] = [
     exportName: "MASTER_PROMPT_V3_SINGLE",
     versionName: "PROMPT_VERSION_V3_SINGLE",
   },
+  {
+    name: "pose",
+    sourceDir: path.join(ROOT, "generation", "pose"),
+    outputFile: path.join(ROOT, "lib", "engine", "prompts", "pose.ts"),
+    exportName: "POSE_PROMPT",
+    versionName: "POSE_PROMPT_VERSION",
+  },
 ];
 
 function getPromptFiles(sourceDir: string): string[] {
