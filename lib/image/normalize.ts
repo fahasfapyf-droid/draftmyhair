@@ -3,6 +3,8 @@ import sharp from "sharp";
 import { getImageMetadata } from "./metadata";
 import { NormalizedImage } from "./types";
 
+const MAX_DIMENSION = 2048;
+
 /**
  * ============================================================
  * Draft My Hair
@@ -14,7 +16,7 @@ import { NormalizedImage } from "./types";
  * ✓ Normalize EXIF orientation
  * ✓ Remove EXIF orientation flag
  * ✓ Preserve image quality
- * ✓ Preserve image dimensions
+ * ✓ Cap longest side at MAX_DIMENSION (2048px)
  * ✓ Determine Gemini aspect ratio
  */
 
@@ -24,6 +26,12 @@ export async function normalizeImage(
 ): Promise<NormalizedImage> {
   const normalizedBuffer = await sharp(buffer)
     .rotate()
+    .resize({
+      width: MAX_DIMENSION,
+      height: MAX_DIMENSION,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
     .toBuffer();
 
   const metadata = await getImageMetadata(
