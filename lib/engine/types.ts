@@ -112,11 +112,24 @@ export interface PromptBuildRequest {
   promptKey: string;
 }
 
+export interface PromptBuildDiagnostics {
+  promptKey: string;
+  masterPromptVersion: string;
+  stylePromptSource: string;
+  stylePromptLength: number;
+  finalPromptLength: number;
+}
+
 export interface PromptBuildResult {
   /**
    * Final compiled production prompt.
    */
   prompt: string;
+
+  /**
+   * Provenance metadata for production diagnostics.
+   */
+  diagnostics: PromptBuildDiagnostics;
 }
 
 /* ============================================================
