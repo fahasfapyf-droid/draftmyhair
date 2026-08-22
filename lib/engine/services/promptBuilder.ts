@@ -34,14 +34,16 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
     : "compiled";
   const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
 
-  // Diagnostic metadata only. This does not alter the generated prompt or pipeline.
-  console.info("Prompt build diagnostics", {
+  const diagnostics = {
     promptKey: request.promptKey,
     masterPromptVersion: ACTIVE_PROMPT_VERSION,
     stylePromptSource,
     stylePromptLength: stylePrompt.length,
     finalPromptLength: prompt.length,
-  });
+  };
 
-  return { prompt };
+  // Keep provenance visible in Vercel production logs. This does not alter the prompt.
+  console.log("[PROMPT_PROVENANCE]", JSON.stringify(diagnostics));
+
+  return { prompt, diagnostics };
 }
