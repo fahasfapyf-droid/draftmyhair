@@ -8,51 +8,33 @@ import {
 export const VERTEX_PROVIDER = "vertex";
 export const VERTEX_MODEL = "gemini-3-pro-image";
 
-/**
- * Lazily create the Vertex AI client.
- * Prevents initialization during module import.
- */
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
   const location = process.env.GOOGLE_CLOUD_LOCATION;
-  const serviceAccountJson =
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
   if (!project) {
-    throw new Error(
-      "Missing environment variable: GOOGLE_CLOUD_PROJECT_ID"
-    );
+    throw new Error("Missing environment variable: GOOGLE_CLOUD_PROJECT_ID");
   }
-
   if (!location) {
-    throw new Error(
-      "Missing environment variable: GOOGLE_CLOUD_LOCATION"
-    );
+    throw new Error("Missing environment variable: GOOGLE_CLOUD_LOCATION");
   }
-
   if (!serviceAccountJson) {
-    throw new Error(
-      "Missing environment variable: GOOGLE_SERVICE_ACCOUNT_JSON"
-    );
+    throw new Error("Missing environment variable: GOOGLE_SERVICE_ACCOUNT_JSON");
   }
 
   let credentials: Record<string, unknown>;
-
   try {
     credentials = JSON.parse(serviceAccountJson);
   } catch {
-    throw new Error(
-      "GOOGLE_SERVICE_ACCOUNT_JSON contains invalid JSON."
-    );
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON contains invalid JSON.");
   }
 
   return new GoogleGenAI({
     vertexai: true,
     project,
     location,
-    googleAuthOptions: {
-      credentials,
-    },
+    googleAuthOptions: { credentials },
   });
 }
 
@@ -74,9 +56,7 @@ export async function generateWithVertex(
                 data: request.imageBuffer.toString("base64"),
               },
             },
-            {
-              text: request.prompt,
-            },
+            { text: request.prompt },
           ],
         },
       ],
@@ -89,23 +69,15 @@ export async function generateWithVertex(
       },
     });
 
-    const imagePart =
-      response.candidates?.[0]?.content?.parts?.find(
-        (part: any) => part.inlineData
-      );
-
-    if (!imagePart?.inlineData?.data) {
-      return {
-        success: false,
-        error: "Vertex AI returned no image.",
-      };
-    }
-
-    const outputBuffer = Buffer.from(
-      imagePart.inlineData.data,
-      "base64"
+    const imagePart = response.candidates?.[0]?.content?.parts?.find(
+      (part: any) => part.inlineData
     );
 
+    if (!imagePart?.inlineData?.data) {
+      return { success: false, error: "Vertex AI returned no image." };
+    }
+
+    const outputBuffer = Buffer.from(imagePart.inlineData.data, "base64");
     const meta = await sharp(outputBuffer).metadata();
 
     if (!meta.width || !meta.height) {
@@ -138,13 +110,9 @@ export async function generateWithVertex(
     };
   } catch (error) {
     console.error("Vertex AI request failed:", error);
-
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Vertex AI request failed.",
+      error: error instanceof Error ? error.message : "Vertex AI request failed.",
     };
   }
 }
