@@ -84,6 +84,7 @@ export async function generateWithVertex(
         responseModalities: ["IMAGE"],
         imageConfig: {
           aspectRatio: request.metadata.aspectRatio,
+          imageSize: "2K",
         },
       },
     });
@@ -117,6 +118,7 @@ export async function generateWithVertex(
     if (process.env.DEBUG_VERTEX === "true") {
       console.debug("Vertex generation completed", {
         model: VERTEX_MODEL,
+        imageSize: "2K",
         inputBytes: request.imageBuffer.length,
         inputWidth: request.metadata.width,
         inputHeight: request.metadata.height,
