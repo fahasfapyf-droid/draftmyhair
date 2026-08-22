@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { PromptBuildRequest, PromptBuildResult } from "../types";
 
 const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3";
-const DEBUG_PROMPTS = process.env.DEBUG_PROMPTS === "true";
 
 function getMasterPrompt(): string {
   switch (ACTIVE_PROMPT_VERSION) {
@@ -30,8 +29,19 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
   if (!stylePrompt) throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
 
   const masterPrompt = getMasterPrompt();
+  const stylePromptSource = databaseStyle
+    ? `database-v${databaseStyle.version}`
+    : "compiled";
   const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
 
-  if (DEBUG_PROMPTS) console.debug("Prompt build diagnostics", { version: ACTIVE_PROMPT_VERSION, stylePromptSource: databaseStyle ? `database-v${databaseStyle.version}` : "compiled", masterPromptLength: masterPrompt.length, finalPromptLength: prompt.length });
+  // Diagnostic metadata only. This does not alter the generated prompt or pipeline.
+  console.info("Prompt build diagnostics", {
+    promptKey: request.promptKey,
+    masterPromptVersion: ACTIVE_PROMPT_VERSION,
+    stylePromptSource,
+    stylePromptLength: stylePrompt.length,
+    finalPromptLength: prompt.length,
+  });
+
   return { prompt };
 }
