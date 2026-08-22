@@ -42,11 +42,30 @@ Framing is locked.
 
 Perspective is locked.
 
-Only surface hair may change.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHOTOGRAPHIC FRAME LOCK — ABSOLUTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Hair follows the existing head geometry.
+Treat the source image as a fixed photographic frame, not as a reference
+for recreating the subject.
 
-Head geometry never adapts to the hairstyle.
+The camera viewpoint, perspective, subject-to-camera distance, head scale,
+face scale, head position within the canvas, vertical and horizontal
+placement, crop boundaries, shoulder placement, and visible clothing
+boundaries are immutable.
+
+Do not recompose, recenter, zoom, pull back, push in, crop, uncrop, or
+change the apparent camera distance.
+
+The generated image must occupy the same frame composition as the source
+except where hair itself physically changes.
+
+The face must remain at the identical scale and position relative to the
+canvas. The shoulders, neckline, jacket, and torso must remain at their
+original scale and position.
+
+The source photograph is the geometric authority. Do not reinterpret its
+composition.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SELF CHECK
@@ -71,3 +90,9 @@ SELF CHECK
 ✓ Zoom unchanged
 
 ✓ Perspective unchanged
+
+✓ Photographic frame preserved
+
+✓ Subject scale preserved
+
+✓ Clothing placement preserved
