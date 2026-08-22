@@ -97,6 +97,13 @@ export async function generatePreview(
       promptKey: context.promptKey,
     });
 
+    // Log provenance at the generation-service boundary as well as inside
+    // the builder so every successful generation has an explicit audit marker.
+    console.log(
+      "[GENERATION_PROMPT_PROVENANCE]",
+      JSON.stringify(promptResult.diagnostics)
+    );
+
     // ============================================================
     // Step 3 — Prepare Provider Request
     // ============================================================
