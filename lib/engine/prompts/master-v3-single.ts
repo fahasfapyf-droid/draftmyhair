@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION_V3_SINGLE = "016962c2125a";
+export const PROMPT_VERSION_V3_SINGLE = "2ded8b35d7a8";
 
 export const MASTER_PROMPT_V3_SINGLE = `
 TASK
@@ -48,6 +48,26 @@ Preserve exactly:
 • lighting
 
 Do not regenerate, reinterpret, beautify or replace the photographed person.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+SOURCE IMAGE REGISTRATION LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Treat the uploaded photograph as a fixed registered frame.
+
+The face, head, ears, shoulders and body are reference geometry, not editable content.
+
+Do not redraw, reconstruct, reshape, reposition or rescale any non-hair region to accommodate the hairstyle.
+
+The visible face must remain the same face in the same location, with the same proportions and the same relationship to the frame.
+
+Only the existing hair region may be altered. Any newly exposed scalp must conform to the existing head geometry; it must never cause the face, ears, skull position, or surrounding anatomy to be regenerated.
+
+Do not use the hairstyle as a reason to change the photograph.
+
+If the requested hairstyle conflicts with the source geometry, adapt the hairstyle to the source geometry rather than adapting the source geometry to the hairstyle.
+
+SOURCE GEOMETRY OVERRIDES STYLE.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 POSE & CAMERA LOCK
