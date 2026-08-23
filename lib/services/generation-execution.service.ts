@@ -264,6 +264,7 @@ export async function executeGeneratePreviewJob(
 
   try {
     const result = await generatePreviewWithRetry({
+      generationId: job.generationId,
       imageBuffer: sourceImage.buffer,
       mimeType: sourceImage.mimeType,
       metadata,
