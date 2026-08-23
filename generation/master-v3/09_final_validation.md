@@ -1,87 +1,74 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL VALIDATION
+NON-HAIR REGION LOCK — ABSOLUTE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Before returning the edited photograph:
+The uploaded photograph outside the hairstyle is fixed.
 
-Verify every lock.
+Do not regenerate, redesign, reinterpret, recolor, or modify any
+non-hair region.
 
-Verify every preserved region.
+LOCKED:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VERIFY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• face
+• skin
+• ears
+• neck
+• shoulders
+• body
+• clothing
+• garments
+• neckline
+• jewelry
+• accessories
+• background
+• environment
+• lighting
+• shadows
+• exposure
+• white balance
+• colour balance
+• camera rendering
+• photographic grain
+• depth of field
 
-✓ Local edit preserved
+The original clothing must remain the exact same clothing.
 
-✓ Uploaded photograph preserved
+Do not change:
 
-✓ Same photographed person
+• garment type
+• garment shape
+• garment colour
+• garment texture
+• neckline
+• seams
+• buttons
+• folds
+• logos
+• visible graphics
+• accessories
 
-✓ Same facial identity
+The original intrinsic hair colour is also fixed.
 
-✓ Same facial structure
+Do not recolour the hair.
 
-✓ Same skin
+Do not darken it.
 
-✓ Same expression
+Do not lighten it.
 
-✓ Same pose
+Do not warm it.
 
-✓ Same head geometry
+Do not cool it.
 
-✓ Same camera
+Do not increase saturation.
 
-✓ Same framing
+Do not introduce new highlights or lowlights.
 
-✓ Same crop
+Only the hairstyle geometry, length, density, texture, and arrangement
+may change.
 
-✓ Same zoom
+Everything else must remain visually consistent with the uploaded
+photograph.
 
-✓ Same perspective
+The hairstyle must adapt to the photograph.
 
-✓ Same lighting
-
-✓ Same background
-
-✓ Hair color preserved unless instructed otherwise
-
-✓ Requested hairstyle successfully applied
-
-✓ Hair integrates naturally
-
-✓ Result looks like a real photograph
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FAILURE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-If any verification fails:
-
-Discard the edit.
-
-Restart from the uploaded photograph.
-
-Do not return the failed result.
-
-If any non-hair region has been regenerated:
-
-Discard the edit immediately.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL RULE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Return the edited photograph only if:
-
-• The hairstyle is the only edited region.
-
-• Every non-hair pixel matches the uploaded photograph.
-
-• The uploaded photograph has been preserved.
-
-Otherwise:
-
-Discard the edit.
-
-Restart from the uploaded photograph.
+The photograph must not adapt to the hairstyle.
