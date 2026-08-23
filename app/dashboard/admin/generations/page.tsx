@@ -5,36 +5,50 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 import { prisma } from "@/lib/prisma";
 
+const PRO_MODEL = "gemini-3-pro-image";
+const FLASH_MODEL = "gemini-3.1-flash-image";
+
 export default async function AdminGenerationsPage() {
   const session = await auth();
 
   if (!session?.user?.id) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  const [generations, total, completed, failed, processing] = await Promise.all([
-    prisma.generation.findMany({
-      select: {
-        id: true,
-        status: true,
-        provider: true,
-        providerModel: true,
-        createdAt: true,
-        completedAt: true,
-        processingTimeMs: true,
-        user: { select: { email: true, name: true } },
-        hairstyle: { select: { name: true, serviceType: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
-    prisma.generation.count(),
-    prisma.generation.count({ where: { status: "COMPLETED" } }),
-    prisma.generation.count({ where: { status: "FAILED" } }),
-    prisma.generation.count({ where: { status: "PROCESSING" } }),
-  ]);
+  const [generations, total, completed, failed, processing, proCompleted, flashCompleted] =
+    await Promise.all([
+      prisma.generation.findMany({
+        select: {
+          id: true,
+          status: true,
+          provider: true,
+          providerModel: true,
+          createdAt: true,
+          completedAt: true,
+          processingTimeMs: true,
+          user: { select: { email: true, name: true } },
+          hairstyle: { select: { name: true, serviceType: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      prisma.generation.count(),
+      prisma.generation.count({ where: { status: "COMPLETED" } }),
+      prisma.generation.count({ where: { status: "FAILED" } }),
+      prisma.generation.count({ where: { status: "PROCESSING" } }),
+      prisma.generation.count({
+        where: { status: "COMPLETED", providerModel: PRO_MODEL },
+      }),
+      prisma.generation.count({
+        where: { status: "COMPLETED", providerModel: FLASH_MODEL },
+      }),
+    ]);
 
   const stats = [
-    { label: "Total generations", value: total },
+    {
+      label: "Total generations",
+      value: total,
+      detail: `Pro 2K: ${proCompleted.toLocaleString()} · Flash 2K: ${flashCompleted.toLocaleString()}`,
+    },
     { label: "Completed", value: completed },
     { label: "Failed", value: failed },
     { label: "Processing", value: processing },
@@ -56,6 +70,9 @@ export default async function AdminGenerationsPage() {
             <p className="mt-2 text-3xl font-semibold text-brand-ink">
               {stat.value.toLocaleString()}
             </p>
+            {stat.detail && (
+              <p className="mt-2 text-xs font-medium text-brand-muted">{stat.detail}</p>
+            )}
           </div>
         ))}
       </div>
