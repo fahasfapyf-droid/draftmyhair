@@ -66,6 +66,28 @@ export async function markGenerationProcessing(generationId: string) {
   return processingStartedAt;
 }
 
+/**
+ * Atomically records one actual provider call for the existing generation.
+ * Stored in the existing metadata JSON so no schema migration is required
+ * and the generation lifecycle remains unchanged.
+ */
+export async function incrementProviderAttempts(generationId: string) {
+  const result = await prisma.$executeRaw`
+    UPDATE "Generation"
+    SET "metadata" = jsonb_set(
+      COALESCE("metadata", '{}'::jsonb),
+      '{providerAttempts}',
+      to_jsonb(COALESCE(NULLIF("metadata"->>'providerAttempts', '')::integer, 0) + 1),
+      true
+    )
+    WHERE "id" = ${generationId}
+  `;
+
+  if (result !== 1) {
+    throw new Error("Generation provider attempt could not be recorded.");
+  }
+}
+
 type CompleteGenerationInput = {
   generationId: string;
   generatedImageId: string;
