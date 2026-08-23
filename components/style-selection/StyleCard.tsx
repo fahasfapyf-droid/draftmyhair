@@ -6,6 +6,16 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { HairStyle } from "@/lib/api/hairstyles";
 
+function getPhotoPosition(url: string | null) {
+  if (!url) return { x: 50, y: 50 };
+  const match = url.match(/#pos=(\d+),(\d+)$/);
+  if (!match) return { x: 50, y: 50 };
+  return {
+    x: Math.max(0, Math.min(100, Number(match[1]))),
+    y: Math.max(0, Math.min(100, Number(match[2]))),
+  };
+}
+
 interface StyleCardProps {
   style: HairStyle;
   isSelected: boolean;
@@ -17,6 +27,8 @@ export const StyleCard: React.FC<StyleCardProps> = ({
   isSelected,
   onClick,
 }) => {
+  const position = getPhotoPosition(style.thumbnailUrl);
+
   return (
     <motion.button
       type="button"
@@ -46,6 +58,7 @@ export const StyleCard: React.FC<StyleCardProps> = ({
               "object-cover transition-transform duration-1000 ease-[0.16,1,0.3,1]",
               isSelected ? "scale-105" : "group-hover:scale-105",
             )}
+            style={{ objectPosition: `${position.x}% ${position.y}%` }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-brand-surface px-6 text-center">
