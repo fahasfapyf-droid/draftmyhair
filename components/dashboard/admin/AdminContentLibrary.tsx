@@ -95,7 +95,15 @@ export function AdminContentLibrary() {
   const updateContent = async (item: ContentItem, patch: Partial<ContentItem>) => {
     try {
       const data = await json<{ style: ContentItem }>(`/api/dashboard/admin/content/styles/${item.id}`, { method: "PATCH", body: JSON.stringify(patch) });
-      setContent((current) => current.map((entry) => entry.id === item.id ? { ...entry, ...data.style } : entry)); setNotice(`${item.name} updated.`);
+      setContent((current) => current.map((entry) => entry.id === item.id ? { ...entry, ...data.style } : entry));
+
+      if (typeof patch.name === "string" && patch.name.trim()) {
+        const nextName = data.style.name ?? patch.name.trim();
+        setPrompts((current) => current.map((prompt) => prompt.hairstyleId === item.id ? { ...prompt, hairstyle: { ...prompt.hairstyle, name: nextName } } : prompt));
+        setGallery((current) => current.map((galleryItem) => galleryItem.hairstyleId === item.id && galleryItem.hairstyle ? { ...galleryItem, hairstyle: { ...galleryItem.hairstyle, name: nextName } } : galleryItem));
+      }
+
+      setNotice(`${item.name} updated.`);
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to update content item."); }
   };
 
