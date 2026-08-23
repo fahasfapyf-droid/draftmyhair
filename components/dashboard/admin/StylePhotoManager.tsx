@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { PointerEvent, useEffect, useMemo, useState } from "react";
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024;
+const DEFAULT_POSITION = { x: 50, y: 50 };
+
+type PhotoPosition = {
+  x: number;
+  y: number;
+};
 
 type StyleItem = {
   id: string;
@@ -12,6 +18,30 @@ type StyleItem = {
   category: string | null;
   gender: string;
 };
+
+function clampPosition(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getPhotoPosition(url: string | null): PhotoPosition {
+  if (!url) return DEFAULT_POSITION;
+  const match = url.match(/#pos=(\d+),(\d+)$/);
+  if (!match) return DEFAULT_POSITION;
+  return {
+    x: clampPosition(Number(match[1])),
+    y: clampPosition(Number(match[2])),
+  };
+}
+
+function withPhotoPosition(url: string, position: PhotoPosition) {
+  const baseUrl = url.replace(/#pos=\d+,\d+$/, "");
+  return `${baseUrl}#pos=${clampPosition(position.x)},${clampPosition(position.y)}`;
+}
+
+function formatPosition(url: string | null) {
+  const position = getPhotoPosition(url);
+  return `${position.x}% horizontal · ${position.y}% vertical`;
+}
 
 async function readResponse(response: Response) {
   const text = await response.text();
@@ -65,6 +95,9 @@ export function StylePhotoManager() {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftPositions, setDraftPositions] = useState<Record<string, PhotoPosition>>({});
+  const [dragState, setDragState] = useState<{ id: string; x: number; y: number } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -112,6 +145,98 @@ export function StylePhotoManager() {
   const changeGender = (value: string) => {
     setGenderFilter(value);
     setCategoryFilter("ALL");
+  };
+
+  const beginPositionEdit = (style: StyleItem) => {
+    if (!style.thumbnailUrl) return;
+    setEditingId(style.id);
+    setDraftPositions((current) => ({
+      ...current,
+      [style.id]: getPhotoPosition(style.thumbnailUrl),
+    }));
+    setError("");
+    setNotice("");
+  };
+
+  const cancelPositionEdit = (style: StyleItem) => {
+    setEditingId(null);
+    setDraftPositions((current) => {
+      const next = { ...current };
+      delete next[style.id];
+      return next;
+    });
+    setDragState(null);
+  };
+
+  const updateDraftPosition = (id: string, position: PhotoPosition) => {
+    setDraftPositions((current) => ({
+      ...current,
+      [id]: {
+        x: clampPosition(position.x),
+        y: clampPosition(position.y),
+      },
+    }));
+  };
+
+  const nudgePosition = (style: StyleItem, dx: number, dy: number) => {
+    const current = draftPositions[style.id] || getPhotoPosition(style.thumbnailUrl);
+    updateDraftPosition(style.id, { x: current.x + dx, y: current.y + dy });
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>, style: StyleItem) => {
+    if (!editingId || editingId !== style.id || !style.thumbnailUrl) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragState({ id: style.id, x: event.clientX, y: event.clientY });
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>, style: StyleItem) => {
+    if (!dragState || dragState.id !== style.id) return;
+    const deltaX = event.clientX - dragState.x;
+    const deltaY = event.clientY - dragState.y;
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+
+    const current = draftPositions[style.id] || getPhotoPosition(style.thumbnailUrl);
+    const rect = event.currentTarget.getBoundingClientRect();
+    updateDraftPosition(style.id, {
+      x: current.x - (deltaX / Math.max(rect.width, 1)) * 100,
+      y: current.y - (deltaY / Math.max(rect.height, 1)) * 100,
+    });
+    setDragState({ id: style.id, x: event.clientX, y: event.clientY });
+  };
+
+  const endDrag = () => setDragState(null);
+
+  const savePosition = async (style: StyleItem) => {
+    if (!style.thumbnailUrl) return;
+    const position = draftPositions[style.id] || getPhotoPosition(style.thumbnailUrl);
+    setBusyId(style.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`/api/dashboard/admin/content/styles/${style.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thumbnailUrl: withPhotoPosition(style.thumbnailUrl, position) }),
+      });
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Unable to save photo position.");
+
+      const updated = data.style as StyleItem;
+      setStyles((current) => current.map((item) => item.id === style.id ? { ...item, thumbnailUrl: updated.thumbnailUrl } : item));
+      setEditingId(null);
+      setDraftPositions((current) => {
+        const next = { ...current };
+        delete next[style.id];
+        return next;
+      });
+      setNotice(`${style.name} photo position saved.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to save photo position.");
+    } finally {
+      setBusyId(null);
+      setDragState(null);
+    }
   };
 
   const replacePhoto = async (style: StyleItem, file: File) => {
@@ -165,6 +290,7 @@ export function StylePhotoManager() {
       const data = await readResponse(response);
       if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Unable to remove style photo.");
       setStyles((current) => current.map((item) => item.id === style.id ? { ...item, thumbnailUrl: null } : item));
+      setEditingId(null);
       setNotice(`${style.name} thumbnail removed.`);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to remove style photo.");
@@ -179,7 +305,7 @@ export function StylePhotoManager() {
     <section className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-brand-ink">Style Photos</h2>
-        <p className="mt-1 text-sm text-brand-muted">Find reference thumbnails by service, gender and category. Upload or replace a thumbnail without changing prompts or generation settings.</p>
+        <p className="mt-1 text-sm text-brand-muted">Find reference thumbnails by service, gender and category. Upload, replace or reposition a thumbnail without changing prompts or generation settings.</p>
       </div>
 
       {error ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
@@ -199,18 +325,65 @@ export function StylePhotoManager() {
             <div key={category}>
               <div className="mb-3 flex items-center justify-between"><h3 className="text-base font-semibold text-brand-ink">{formatLabel(category)}</h3><span className="text-xs text-brand-muted">{items.length} style{items.length === 1 ? "" : "s"}</span></div>
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((style) => (
-                  <article key={style.id} className="overflow-hidden rounded-xl border border-brand-border bg-white">
-                    <div className="aspect-[4/5] bg-brand-surface">{style.thumbnailUrl ? <img src={style.thumbnailUrl} alt={style.name} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center p-6 text-center text-sm text-brand-muted">No style photo</div>}</div>
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold text-brand-ink">{style.name}</h4><p className="mt-1 text-xs text-brand-muted">{GENDER_LABELS[style.gender] || formatLabel(style.gender)}</p></div><span className="rounded-full border border-brand-border px-2 py-1 text-[11px] text-brand-muted">{style.thumbnailUrl ? "Uploaded" : "Missing"}</span></div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <label className="inline-flex cursor-pointer rounded-lg bg-brand-ink px-3 py-2 text-sm font-semibold text-white">{busyId === style.id ? "Working…" : style.thumbnailUrl ? "Replace Photo" : "Upload Photo"}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busyId !== null} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void replacePhoto(style, file); }} /></label>
-                        {style.thumbnailUrl ? <button type="button" onClick={() => void removePhoto(style)} disabled={busyId !== null} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Remove Photo</button> : null}
+                {items.map((style) => {
+                  const isEditing = editingId === style.id;
+                  const position = draftPositions[style.id] || getPhotoPosition(style.thumbnailUrl);
+                  return (
+                    <article key={style.id} className="overflow-hidden rounded-xl border border-brand-border bg-white">
+                      <div
+                        className={`relative aspect-[4/5] bg-brand-surface select-none ${isEditing ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+                        onPointerDown={(event) => handlePointerDown(event, style)}
+                        onPointerMove={(event) => handlePointerMove(event, style)}
+                        onPointerUp={endDrag}
+                        onPointerCancel={endDrag}
+                        onPointerLeave={endDrag}
+                      >
+                        {style.thumbnailUrl ? (
+                          <img
+                            src={style.thumbnailUrl}
+                            alt={style.name}
+                            draggable={false}
+                            className="h-full w-full object-cover"
+                            style={{ objectPosition: `${position.x}% ${position.y}%`, pointerEvents: isEditing ? "none" : "auto" }}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-brand-muted">No style photo</div>
+                        )}
+                        {isEditing ? <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 px-3 py-2 text-center text-xs font-medium text-white">Drag the photo to reposition it</div> : null}
                       </div>
-                    </div>
-                  </article>
-                ))}
+
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold text-brand-ink">{style.name}</h4><p className="mt-1 text-xs text-brand-muted">{GENDER_LABELS[style.gender] || formatLabel(style.gender)}</p></div><span className="rounded-full border border-brand-border px-2 py-1 text-[11px] text-brand-muted">{style.thumbnailUrl ? "Uploaded" : "Missing"}</span></div>
+
+                        {isEditing ? (
+                          <div className="mt-3 rounded-lg border border-brand-border bg-brand-surface p-3">
+                            <div className="mb-2 text-xs text-brand-muted">{formatPosition(style.thumbnailUrl)}</div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div />
+                              <button type="button" onClick={() => nudgePosition(style, 0, -5)} disabled={busyId !== null} className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-semibold hover:bg-brand-canvas" aria-label="Move photo up">↑</button>
+                              <div />
+                              <button type="button" onClick={() => nudgePosition(style, 5, 0)} disabled={busyId !== null} className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-semibold hover:bg-brand-canvas" aria-label="Move photo left">←</button>
+                              <button type="button" onClick={() => updateDraftPosition(style.id, DEFAULT_POSITION)} disabled={busyId !== null} className="rounded-lg border border-brand-border bg-white px-3 py-2 text-xs font-semibold hover:bg-brand-canvas" aria-label="Reset photo position">Reset</button>
+                              <button type="button" onClick={() => nudgePosition(style, -5, 0)} disabled={busyId !== null} className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-semibold hover:bg-brand-canvas" aria-label="Move photo right">→</button>
+                              <div />
+                              <button type="button" onClick={() => nudgePosition(style, 0, 5)} disabled={busyId !== null} className="rounded-lg border border-brand-border bg-white px-3 py-2 text-sm font-semibold hover:bg-brand-canvas" aria-label="Move photo down">↓</button>
+                              <div />
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                              <button type="button" onClick={() => void savePosition(style)} disabled={busyId !== null} className="flex-1 rounded-lg bg-brand-ink px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busyId === style.id ? "Saving…" : "Save Position"}</button>
+                              <button type="button" onClick={() => cancelPositionEdit(style)} disabled={busyId !== null} className="rounded-lg border border-brand-border px-3 py-2 text-sm font-semibold disabled:opacity-50">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <label className="inline-flex cursor-pointer rounded-lg bg-brand-ink px-3 py-2 text-sm font-semibold text-white">{busyId === style.id ? "Working…" : style.thumbnailUrl ? "Replace Photo" : "Upload Photo"}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busyId !== null} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void replacePhoto(style, file); }} /></label>
+                            {style.thumbnailUrl ? <><button type="button" onClick={() => beginPositionEdit(style)} disabled={busyId !== null} className="rounded-lg border border-brand-border px-3 py-2 text-sm font-semibold disabled:opacity-50">Adjust Position</button><button type="button" onClick={() => void removePhoto(style)} disabled={busyId !== null} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">Remove Photo</button></> : null}
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           ))}
