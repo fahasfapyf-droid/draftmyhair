@@ -29,6 +29,12 @@ export interface GenerateRequestDTO {
 
 export interface GenerationContext {
   /**
+   * Existing persisted Generation record identifier.
+   * Used only for provider-attempt accounting.
+   */
+  generationId?: string;
+
+  /**
    * Original uploaded image.
    */
   imageBuffer: Buffer;
