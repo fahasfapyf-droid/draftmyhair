@@ -94,13 +94,6 @@ export function AdminHome() {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-editorial border border-brand-border bg-brand-surface p-8 shadow-sm">
-        <h2 className="text-2xl font-semibold text-brand-ink">Welcome, Administrator</h2>
-        <p className="mt-3 text-brand-muted">
-          This dashboard provides access to administrative tools for Draft My Hair.
-        </p>
-      </div>
-
       <div className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
