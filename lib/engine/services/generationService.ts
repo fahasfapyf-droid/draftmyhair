@@ -14,6 +14,7 @@ import {
   VERTEX_PROVIDER,
 } from "../providers/vertex";
 import { buildPrompt } from "./promptBuilder";
+import { incrementProviderAttempts } from "@/lib/services/generation-lifecycle.service";
 
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
@@ -125,6 +126,19 @@ export async function generatePreview(
     let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
 
     for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
+      // Accounting is deliberately best-effort: if the new tracking write is
+      // unavailable, the existing generation request must continue unchanged.
+      if (context.generationId) {
+        try {
+          await incrementProviderAttempts(context.generationId);
+        } catch (accountingError) {
+          console.warn(
+            "Provider attempt accounting unavailable; continuing generation.",
+            accountingError
+          );
+        }
+      }
+
       providerResult = await generateWithVertex(providerRequest);
 
       if (providerResult.success) {
