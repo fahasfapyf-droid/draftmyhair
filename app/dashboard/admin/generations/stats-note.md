@@ -1,1 +1,0 @@
-Admin generation statistics are planned.
