@@ -11,7 +11,7 @@ export const VERTEX_PROVIDER = "vertex";
 // Keep the V3.2 prompt and the rest of the generation pipeline unchanged so the
 // model comparison isolates model/resolution effects.
 export const VERTEX_MODEL = "gemini-3.1-flash-image";
-export const VERTEX_IMAGE_SIZE = "1K";
+export const VERTEX_IMAGE_SIZE = "2K";
 
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
