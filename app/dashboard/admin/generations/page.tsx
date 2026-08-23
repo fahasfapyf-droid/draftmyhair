@@ -14,44 +14,68 @@ export default async function AdminGenerationsPage() {
   if (!session?.user?.id) redirect("/login");
   if (session.user.role !== "ADMIN") redirect("/dashboard");
 
-  const [generations, total, completed, failed, processing, proCompleted, flashCompleted] =
-    await Promise.all([
-      prisma.generation.findMany({
-        select: {
-          id: true,
-          status: true,
-          provider: true,
-          providerModel: true,
-          createdAt: true,
-          completedAt: true,
-          processingTimeMs: true,
-          user: { select: { email: true, name: true } },
-          hairstyle: { select: { name: true, serviceType: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-      }),
-      prisma.generation.count(),
-      prisma.generation.count({ where: { status: "COMPLETED" } }),
-      prisma.generation.count({ where: { status: "FAILED" } }),
-      prisma.generation.count({ where: { status: "PROCESSING" } }),
-      prisma.generation.count({
-        where: { status: "COMPLETED", providerModel: PRO_MODEL },
-      }),
-      prisma.generation.count({
-        where: { status: "COMPLETED", providerModel: FLASH_MODEL },
-      }),
-    ]);
+  const [
+    generations,
+    total,
+    completed,
+    failed,
+    processing,
+    modelStatusCounts,
+  ] = await Promise.all([
+    prisma.generation.findMany({
+      select: {
+        id: true,
+        status: true,
+        provider: true,
+        providerModel: true,
+        createdAt: true,
+        completedAt: true,
+        processingTimeMs: true,
+        user: { select: { email: true, name: true } },
+        hairstyle: { select: { name: true, serviceType: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    prisma.generation.count(),
+    prisma.generation.count({ where: { status: "COMPLETED" } }),
+    prisma.generation.count({ where: { status: "FAILED" } }),
+    prisma.generation.count({ where: { status: "PROCESSING" } }),
+    prisma.generation.groupBy({
+      by: ["providerModel", "status"],
+      _count: { _all: true },
+      where: {
+        providerModel: { in: [PRO_MODEL, FLASH_MODEL] },
+      },
+    }),
+  ]);
+
+  const getModelStats = (model: string) => {
+    const rows = modelStatusCounts.filter((row) => row.providerModel === model);
+    const count = (status: string) =>
+      rows.find((row) => row.status === status)?._count._all ?? 0;
+
+    return {
+      total: rows.reduce((sum, row) => sum + row._count._all, 0),
+      completed: count("COMPLETED"),
+      failed: count("FAILED"),
+      processing: count("PROCESSING"),
+    };
+  };
+
+  const proStats = getModelStats(PRO_MODEL);
+  const flashStats = getModelStats(FLASH_MODEL);
 
   const stats = [
-    {
-      label: "Total generations",
-      value: total,
-      detail: `Pro 2K: ${proCompleted.toLocaleString()} · Flash 2K: ${flashCompleted.toLocaleString()}`,
-    },
+    { label: "Total generations", value: total },
     { label: "Completed", value: completed },
     { label: "Failed", value: failed },
     { label: "Processing", value: processing },
+  ];
+
+  const modelStats = [
+    { label: "Pro 2K", ...proStats },
+    { label: "Flash 2K", ...flashStats },
   ];
 
   return (
@@ -70,11 +94,41 @@ export default async function AdminGenerationsPage() {
             <p className="mt-2 text-3xl font-semibold text-brand-ink">
               {stat.value.toLocaleString()}
             </p>
-            {stat.detail && (
-              <p className="mt-2 text-xs font-medium text-brand-muted">{stat.detail}</p>
-            )}
           </div>
         ))}
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-brand-border text-brand-muted">
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Model</th>
+              <th className="px-4 py-2.5 text-right font-medium">Total</th>
+              <th className="px-4 py-2.5 text-right font-medium">Completed</th>
+              <th className="px-4 py-2.5 text-right font-medium">Failed</th>
+              <th className="px-4 py-2.5 text-right font-medium">Processing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modelStats.map((model) => (
+              <tr key={model.label} className="border-b border-brand-border last:border-0">
+                <td className="px-4 py-2.5 font-medium text-brand-ink">{model.label}</td>
+                <td className="px-4 py-2.5 text-right text-brand-ink">
+                  {model.total.toLocaleString()}
+                </td>
+                <td className="px-4 py-2.5 text-right text-brand-muted">
+                  {model.completed.toLocaleString()}
+                </td>
+                <td className="px-4 py-2.5 text-right text-brand-muted">
+                  {model.failed.toLocaleString()}
+                </td>
+                <td className="px-4 py-2.5 text-right text-brand-muted">
+                  {model.processing.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-editorial border border-brand-border bg-brand-surface shadow-sm">
