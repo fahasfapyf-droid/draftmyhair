@@ -18,6 +18,14 @@ import { incrementProviderAttempts } from "@/lib/services/generation-lifecycle.s
 
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
+// Test-only hook: it can only operate on Vercel Preview deployments.
+// When enabled, the first real provider call is intentionally treated as a
+// retryable 503 after the call returns, forcing the existing retry path to make
+// a second real provider call. This is never active in Production.
+const FORCE_RETRY_TEST =
+  process.env.VERCEL_ENV === "preview" &&
+  process.env.DMH_FORCE_RETRY_TEST === "true";
+
 function isRetryableGenerationError(error: unknown) {
   const message =
     error instanceof Error
@@ -124,6 +132,7 @@ export async function generatePreview(
     // execution-layer retry wrapper is not bypassed for 429/5xx responses.
 
     let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
+    let forcedRetryInjected = false;
 
     for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
       // Accounting is deliberately best-effort: if the new tracking write is
@@ -140,6 +149,20 @@ export async function generatePreview(
       }
 
       providerResult = await generateWithVertex(providerRequest);
+
+      // Preview-only test hook. The first provider request has already reached
+      // Vertex, so a forced retry represents two real provider calls and two
+      // counted attempts. Production can never enter this branch.
+      if (FORCE_RETRY_TEST && !forcedRetryInjected) {
+        forcedRetryInjected = true;
+        console.warn(
+          "[RETRY_TEST] First real provider call intentionally marked as retryable."
+        );
+        providerResult = {
+          success: false,
+          error: "503 TEST_RETRY_FORCED",
+        };
+      }
 
       if (providerResult.success) {
         break;
