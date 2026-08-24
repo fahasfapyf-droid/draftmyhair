@@ -20,6 +20,7 @@ type GenerationStats = {
   models: {
     pro: ModelStats;
     flash: ModelStats;
+    other: ModelStats;
   };
 };
 
@@ -127,6 +128,9 @@ export function AdminHome() {
     ? [
         { label: "Pro 2K", ...generationStats.models.pro },
         { label: "Flash 2K", ...generationStats.models.flash },
+        ...(generationStats.models.other.total > 0
+          ? [{ label: "Other / legacy", ...generationStats.models.other }]
+          : []),
       ]
     : [
         { label: "Pro 2K", ...EMPTY_MODEL_STATS },
