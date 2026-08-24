@@ -70,12 +70,28 @@ export async function generateWithVertex(
       },
     });
 
-    const imagePart = response.candidates?.[0]?.content?.parts?.find(
+    const candidate = response.candidates?.[0];
+    const imagePart = candidate?.content?.parts?.find(
       (part: any) => part.inlineData
     );
 
     if (!imagePart?.inlineData?.data) {
-      return { success: false, error: "Vertex AI returned no image." };
+      const finishReason = String(candidate?.finishReason ?? "unknown");
+      const normalizedReason = finishReason.toLowerCase();
+      const blocked = [
+        "safety",
+        "blocklist",
+        "prohibited",
+        "recitation",
+        "policy",
+      ].some((pattern) => normalizedReason.includes(pattern));
+
+      return {
+        success: false,
+        error: blocked
+          ? `Vertex AI blocked the image request (${finishReason}).`
+          : `Vertex AI returned no image (finish reason: ${finishReason}).`,
+      };
     }
 
     const outputBuffer = Buffer.from(imagePart.inlineData.data, "base64");
