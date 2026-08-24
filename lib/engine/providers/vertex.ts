@@ -42,6 +42,16 @@ function getVertexClient(): GoogleGenAI {
 export async function generateWithVertex(
   request: ProviderGenerationRequest
 ): Promise<ProviderGenerationResult> {
+  const providerStartedAt = performance.now();
+  const providerStartedWallClock = new Date().toISOString();
+
+  console.info("[GENERATION_TIMING] provider start", {
+    model: VERTEX_MODEL,
+    imageSize: VERTEX_IMAGE_SIZE,
+    inputBytes: request.imageBuffer.length,
+    at: providerStartedWallClock,
+  });
+
   try {
     const ai = getVertexClient();
 
@@ -68,6 +78,14 @@ export async function generateWithVertex(
           imageSize: VERTEX_IMAGE_SIZE,
         },
       },
+    });
+
+    const providerResponseMs = Math.round(performance.now() - providerStartedAt);
+    console.info("[GENERATION_TIMING] provider response", {
+      model: VERTEX_MODEL,
+      imageSize: VERTEX_IMAGE_SIZE,
+      providerResponseMs,
+      at: new Date().toISOString(),
     });
 
     const candidate = response.candidates?.[0];
@@ -126,7 +144,11 @@ export async function generateWithVertex(
       mimeType: imagePart.inlineData.mimeType ?? "image/png",
     };
   } catch (error) {
-    console.error("Vertex AI request failed:", error);
+    const providerErrorMs = Math.round(performance.now() - providerStartedAt);
+    console.error("Vertex AI request failed:", error, {
+      providerErrorMs,
+      at: new Date().toISOString(),
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : "Vertex AI request failed.",
