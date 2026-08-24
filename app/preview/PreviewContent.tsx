@@ -16,6 +16,10 @@ export default function PreviewContent() {
 
   const handleCompleted = useCallback((completedGenerationId: string) => {
     setGenerationStatus("success");
+    console.info("[GENERATION_TIMING] result navigation", {
+      generationId: completedGenerationId,
+      at: new Date().toISOString(),
+    });
     router.push(`/result?generationId=${completedGenerationId}`);
   }, [router, setGenerationStatus]);
 
@@ -46,17 +50,53 @@ export default function PreviewContent() {
     setGenerationId(nextGenerationId);
 
     async function generate() {
+      const clientStartedAt = performance.now();
+      const wallClockStartedAt = new Date().toISOString();
       setGenerationStatus("generating");
+
+      console.info("[GENERATION_TIMING] client generation start", {
+        generationId: nextGenerationId,
+        style: selectedStyle.name,
+        at: wallClockStartedAt,
+      });
+
       try {
+        const preparationStartedAt = performance.now();
         const generationImage = await prepareGenerationImage(uploadedFile);
+        const preparationMs = Math.round(performance.now() - preparationStartedAt);
+
+        console.info("[GENERATION_TIMING] upload prepared", {
+          generationId: nextGenerationId,
+          inputBytes: uploadedFile.size,
+          preparedBytes: generationImage.size,
+          preparationMs,
+          at: new Date().toISOString(),
+        });
+
         const formData = new FormData();
         formData.append("image", generationImage);
         formData.append("promptKey", selectedStyle.promptKey);
         formData.append("generationId", nextGenerationId);
         if (salonClientId) formData.append("salonClientId", salonClientId);
 
+        const requestStartedAt = performance.now();
+        console.info("[GENERATION_TIMING] generate request sent", {
+          generationId: nextGenerationId,
+          at: new Date().toISOString(),
+        });
+
         const response = await fetch("/api/generate", { method: "POST", body: formData });
+        const responseReceivedMs = Math.round(performance.now() - requestStartedAt);
         const result = await response.json().catch(() => null);
+        const totalClientMs = Math.round(performance.now() - clientStartedAt);
+
+        console.info("[GENERATION_TIMING] client received result", {
+          generationId: nextGenerationId,
+          httpStatus: response.status,
+          responseReceivedMs,
+          totalClientMs,
+          at: new Date().toISOString(),
+        });
 
         if (!response.ok || !result?.success) {
           throw new Error(result?.error ?? "Generation failed. Please try again.");
