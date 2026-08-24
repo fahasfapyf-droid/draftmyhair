@@ -23,6 +23,20 @@ function isRetryableGenerationError(error: unknown) {
       ? error.message.toLowerCase()
       : String(error).toLowerCase();
 
+  // Never spend additional provider calls on policy/safety refusals.
+  const nonRetryablePatterns = [
+    "blocked the image request",
+    "safety",
+    "blocklist",
+    "prohibited",
+    "recitation",
+    "policy",
+  ];
+
+  if (nonRetryablePatterns.some((pattern) => message.includes(pattern))) {
+    return false;
+  }
+
   const retryablePatterns = [
     "timeout",
     "timed out",
@@ -37,6 +51,8 @@ function isRetryableGenerationError(error: unknown) {
     "unavailable",
     "temporarily",
     "internal server error",
+    "returned no image",
+    "invalid dimensions",
   ];
 
   return retryablePatterns.some((pattern) => message.includes(pattern));
@@ -118,9 +134,10 @@ export async function generatePreview(
     // ============================================================
     // Step 4 — Generate Image
     // ============================================================
-    // The Vertex provider currently returns transient provider failures as
-    // { success: false } rather than throwing. Retry them here so the existing
-    // execution-layer retry wrapper is not bypassed for 429/5xx responses.
+    // The Vertex provider returns transient provider failures as
+    // { success: false }. Retry only failures that are plausibly transient.
+    // Policy/safety refusals are explicitly not retried because another
+    // identical provider call would only waste another paid attempt.
 
     let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
 
