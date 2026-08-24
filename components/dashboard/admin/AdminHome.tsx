@@ -5,22 +5,29 @@ import { useCallback, useEffect, useState } from "react";
 
 const FEEDBACK_LAST_SEEN_KEY = "draftmyhair:admin-feedback-last-seen";
 
-type GenerationStats = {
-  totalRequests: number;
-  completedImages: number;
+type ModelStats = {
+  total: number;
+  completed: number;
   failed: number;
   processing: number;
-  pro: number;
-  flash: number;
 };
 
-const EMPTY_GENERATION_STATS: GenerationStats = {
-  totalRequests: 0,
-  completedImages: 0,
+type GenerationStats = {
+  total: number;
+  completed: number;
+  failed: number;
+  processing: number;
+  models: {
+    pro: ModelStats;
+    flash: ModelStats;
+  };
+};
+
+const EMPTY_MODEL_STATS: ModelStats = {
+  total: 0,
+  completed: 0,
   failed: 0,
   processing: 0,
-  pro: 0,
-  flash: 0,
 };
 
 const adminCards = [
@@ -48,19 +55,14 @@ const adminCards = [
 
 export function AdminHome() {
   const [unreadFeedbackCount, setUnreadFeedbackCount] = useState(0);
-  const [generationStats, setGenerationStats] = useState<GenerationStats>(
-    EMPTY_GENERATION_STATS
-  );
+  const [generationStats, setGenerationStats] = useState<GenerationStats | null>(null);
 
   const loadUnreadFeedbackCount = useCallback(async () => {
     try {
       const stored = window.localStorage.getItem(FEEDBACK_LAST_SEEN_KEY);
 
       if (!stored) {
-        window.localStorage.setItem(
-          FEEDBACK_LAST_SEEN_KEY,
-          new Date().toISOString()
-        );
+        window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, new Date().toISOString());
         setUnreadFeedbackCount(0);
         return;
       }
@@ -89,21 +91,7 @@ export function AdminHome() {
 
       if (!response.ok) return;
 
-      const data = (await response.json()) as Partial<GenerationStats>;
-      setGenerationStats({
-        totalRequests: Number.isFinite(data.totalRequests)
-          ? Math.max(0, data.totalRequests ?? 0)
-          : 0,
-        completedImages: Number.isFinite(data.completedImages)
-          ? Math.max(0, data.completedImages ?? 0)
-          : 0,
-        failed: Number.isFinite(data.failed) ? Math.max(0, data.failed ?? 0) : 0,
-        processing: Number.isFinite(data.processing)
-          ? Math.max(0, data.processing ?? 0)
-          : 0,
-        pro: Number.isFinite(data.pro) ? Math.max(0, data.pro ?? 0) : 0,
-        flash: Number.isFinite(data.flash) ? Math.max(0, data.flash ?? 0) : 0,
-      });
+      setGenerationStats((await response.json()) as GenerationStats);
     } catch {
       // Generation statistics must never break the admin dashboard.
     }
@@ -122,74 +110,97 @@ export function AdminHome() {
   }, [loadGenerationStats, loadUnreadFeedbackCount]);
 
   const markFeedbackSeen = () => {
-    window.localStorage.setItem(
-      FEEDBACK_LAST_SEEN_KEY,
-      new Date().toISOString()
-    );
+    window.localStorage.setItem(FEEDBACK_LAST_SEEN_KEY, new Date().toISOString());
     setUnreadFeedbackCount(0);
   };
 
+  const generationSummary = generationStats
+    ? [
+        { label: "Total generations", value: generationStats.total },
+        { label: "Completed", value: generationStats.completed },
+        { label: "Failed", value: generationStats.failed },
+        { label: "Processing", value: generationStats.processing },
+      ]
+    : [];
+
+  const modelStats = generationStats
+    ? [
+        { label: "Pro 2K", ...generationStats.models.pro },
+        { label: "Flash 2K", ...generationStats.models.flash },
+      ]
+    : [
+        { label: "Pro 2K", ...EMPTY_MODEL_STATS },
+        { label: "Flash 2K", ...EMPTY_MODEL_STATS },
+      ];
+
   return (
     <div className="space-y-8">
-      <div className="rounded-editorial border border-brand-border bg-brand-surface p-8 shadow-sm">
-        <h2 className="text-2xl font-semibold text-brand-ink">
-          Welcome, Administrator
-        </h2>
-
-        <p className="mt-3 text-brand-muted">
-          This dashboard provides access to administrative tools for Draft My Hair.
-        </p>
-      </div>
-
       <section
         aria-label="AI generation overview"
         className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm"
       >
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.14em] text-brand-muted">
-              Completed Images
-            </p>
-            <p className="mt-1 text-4xl font-semibold tracking-tight text-brand-ink">
-              {generationStats.completedImages.toLocaleString()}
+            <h3 className="font-semibold text-brand-ink">AI Generation Overview</h3>
+            <p className="mt-1 text-sm text-brand-muted">
+              Lifetime generation activity by status and model.
             </p>
           </div>
-
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:min-w-[560px]">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
-                Total Requests
-              </p>
-              <p className="mt-1 text-lg font-semibold text-brand-ink">
-                {generationStats.totalRequests.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
-                Failed
-              </p>
-              <p className="mt-1 text-lg font-semibold text-brand-ink">
-                {generationStats.failed.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
-                Processing
-              </p>
-              <p className="mt-1 text-lg font-semibold text-brand-ink">
-                {generationStats.processing.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
-                Models
-              </p>
-              <p className="mt-1 text-sm font-semibold text-brand-ink">
-                Pro {generationStats.pro.toLocaleString()} · Flash {generationStats.flash.toLocaleString()}
-              </p>
-            </div>
-          </div>
+          <Link
+            href="/dashboard/admin/generations"
+            className="text-sm font-medium text-brand-ink hover:underline"
+          >
+            View all →
+          </Link>
         </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {generationSummary.map((stat) => (
+            <div key={stat.label} className="rounded-lg border border-brand-border px-4 py-3">
+              <p className="text-xs text-brand-muted">{stat.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-brand-ink">
+                {stat.value.toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {generationStats ? (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-brand-border">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-brand-border text-brand-muted">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Model</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Total</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Completed</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Failed</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Processing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelStats.map((model) => (
+                  <tr key={model.label} className="border-b border-brand-border last:border-0">
+                    <td className="px-4 py-2.5 font-medium text-brand-ink">{model.label}</td>
+                    <td className="px-4 py-2.5 text-right text-brand-ink">
+                      {model.total.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-brand-muted">
+                      {model.completed.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-brand-muted">
+                      {model.failed.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-brand-muted">
+                      {model.processing.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-brand-muted">Loading generation statistics…</p>
+        )}
       </section>
 
       {unreadFeedbackCount > 0 ? (
@@ -200,9 +211,7 @@ export function AdminHome() {
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-red-800">
-                New customer feedback
-              </p>
+              <p className="text-sm font-semibold text-red-800">New customer feedback</p>
               <p className="mt-1 text-sm text-red-700">
                 {unreadFeedbackCount} new feedback submission
                 {unreadFeedbackCount === 1 ? "" : "s"} is waiting for review.
@@ -226,15 +235,9 @@ export function AdminHome() {
             href={card.href}
             className="group rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-ink focus:ring-offset-2"
           >
-            <h3 className="font-semibold text-brand-ink group-hover:underline">
-              {card.title}
-            </h3>
-            <p className="mt-2 text-sm text-brand-muted">
-              {card.description}
-            </p>
-            <span className="mt-5 inline-block text-sm font-medium text-brand-ink">
-              Open →
-            </span>
+            <h3 className="font-semibold text-brand-ink group-hover:underline">{card.title}</h3>
+            <p className="mt-2 text-sm text-brand-muted">{card.description}</p>
+            <span className="mt-5 inline-block text-sm font-medium text-brand-ink">Open →</span>
           </Link>
         ))}
       </div>
@@ -243,9 +246,7 @@ export function AdminHome() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="font-semibold text-brand-ink">Customer Feedback</h3>
-            <p className="mt-1 text-sm text-brand-muted">
-              Review customer ratings and comments.
-            </p>
+            <p className="mt-1 text-sm text-brand-muted">Review customer ratings and comments.</p>
           </div>
           <Link
             href="/dashboard/admin/feedback"
