@@ -5,6 +5,24 @@ import { useCallback, useEffect, useState } from "react";
 
 const FEEDBACK_LAST_SEEN_KEY = "draftmyhair:admin-feedback-last-seen";
 
+type GenerationStats = {
+  totalRequests: number;
+  completedImages: number;
+  failed: number;
+  processing: number;
+  pro: number;
+  flash: number;
+};
+
+const EMPTY_GENERATION_STATS: GenerationStats = {
+  totalRequests: 0,
+  completedImages: 0,
+  failed: 0,
+  processing: 0,
+  pro: 0,
+  flash: 0,
+};
+
 const adminCards = [
   {
     href: "/dashboard/admin/contact",
@@ -30,6 +48,9 @@ const adminCards = [
 
 export function AdminHome() {
   const [unreadFeedbackCount, setUnreadFeedbackCount] = useState(0);
+  const [generationStats, setGenerationStats] = useState<GenerationStats>(
+    EMPTY_GENERATION_STATS
+  );
 
   const loadUnreadFeedbackCount = useCallback(async () => {
     try {
@@ -60,15 +81,45 @@ export function AdminHome() {
     }
   }, []);
 
+  const loadGenerationStats = useCallback(async () => {
+    try {
+      const response = await fetch("/api/dashboard/admin/generation-stats", {
+        cache: "no-store",
+      });
+
+      if (!response.ok) return;
+
+      const data = (await response.json()) as Partial<GenerationStats>;
+      setGenerationStats({
+        totalRequests: Number.isFinite(data.totalRequests)
+          ? Math.max(0, data.totalRequests ?? 0)
+          : 0,
+        completedImages: Number.isFinite(data.completedImages)
+          ? Math.max(0, data.completedImages ?? 0)
+          : 0,
+        failed: Number.isFinite(data.failed) ? Math.max(0, data.failed ?? 0) : 0,
+        processing: Number.isFinite(data.processing)
+          ? Math.max(0, data.processing ?? 0)
+          : 0,
+        pro: Number.isFinite(data.pro) ? Math.max(0, data.pro ?? 0) : 0,
+        flash: Number.isFinite(data.flash) ? Math.max(0, data.flash ?? 0) : 0,
+      });
+    } catch {
+      // Generation statistics must never break the admin dashboard.
+    }
+  }, []);
+
   useEffect(() => {
     void loadUnreadFeedbackCount();
+    void loadGenerationStats();
 
     const interval = window.setInterval(() => {
       void loadUnreadFeedbackCount();
+      void loadGenerationStats();
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [loadUnreadFeedbackCount]);
+  }, [loadGenerationStats, loadUnreadFeedbackCount]);
 
   const markFeedbackSeen = () => {
     window.localStorage.setItem(
@@ -89,6 +140,57 @@ export function AdminHome() {
           This dashboard provides access to administrative tools for Draft My Hair.
         </p>
       </div>
+
+      <section
+        aria-label="AI generation overview"
+        className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm"
+      >
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.14em] text-brand-muted">
+              Completed Images
+            </p>
+            <p className="mt-1 text-4xl font-semibold tracking-tight text-brand-ink">
+              {generationStats.completedImages.toLocaleString()}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:min-w-[560px]">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
+                Total Requests
+              </p>
+              <p className="mt-1 text-lg font-semibold text-brand-ink">
+                {generationStats.totalRequests.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
+                Failed
+              </p>
+              <p className="mt-1 text-lg font-semibold text-brand-ink">
+                {generationStats.failed.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
+                Processing
+              </p>
+              <p className="mt-1 text-lg font-semibold text-brand-ink">
+                {generationStats.processing.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-brand-muted">
+                Models
+              </p>
+              <p className="mt-1 text-sm font-semibold text-brand-ink">
+                Pro {generationStats.pro.toLocaleString()} · Flash {generationStats.flash.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {unreadFeedbackCount > 0 ? (
         <div
