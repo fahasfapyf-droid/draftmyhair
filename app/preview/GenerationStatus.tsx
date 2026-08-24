@@ -27,6 +27,20 @@ const STEPS = [
 ];
 
 const STEP_DURATION = 800;
+const RATE_LIMIT_ERROR_PREFIX = "[RATE_LIMIT_429]";
+const RATE_LIMIT_USER_MESSAGE =
+  "We're experiencing a temporary system issue. Your credit has been returned. Please try again in a few minutes.";
+
+function getDisplayError(error?: string | null) {
+  if (error?.includes(RATE_LIMIT_ERROR_PREFIX)) {
+    return RATE_LIMIT_USER_MESSAGE;
+  }
+
+  return (
+    error ??
+    "Something went wrong while generating your hairstyle preview."
+  );
+}
 
 export const GenerationStatus: React.FC<
   GenerationStatusProps
@@ -152,8 +166,7 @@ export const GenerationStatus: React.FC<
               </p>
 
               <p className="mt-1 text-sm text-red-600">
-                {error ??
-                  "Something went wrong while generating your hairstyle preview."}
+                {getDisplayError(error)}
               </p>
 
               {onRetry && (
