@@ -29,6 +29,7 @@ export async function GET() {
   const models = {
     pro: { total: 0, completed: 0, failed: 0, processing: 0 },
     flash: { total: 0, completed: 0, failed: 0, processing: 0 },
+    other: { total: 0, completed: 0, failed: 0, processing: 0 },
   };
 
   for (const row of byModelAndStatus) {
@@ -38,9 +39,7 @@ export async function GET() {
       ? models.flash
       : model.includes("pro")
         ? models.pro
-        : null;
-
-    if (!bucket) continue;
+        : models.other;
 
     bucket.total += count;
 
