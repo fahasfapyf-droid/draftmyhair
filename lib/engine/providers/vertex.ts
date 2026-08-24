@@ -7,6 +7,7 @@ import {
 
 export const VERTEX_PROVIDER = "vertex";
 export const VERTEX_MODEL = "gemini-3-pro-image";
+export const VERTEX_IMAGE_SIZE = "1K";
 
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
@@ -64,7 +65,7 @@ export async function generateWithVertex(
         responseModalities: ["IMAGE"],
         imageConfig: {
           aspectRatio: request.metadata.aspectRatio,
-          imageSize: "2K",
+          imageSize: VERTEX_IMAGE_SIZE,
         },
       },
     });
@@ -90,7 +91,7 @@ export async function generateWithVertex(
     if (process.env.DEBUG_VERTEX === "true") {
       console.debug("Vertex generation completed", {
         model: VERTEX_MODEL,
-        imageSize: "2K",
+        imageSize: VERTEX_IMAGE_SIZE,
         inputBytes: request.imageBuffer.length,
         inputWidth: request.metadata.width,
         inputHeight: request.metadata.height,
