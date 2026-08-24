@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const [totalRequests, completedImages, failed, processing, completedByModel] =
+  const [total, completed, failed, processing, byModelAndStatus] =
     await Promise.all([
       prisma.generation.count(),
       prisma.generation.count({ where: { status: "COMPLETED" } }),
@@ -21,32 +21,43 @@ export async function GET() {
         },
       }),
       prisma.generation.groupBy({
-        by: ["providerModel"],
-        where: { status: "COMPLETED" },
+        by: ["providerModel", "status"],
         _count: { _all: true },
       }),
     ]);
 
-  let pro = 0;
-  let flash = 0;
+  const models = {
+    pro: { total: 0, completed: 0, failed: 0, processing: 0 },
+    flash: { total: 0, completed: 0, failed: 0, processing: 0 },
+  };
 
-  for (const row of completedByModel) {
+  for (const row of byModelAndStatus) {
     const model = row.providerModel.toLowerCase();
     const count = row._count._all;
+    const bucket = model.includes("flash")
+      ? models.flash
+      : model.includes("pro")
+        ? models.pro
+        : null;
 
-    if (model.includes("flash")) {
-      flash += count;
-    } else if (model.includes("pro")) {
-      pro += count;
+    if (!bucket) continue;
+
+    bucket.total += count;
+
+    if (row.status === "COMPLETED") {
+      bucket.completed += count;
+    } else if (row.status === "FAILED") {
+      bucket.failed += count;
+    } else if (row.status === "QUEUED" || row.status === "PROCESSING") {
+      bucket.processing += count;
     }
   }
 
   return NextResponse.json({
-    totalRequests,
-    completedImages,
+    total,
+    completed,
     failed,
     processing,
-    pro,
-    flash,
+    models,
   });
 }
