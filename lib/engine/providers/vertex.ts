@@ -6,7 +6,7 @@ import {
 } from "../types";
 
 export const VERTEX_PROVIDER = "vertex";
-export const VERTEX_MODEL = "gemini-3-pro-image";
+export const VERTEX_MODEL = "gemini-3.1-flash-image";
 export const VERTEX_IMAGE_SIZE = "2K";
 
 function getVertexClient(): GoogleGenAI {
