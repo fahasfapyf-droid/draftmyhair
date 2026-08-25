@@ -6,6 +6,18 @@ import { prisma } from "@/lib/prisma";
 
 const ENVIRONMENT = "PREVIEW" as const;
 
+type MasterPromptVersionRow = {
+  id: string;
+  version: number;
+  prompt: string;
+  status: string;
+  qaStatus: string;
+  environment: string;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 async function requireAdmin() {
   const session = await auth();
   return session?.user?.id && session.user.role === "ADMIN";
@@ -52,13 +64,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         WHERE "id" = ${id} AND "environment" = ${ENVIRONMENT}::"MasterPromptEnvironment"
       `);
 
-      const updated = await tx.$queryRaw(Prisma.sql`
+      const updated = await tx.$queryRaw<MasterPromptVersionRow[]>(Prisma.sql`
         SELECT "id", "version", "prompt", "status", "qaStatus", "environment", "notes", "createdAt", "updatedAt"
         FROM "MasterPromptVersion"
         WHERE "id" = ${id}
         LIMIT 1
       `);
-      return updated[0];
+      return updated[0] ?? null;
     });
 
     if (!result) return NextResponse.json({ error: "Master prompt version not found." }, { status: 404 });
