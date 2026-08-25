@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 
 export interface SelectedHairstyle {
   id: string;
@@ -46,40 +46,40 @@ export function GenerationSessionProvider({ children }: { children: ReactNode })
     };
   }, [uploadedPreview]);
 
-  function setUploadedPhoto(file: File | null, preview: string | null) {
+  const setUploadedPhoto = useCallback((file: File | null, preview: string | null) => {
     setUploadedFile(file);
     setUploadedPreview(preview);
-  }
+  }, []);
 
-  function setSelectedStyle(style: SelectedHairstyle | null) {
+  const setSelectedStyle = useCallback((style: SelectedHairstyle | null) => {
     setSelectedStyleState(style);
-  }
+  }, []);
 
-  function setSalonClientId(clientId: string | null) {
+  const setSalonClientId = useCallback((clientId: string | null) => {
     setSalonClientIdState(clientId);
-  }
+  }, []);
 
-  function setGenerationStatus(status: GenerationStatus) {
+  const setGenerationStatus = useCallback((status: GenerationStatus) => {
     setGenerationStatusState(status);
-  }
+  }, []);
 
-  function setGenerationFailed(error: string) {
+  const setGenerationFailed = useCallback((error: string) => {
     setGenerationStatusState("failed");
     setGenerationError(error);
-  }
+  }, []);
 
-  function clearGenerationResult() {
+  const clearGenerationResult = useCallback(() => {
     setGenerationStatusState("idle");
     setGenerationError(null);
-  }
+  }, []);
 
-  function resetSession() {
+  const resetSession = useCallback(() => {
     setUploadedFile(null);
     setUploadedPreview(null);
     setSelectedStyleState(null);
     setSalonClientIdState(null);
     clearGenerationResult();
-  }
+  }, [clearGenerationResult]);
 
   const value = useMemo(() => ({
     session: { uploadedFile, uploadedPreview, selectedStyle, salonClientId, generationStatus, generationError },
@@ -90,7 +90,7 @@ export function GenerationSessionProvider({ children }: { children: ReactNode })
     setGenerationFailed,
     clearGenerationResult,
     resetSession,
-  }), [uploadedFile, uploadedPreview, selectedStyle, salonClientId, generationStatus, generationError]);
+  }), [uploadedFile, uploadedPreview, selectedStyle, salonClientId, generationStatus, generationError, setUploadedPhoto, setSelectedStyle, setSalonClientId, setGenerationStatus, setGenerationFailed, clearGenerationResult, resetSession]);
 
   return <GenerationSessionContext.Provider value={value}>{children}</GenerationSessionContext.Provider>;
 }
