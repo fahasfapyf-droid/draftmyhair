@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { StyleSelectionPage } from "@/components/style-selection";
 import { createPageMetadata } from "../metadata";
 
@@ -22,6 +24,9 @@ function getFirstValue(value: string | string[] | undefined): string | undefined
 }
 
 export default async function Page({ searchParams }: PageProps) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login?callbackUrl=/style-selection");
+
   const params = await searchParams;
 
   return (
