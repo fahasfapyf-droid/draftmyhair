@@ -21,6 +21,7 @@ export interface ResultFeedback {
 export interface ResultGeneration {
   id: string;
   imageUrl: string;
+  downloadUrl: string;
   hairstyle: {
     id: string;
     name: string;
@@ -61,7 +62,7 @@ export default function ResultContent({ generation }: ResultContentProps) {
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 1.1 }} className="mt-12 flex justify-center">
           <Button asChild variant="primary" size="lg" className="min-w-[280px]">
-            <a href={generation.imageUrl} download target="_blank" rel="noopener noreferrer">
+            <a href={generation.downloadUrl}>
               <Download className="mr-2 h-5 w-5" />
               Download Image
             </a>
