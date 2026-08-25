@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
@@ -27,15 +26,14 @@ async function requireAdmin() {
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await prisma.$queryRaw<MasterPromptRow[]>(Prisma.sql`
+  const rows = await prisma.$queryRaw<MasterPromptRow[]>`
     SELECT "id", "version", "prompt", "status", "qaStatus", "environment", "notes", "createdAt", "updatedAt"
     FROM "MasterPromptVersion"
     WHERE "environment" = ${ENVIRONMENT}::"MasterPromptEnvironment"
     ORDER BY "version" DESC
-  `);
+  `;
 
   const versions = rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }));
-  const hasDatabaseVersion = rows.length > 0;
 
   return NextResponse.json({
     environment: ENVIRONMENT,
@@ -50,7 +48,6 @@ export async function GET() {
     },
     activeVersion: versions.find((version) => version.status === "ACTIVE") ?? null,
     versions,
-    hasDatabaseVersion,
   }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -67,26 +64,26 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const latest = await tx.$queryRaw<{ version: number }[]>(Prisma.sql`
+      const latest = await tx.$queryRaw<{ version: number }[]>`
         SELECT "version" FROM "MasterPromptVersion"
         WHERE "environment" = ${ENVIRONMENT}::"MasterPromptEnvironment"
         ORDER BY "version" DESC
         LIMIT 1
-      `);
+      `;
       const version = (latest[0]?.version ?? 0) + 1;
 
       if (status === "ACTIVE") {
-        await tx.$executeRaw(Prisma.sql`
+        await tx.$executeRaw`
           UPDATE "MasterPromptVersion"
           SET "status" = 'ARCHIVED', "updatedAt" = CURRENT_TIMESTAMP
           WHERE "environment" = ${ENVIRONMENT}::"MasterPromptEnvironment" AND "status" = 'ACTIVE'
-        `);
+        `;
       }
 
       const id = crypto.randomUUID();
-      await tx.$executeRaw(Prisma.sql`
+      await tx.$executeRaw`
         INSERT INTO "MasterPromptVersion" ("id", "version", "prompt", "status", "qaStatus", "environment", "notes", "createdAt", "updatedAt")
-        VALUES (${id}, ${version}, ${prompt}, ${status}::"PromptStatus", ${qaStatus}::"PromptQAStatus", ${ENVIRONMENT}::"MasterPromptEnvironment", ${notes}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (${id}, ${version}, ${prompt}, CAST(${status} AS "PromptStatus"), CAST(${qaStatus} AS "PromptQAStatus"), ${ENVIRONMENT}::"MasterPromptEnvironment", ${notes}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `;
 
       return { id, version, prompt, status, qaStatus, environment: ENVIRONMENT, notes };
