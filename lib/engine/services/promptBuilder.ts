@@ -6,7 +6,8 @@ import { STYLE_PROMPTS } from "../prompts/styles";
 import { prisma } from "@/lib/prisma";
 import { PromptBuildRequest, PromptBuildResult } from "../types";
 
-const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3";
+// Preview-only test branch: force v3-single without changing production behavior.
+const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single";
 
 function getMasterPrompt(): string {
   switch (ACTIVE_PROMPT_VERSION) {
@@ -42,7 +43,6 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
     finalPromptLength: prompt.length,
   };
 
-  // Keep provenance visible in Vercel production logs. This does not alter the prompt.
   console.log("[PROMPT_PROVENANCE]", JSON.stringify(diagnostics));
 
   return { prompt, diagnostics };
