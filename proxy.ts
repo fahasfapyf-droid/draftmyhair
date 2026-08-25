@@ -5,9 +5,5 @@ export const config = {
     "/dashboard/:path*",
     "/account/:path*",
     "/settings/:path*",
-    "/upload/:path*",
-    "/style-selection/:path*",
-    "/preview/:path*",
-    "/result/:path*",
   ],
 };
