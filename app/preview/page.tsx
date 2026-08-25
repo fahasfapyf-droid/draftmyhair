@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import PreviewContent from "./PreviewContent";
 import { createPageMetadata } from "../metadata";
 
@@ -10,7 +12,10 @@ export const metadata: Metadata = createPageMetadata({
   path: "/preview",
 });
 
-export default function PreviewPage() {
+export default async function PreviewPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login?callbackUrl=/preview");
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <PreviewContent />
