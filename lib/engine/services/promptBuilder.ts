@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { MASTER_PROMPT } from "../prompts/master";
 import { MASTER_PROMPT_V2 } from "../prompts/master-v2";
 import { MASTER_PROMPT_V3 } from "../prompts/master-v3";
@@ -6,10 +8,9 @@ import { STYLE_PROMPTS } from "../prompts/styles";
 import { prisma } from "@/lib/prisma";
 import { PromptBuildRequest, PromptBuildResult } from "../types";
 
-// Preview-only test branch: force v3-single without changing production behavior.
 const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single";
 
-function getMasterPrompt(): string {
+function getCompiledMasterPrompt(): string {
   switch (ACTIVE_PROMPT_VERSION) {
     case "v1": return MASTER_PROMPT;
     case "v2": return MASTER_PROMPT_V2;
@@ -17,6 +18,30 @@ function getMasterPrompt(): string {
     case "v3-single": return MASTER_PROMPT_V3_SINGLE;
     default: throw new Error(`Unknown PROMPT_VERSION: ${ACTIVE_PROMPT_VERSION}`);
   }
+}
+
+async function getMasterPrompt() {
+  const environment = process.env.VERCEL_ENV === "production" ? "PRODUCTION" : "PREVIEW";
+
+  try {
+    const rows = await prisma.$queryRaw<{ prompt: string; version: number }[]>(Prisma.sql`
+      SELECT "prompt", "version"
+      FROM "MasterPromptVersion"
+      WHERE "environment" = ${environment}::"MasterPromptEnvironment" AND "status" = 'ACTIVE'
+      ORDER BY "version" DESC
+      LIMIT 1
+    `);
+
+    if (rows[0]) {
+      return { prompt: rows[0].prompt, source: `database-${environment.toLowerCase()}-v${rows[0].version}` };
+    }
+  } catch (error) {
+    // The compiled prompt remains the safe fallback if the optional override table
+    // is unavailable during rollout or in an environment that has not migrated yet.
+    console.warn("[PROMPT_PROVENANCE] Master prompt DB override unavailable; using compiled prompt.", error);
+  }
+
+  return { prompt: getCompiledMasterPrompt(), source: `compiled-${ACTIVE_PROMPT_VERSION}` };
 }
 
 export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBuildResult> {
@@ -29,16 +54,13 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
   const stylePrompt = databaseStyle?.prompt ?? compiledStyle?.prompt;
   if (!stylePrompt) throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
 
-  const masterPrompt = getMasterPrompt();
-  const stylePromptSource = databaseStyle
-    ? `database-v${databaseStyle.version}`
-    : "compiled";
-  const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
+  const master = await getMasterPrompt();
+  const prompt = `${master.prompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
 
   const diagnostics = {
     promptKey: request.promptKey,
-    masterPromptVersion: ACTIVE_PROMPT_VERSION,
-    stylePromptSource,
+    masterPromptVersion: master.source,
+    stylePromptSource: databaseStyle ? `database-v${databaseStyle.version}` : "compiled",
     stylePromptLength: stylePrompt.length,
     finalPromptLength: prompt.length,
   };
