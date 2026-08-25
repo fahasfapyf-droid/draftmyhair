@@ -26,7 +26,7 @@ const previewCategories: Record<
     copy:
       "Photorealistic hairstyle previews that preserve your facial identity, lighting and proportions so you can choose with confidence.",
     original: "/portfolio/bob/french-bob-before.webp",
-preview: "/portfolio/bob/french-bob-after.webp",
+    preview: "/portfolio/bob/french-bob-after.webp",
   },
 
   hairColour: {
@@ -35,7 +35,7 @@ preview: "/portfolio/bob/french-bob-after.webp",
     copy:
       "Experiment with realistic hair colors while keeping your face, skin tone and lighting exactly the same.",
     original: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-before.webp",
-preview: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
+    preview: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-after.webp",
   },
 
   buzzCut: {
@@ -44,7 +44,7 @@ preview: "/portfolio/dye-color-change/dye-color-change-natural-black-to-blonde-a
     copy:
       "Preview a realistic buzz cut before making the change. No guessing, no surprises.",
     original: "/portfolio/buzzcut/0mm-buzz-before.webp",
-preview: "/portfolio/buzzcut/0mm-buzz-after.webp",
+    preview: "/portfolio/buzzcut/0mm-buzz-after.webp",
   },
 
   bald: {
@@ -53,17 +53,17 @@ preview: "/portfolio/buzzcut/0mm-buzz-after.webp",
     copy:
       "Thinking about shaving your head? Preview a natural bald look before making the decision.",
     original: "/portfolio/bald/clean-bald-before.webp",
-preview: "/portfolio/bald/clean-bald-after.webp",
+    preview: "/portfolio/bald/clean-bald-after.webp",
   },
 
   beard: {
-  label: "Beards",
-  headline: "Find the Beard Style That Fits You.",
-  copy:
-    "Try different beard styles while preserving your natural facial features and proportions.",
-  original: "/portfolio/beard/full-beard-before.webp",
-  preview: "/portfolio/beard/full-beard-after.webp",
-},
+    label: "Beards",
+    headline: "Find the Beard Style That Fits You.",
+    copy:
+      "Try different beard styles while preserving your natural facial features and proportions.",
+    original: "/portfolio/beard/full-beard-before.webp",
+    preview: "/portfolio/beard/full-beard-after.webp",
+  },
 
   beardRemoval: {
     label: "Clean Shave",
@@ -71,7 +71,7 @@ preview: "/portfolio/bald/clean-bald-after.webp",
     copy:
       "Preview a clean-shaven look with realistic identity preservation before picking up the razor.",
     original: "/portfolio/beard/clean-shave-before.webp",
-preview: "/portfolio/beard/clean-shave-after.webp",
+    preview: "/portfolio/beard/clean-shave-after.webp",
   },
 };
 
@@ -93,18 +93,18 @@ export const Hero = () => {
 
   const textVariants = {
     hidden: { opacity: 0, y: 12 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { duration: 1, ease: [0.16, 1, 0.3, 1] } 
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 1, ease: [0.16, 1, 0.3, 1] }
     },
   };
 
   const sliderVariants = {
     hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1, 
-      transition: { duration: 1.5, delay: 0.3, ease: [0.16, 1, 0.3, 1] } 
+    visible: {
+      opacity: 1,
+      transition: { duration: 1.5, delay: 0.3, ease: [0.16, 1, 0.3, 1] }
     },
   };
 
@@ -112,21 +112,21 @@ export const Hero = () => {
     <section className="relative w-full pt-14 pb-16 md:pt-20 md:pb-24 lg:pt-24 lg:pb-28 overflow-hidden bg-brand-canvas">
       <Container>
         <div className="flex flex-col lg:flex-row items-center lg:items-stretch gap-12 lg:gap-16 xl:gap-24">
-          
+
           {/* Left Column: Typography & Actions (35% Visual Weight) */}
-          <motion.div 
+          <motion.div
             className="w-full lg:w-[45%] xl:w-[40%] flex flex-col justify-center order-1"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
           >
-            <motion.span 
+            <motion.span
               variants={textVariants}
               className="block text-[11px] font-semibold uppercase tracking-widest text-brand-muted mb-6"
             >
               Photorealistic Hairstyle Previews
             </motion.span>
-            
+
             {/* Dynamic Headline & Copy with fixed min-height to prevent layout jumps */}
             <motion.div variants={textVariants} className="min-h-[160px] sm:min-h-[140px] md:min-h-[180px] lg:min-h-[220px] mb-4">
               <AnimatePresence mode="wait">
@@ -146,7 +146,7 @@ export const Hero = () => {
                 </motion.div>
               </AnimatePresence>
             </motion.div>
-            
+
             {/* NEW: Category Selector */}
             <motion.div variants={textVariants} className="mb-10">
               <h3 className="text-sm font-medium tracking-tight text-brand-ink mb-4">
@@ -161,8 +161,8 @@ export const Hero = () => {
                       onClick={() => setActiveCategory(key)}
                       className={cn(
                         "px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300 tracking-tight",
-                        isActive 
-                          ? "bg-brand-ink text-brand-canvas shadow-sm pointer-events-none" 
+                        isActive
+                          ? "bg-brand-ink text-brand-canvas shadow-sm pointer-events-none"
                           : "bg-transparent text-brand-muted border border-brand-border/80 hover:border-brand-ink/40 hover:text-brand-ink"
                       )}
                     >
@@ -174,31 +174,31 @@ export const Hero = () => {
             </motion.div>
 
             <motion.div
-  variants={textVariants}
-  className="flex flex-col sm:flex-row items-center gap-4"
->
-  <Button
-    asChild
-    variant="primary"
-    size="lg"
-    className="w-full sm:w-auto"
-  >
-    <Link href="/gallery">
-      View Gallery
-    </Link>
-  </Button>
+              variants={textVariants}
+              className="flex flex-col sm:flex-row items-center gap-4"
+            >
+              <Button
+                asChild
+                variant="primary"
+                size="lg"
+                className="w-full sm:w-auto"
+              >
+                <Link href="/gallery">
+                  View Gallery
+                </Link>
+              </Button>
 
-  <Button
-    asChild
-    variant="secondary"
-    size="lg"
-    className="w-full sm:w-auto"
-  >
-    <Link href="/contact">
-      Contact Us
-    </Link>
-  </Button>
-</motion.div>
+              <Button
+                asChild
+                variant="secondary"
+                size="lg"
+                className="w-full sm:w-auto"
+              >
+                <Link href="/upload">
+                  Upload
+                </Link>
+              </Button>
+            </motion.div>
 
             <motion.div variants={textVariants}>
               <p className="mt-8 text-[10px] uppercase tracking-widest font-medium text-brand-muted">
@@ -208,7 +208,7 @@ export const Hero = () => {
           </motion.div>
 
           {/* Right Column: The Product (65% Visual Weight) */}
-          <motion.div 
+          <motion.div
             className="w-full lg:w-[55%] xl:w-[60%] order-2 flex items-center justify-center lg:justify-end"
             variants={sliderVariants}
             initial="hidden"
