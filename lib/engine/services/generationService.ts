@@ -15,7 +15,7 @@ import {
 } from "../providers/vertex";
 import { buildPrompt } from "./promptBuilder";
 
-const PROVIDER_RETRY_DELAYS_MS = [5000, 15000, 30000];
+const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const RATE_LIMIT_ERROR_PREFIX = "[RATE_LIMIT_429]";
 const RATE_LIMIT_USER_MESSAGE =
   "We're experiencing a temporary system issue. Your credit has been returned. Please try again in a few minutes.";
@@ -26,11 +26,7 @@ function isRateLimitError(error: unknown) {
       ? error.message.toLowerCase()
       : String(error).toLowerCase();
 
-  return (
-    message.includes("429") ||
-    message.includes("rate limit") ||
-    message.includes("resource exhausted")
-  );
+  return message.includes("429") || message.includes("rate limit");
 }
 
 function isRetryableGenerationError(error: unknown) {
@@ -53,6 +49,9 @@ function isRetryableGenerationError(error: unknown) {
     return false;
   }
 
+  // 429/rate-limit responses are deliberately excluded. Retrying immediately
+  // only creates additional provider pressure and can turn one rate-limited
+  // request into several wasted provider calls.
   const retryablePatterns = [
     "timeout",
     "timed out",
@@ -81,7 +80,7 @@ function delay(ms: number) {
 
 async function waitBeforeProviderRetry(attempt: number) {
   const baseDelay = PROVIDER_RETRY_DELAYS_MS[attempt - 1];
-  const jitter = Math.floor(Math.random() * 1000);
+  const jitter = Math.floor(Math.random() * 250);
 
   await delay(baseDelay + jitter);
 }
@@ -128,6 +127,8 @@ export async function generatePreview(
       promptKey: context.promptKey,
     });
 
+    // Log provenance at the generation-service boundary as well as inside
+    // the builder so every successful generation has an explicit audit marker.
     console.log(
       "[GENERATION_PROMPT_PROVENANCE]",
       JSON.stringify(promptResult.diagnostics)
@@ -147,37 +148,30 @@ export async function generatePreview(
     // ============================================================
     // Step 4 — Generate Image
     // ============================================================
-    // Vertex 429 RESOURCE_EXHAUSTED is treated as a transient capacity/rate
-    // condition. Retry it with bounded exponential backoff rather than
-    // immediately converting the first 429 into a failed generation.
+    // The Vertex provider returns transient provider failures as
+    // { success: false }. Retry only failures that are plausibly transient.
+    // Policy/safety refusals and rate limits are explicitly not retried.
 
     let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
 
-    for (
-      let attempt = 1;
-      attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1;
-      attempt++
-    ) {
+    for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
       providerResult = await generateWithVertex(providerRequest);
 
       if (providerResult.success) {
         break;
       }
 
-      const rateLimited = isRateLimitError(providerResult.error);
-      const retryable = rateLimited
-        ? true
-        : isRetryableGenerationError(providerResult.error);
+      if (isRateLimitError(providerResult.error)) {
+        return {
+          success: false,
+          error: `${RATE_LIMIT_ERROR_PREFIX} ${RATE_LIMIT_USER_MESSAGE}`,
+        };
+      }
+
+      const retryable = isRetryableGenerationError(providerResult.error);
       const hasRetryRemaining = attempt <= PROVIDER_RETRY_DELAYS_MS.length;
 
       if (!retryable || !hasRetryRemaining) {
-        if (rateLimited) {
-          return {
-            success: false,
-            error: `${RATE_LIMIT_ERROR_PREFIX} ${RATE_LIMIT_USER_MESSAGE}`,
-          };
-        }
-
         return {
           success: false,
           error: providerResult.error ?? "Image generation failed.",
@@ -185,14 +179,10 @@ export async function generatePreview(
       }
 
       console.warn(
-        rateLimited
-          ? `Vertex capacity/rate limit on attempt ${attempt}. Retrying with backoff...`
-          : `Transient Vertex generation failure on attempt ${attempt}. Retrying...`,
+        `Transient Vertex generation failure on attempt ${attempt}. Retrying...`,
         {
           error: providerResult.error,
-          attempt,
           nextAttempt: attempt + 1,
-          retryDelayMs: PROVIDER_RETRY_DELAYS_MS[attempt - 1],
         }
       );
 
@@ -241,7 +231,8 @@ export async function generatePreview(
 
     const generationId = crypto.randomUUID();
 
-    const imageUrl = "/images/placeholders/generated-preview.jpg";
+    const imageUrl =
+      "/images/placeholders/generated-preview.jpg";
 
     // ============================================================
     // Step 6 — Return
