@@ -59,11 +59,12 @@ export const Navbar = () => {
               FAQ
             </Link>
 
-            <Button asChild variant="primary">
-              <Link href="/upload">
-                Upload
-              </Link>
-            </Button>
+            <Link
+              href="/contact"
+              className="transition-colors hover:text-brand-ink"
+            >
+              Contact
+            </Link>
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -155,13 +156,21 @@ export const Navbar = () => {
                 FAQ
               </Link>
 
-              <Button asChild variant="primary">
-                <Link href="/upload" onClick={closeMenu}>
-                  Upload
-                </Link>
-              </Button>
+              <Link
+                href="/contact"
+                onClick={closeMenu}
+                className="text-brand-ink transition-colors hover:text-brand-muted"
+              >
+                Contact
+              </Link>
 
               <div className="mt-4 flex flex-col gap-3">
+                <Button asChild variant="primary">
+                  <Link href="/upload" onClick={closeMenu}>
+                    Upload
+                  </Link>
+                </Button>
+
                 {isAuthenticated ? (
                   <>
                     <Button
@@ -199,10 +208,7 @@ export const Navbar = () => {
                       asChild
                       variant="primary"
                     >
-                      <Link
-                        href="/register"
-                        onClick={closeMenu}
-                      >
+                      <Link href="/register" onClick={closeMenu}>
                         Register
                       </Link>
                     </Button>
