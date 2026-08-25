@@ -48,11 +48,15 @@ export default async function ResultPage({ searchParams }: ResultPageProps) {
 
   if (!generation?.outputImageUrl || !generation.resultStorageKey) notFound();
 
+  const pathname = encodeURIComponent(generation.resultStorageKey);
+  const style = encodeURIComponent(generation.hairstyle.name);
+
   return (
     <ResultContent
       generation={{
         id: generation.id,
-        imageUrl: `/api/blob?pathname=${encodeURIComponent(generation.resultStorageKey)}`,
+        imageUrl: `/api/blob?pathname=${pathname}`,
+        downloadUrl: `/api/download?pathname=${pathname}&style=${style}`,
         hairstyle: generation.hairstyle,
         feedback: generation.feedback,
       }}
