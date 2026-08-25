@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { UploadPage } from "@/components/upload";
 import { createPageMetadata } from "../metadata";
 
@@ -10,7 +12,10 @@ export const metadata: Metadata = createPageMetadata({
   path: "/upload",
 });
 
-export default function Upload() {
+export default async function Upload() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login?callbackUrl=/upload");
+
   return (
     <Suspense fallback={null}>
       <UploadPage />
