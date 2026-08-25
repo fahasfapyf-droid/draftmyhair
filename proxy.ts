@@ -6,5 +6,8 @@ export const config = {
     "/account/:path*",
     "/settings/:path*",
     "/upload/:path*",
+    "/style-selection/:path*",
+    "/preview/:path*",
+    "/result/:path*",
   ],
 };
