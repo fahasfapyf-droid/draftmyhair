@@ -7,7 +7,7 @@ import {
 
 export const VERTEX_PROVIDER = "vertex";
 export const VERTEX_MODEL = "gemini-3-pro-image";
-export const VERTEX_IMAGE_SIZE = "2K";
+export const VERTEX_IMAGE_SIZE = "1K";
 
 function getVertexClient(): GoogleGenAI {
   const project = process.env.GOOGLE_CLOUD_PROJECT_ID;
