@@ -59,12 +59,11 @@ export const Navbar = () => {
               FAQ
             </Link>
 
-            <Link
-              href="/contact"
-              className="transition-colors hover:text-brand-ink"
-            >
-              Contact
-            </Link>
+            <Button asChild variant="primary">
+              <Link href="/upload">
+                Upload
+              </Link>
+            </Button>
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -125,7 +124,8 @@ export const Navbar = () => {
             )}
           </button>
         </div>
-                {mobileOpen && (
+
+        {mobileOpen && (
           <nav
             id="mobile-navigation"
             className="border-t border-brand-border/40 py-6 md:hidden"
@@ -155,13 +155,11 @@ export const Navbar = () => {
                 FAQ
               </Link>
 
-              <Link
-                href="/contact"
-                onClick={closeMenu}
-                className="text-brand-ink transition-colors hover:text-brand-muted"
-              >
-                Contact
-              </Link>
+              <Button asChild variant="primary">
+                <Link href="/upload" onClick={closeMenu}>
+                  Upload
+                </Link>
+              </Button>
 
               <div className="mt-4 flex flex-col gap-3">
                 {isAuthenticated ? (
