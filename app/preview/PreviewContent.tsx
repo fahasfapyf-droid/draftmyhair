@@ -54,9 +54,27 @@ export default function PreviewContent() {
   useEffect(() => {
     if (hasStartedGeneration.current) return;
 
-    // Recovery must run before the normal session guards. A full browser
-    // refresh can recreate the React session context without the uploaded
-    // File/style, while the server-side generation is still running.
+    // The generation ID in the URL is the durable recovery reference. This
+    // survives a full browser refresh even when the in-memory session is gone.
+    const urlGenerationId =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("generationId")
+        : null;
+
+    if (urlGenerationId) {
+      hasStartedGeneration.current = true;
+      setActiveGeneration(urlGenerationId);
+      setGenerationId(urlGenerationId);
+      setGenerationStatus("generating");
+      console.info("[GENERATION_RECOVERY] restored generation from URL", {
+        generationId: urlGenerationId,
+        at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Keep sessionStorage as a secondary recovery path for previews that were
+    // already running before the URL-based recovery reference was introduced.
     const activeGeneration = getActiveGeneration();
     if (activeGeneration) {
       const ageMs = Date.now() - Date.parse(activeGeneration.startedAt);
@@ -89,6 +107,10 @@ export default function PreviewContent() {
     const selectedStyle = session.selectedStyle;
     const salonClientId = session.salonClientId;
     const nextGenerationId = crypto.randomUUID();
+
+    // Put the generation ID into the URL before starting the provider request.
+    // A refresh at any point during Vertex processing can now recover by ID.
+    router.replace(`/preview?generationId=${nextGenerationId}`);
     setActiveGeneration(nextGenerationId);
     setGenerationId(nextGenerationId);
 
