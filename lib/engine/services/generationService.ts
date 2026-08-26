@@ -16,6 +16,8 @@ import {
 import { buildPrompt } from "./promptBuilder";
 
 const PROVIDER_RETRY_DELAYS_MS = [1000, 2000, 4000];
+const RATE_LIMIT_RETRY_DELAY_MS = 5000;
+const RATE_LIMIT_RETRY_JITTER_MS = 1000;
 const RATE_LIMIT_ERROR_PREFIX = "[RATE_LIMIT_429]";
 const RATE_LIMIT_USER_MESSAGE =
   "We're experiencing a temporary system issue. Your credit has been returned. Please try again in a few minutes.";
@@ -35,7 +37,6 @@ function isRetryableGenerationError(error: unknown) {
       ? error.message.toLowerCase()
       : String(error).toLowerCase();
 
-  // Never spend additional provider calls on policy/safety refusals.
   const nonRetryablePatterns = [
     "blocked the image request",
     "safety",
@@ -49,9 +50,6 @@ function isRetryableGenerationError(error: unknown) {
     return false;
   }
 
-  // 429/rate-limit responses are deliberately excluded. Retrying immediately
-  // only creates additional provider pressure and can turn one rate-limited
-  // request into several wasted provider calls.
   const retryablePatterns = [
     "timeout",
     "timed out",
@@ -85,14 +83,10 @@ async function waitBeforeProviderRetry(attempt: number) {
   await delay(baseDelay + jitter);
 }
 
-/**
- * ============================================================
- * Draft My Hair
- * Generation Service
- * ============================================================
- *
- * Coordinates the complete hairstyle generation pipeline.
- */
+async function waitBeforeRateLimitRetry() {
+  const jitter = Math.floor(Math.random() * RATE_LIMIT_RETRY_JITTER_MS);
+  await delay(RATE_LIMIT_RETRY_DELAY_MS + jitter);
+}
 
 export function getGenerationMetadata() {
   return {
@@ -106,10 +100,6 @@ export async function generatePreview(
   context: GenerationContext
 ): Promise<GenerationResult> {
   try {
-    // ============================================================
-    // Step 1 — Validate Request
-    // ============================================================
-
     const validation = validateGenerationRequest(context);
 
     if (!validation.valid) {
@@ -119,24 +109,14 @@ export async function generatePreview(
       };
     }
 
-    // ============================================================
-    // Step 2 — Build Prompt
-    // ============================================================
-
     const promptResult = await buildPrompt({
       promptKey: context.promptKey,
     });
 
-    // Log provenance at the generation-service boundary as well as inside
-    // the builder so every successful generation has an explicit audit marker.
     console.log(
       "[GENERATION_PROMPT_PROVENANCE]",
       JSON.stringify(promptResult.diagnostics)
     );
-
-    // ============================================================
-    // Step 3 — Prepare Provider Request
-    // ============================================================
 
     const providerRequest: ProviderGenerationRequest = {
       imageBuffer: context.imageBuffer,
@@ -145,14 +125,8 @@ export async function generatePreview(
       prompt: promptResult.prompt,
     };
 
-    // ============================================================
-    // Step 4 — Generate Image
-    // ============================================================
-    // The Vertex provider returns transient provider failures as
-    // { success: false }. Retry only failures that are plausibly transient.
-    // Policy/safety refusals and rate limits are explicitly not retried.
-
     let providerResult: Awaited<ReturnType<typeof generateWithVertex>> | null = null;
+    let rateLimitRetried = false;
 
     for (let attempt = 1; attempt <= PROVIDER_RETRY_DELAYS_MS.length + 1; attempt++) {
       providerResult = await generateWithVertex(providerRequest);
@@ -162,10 +136,22 @@ export async function generatePreview(
       }
 
       if (isRateLimitError(providerResult.error)) {
-        return {
-          success: false,
-          error: `${RATE_LIMIT_ERROR_PREFIX} ${RATE_LIMIT_USER_MESSAGE}`,
-        };
+        if (rateLimitRetried) {
+          return {
+            success: false,
+            error: `${RATE_LIMIT_ERROR_PREFIX} ${RATE_LIMIT_USER_MESSAGE}`,
+          };
+        }
+
+        rateLimitRetried = true;
+        console.warn("Vertex 429 RESOURCE_EXHAUSTED. Retrying once with backoff...", {
+          error: providerResult.error,
+          retryDelayMs: RATE_LIMIT_RETRY_DELAY_MS,
+          retryAttempt: 2,
+        });
+
+        await waitBeforeRateLimitRetry();
+        continue;
       }
 
       const retryable = isRetryableGenerationError(providerResult.error);
@@ -217,26 +203,8 @@ export async function generatePreview(
       };
     }
 
-    // ============================================================
-    // Step 5 — Storage (Temporary)
-    // ============================================================
-
-    /**
-     * TODO
-     * Replace with:
-     * - Vercel Blob
-     * - Cloudflare R2
-     * - Amazon S3
-     */
-
     const generationId = crypto.randomUUID();
-
-    const imageUrl =
-      "/images/placeholders/generated-preview.jpg";
-
-    // ============================================================
-    // Step 6 — Return
-    // ============================================================
+    const imageUrl = "/images/placeholders/generated-preview.jpg";
 
     return {
       success: true,
