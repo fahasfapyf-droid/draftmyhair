@@ -120,6 +120,24 @@ FRAME FIDELITY OVERRIDES HAIRSTYLE AESTHETICS.
 
 Pose fidelity overrides hairstyle aesthetics.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRIMARY OBJECTIVE & IDENTITY LOCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Generate the requested hairstyle by modifying only the existing hair and the minimum image area required to naturally reveal previously occluded anatomy.
+
+100% absolute preservation of the subject's original identity. You must strictly preserve and lock the following elements without any alteration, smoothing, or AI distortion:
+• head position, tilt, and rotation
+• skull and jaw geometry
+• ears, neck, and shoulders
+• facial proportions and expression
+• framing, crop, and zoom
+• camera perspective and depth of field
+• lighting, exposure, and white balance
+• skin texture, pores, freckles, and undertones
+
+Do not regenerate, reshape, smooth, reconstruct, or reinterpret any facial or anatomical region. The newly exposed neck, ears, and shoulders must remain anatomically identical to the source image's underlying structure.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 REALISM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
