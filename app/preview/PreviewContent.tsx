@@ -6,6 +6,13 @@ import { GenerationStatus } from "./GenerationStatus";
 import { useGenerationSession } from "@/lib/context/GenerationSession";
 import { useGenerationPolling } from "@/hooks/useGenerationPolling";
 import { prepareGenerationImage } from "@/lib/image/prepare-generation-image";
+import {
+  clearActiveGeneration,
+  getActiveGeneration,
+  setActiveGeneration,
+} from "@/lib/generation/active-generation-storage";
+
+const MAX_ACTIVE_GENERATION_AGE_MS = 60 * 60 * 1000;
 
 export default function PreviewContent() {
   const router = useRouter();
@@ -15,8 +22,9 @@ export default function PreviewContent() {
   const { session, setGenerationStatus, setGenerationFailed } = useGenerationSession();
 
   const handleCompleted = useCallback((completedGenerationId: string) => {
+    clearActiveGeneration(completedGenerationId);
     setGenerationStatus("success");
-    console.info("[GENERATION_TIMING] result navigation", {
+    console.info("[GENERATION_RECOVERY] generation completed", {
       generationId: completedGenerationId,
       at: new Date().toISOString(),
     });
@@ -24,14 +32,67 @@ export default function PreviewContent() {
   }, [router, setGenerationStatus]);
 
   const handleFailed = useCallback((error: string) => {
+    const active = getActiveGeneration();
+    if (active) {
+      clearActiveGeneration(active.generationId);
+      console.info("[GENERATION_RECOVERY] generation terminated", {
+        generationId: active.generationId,
+        at: new Date().toISOString(),
+      });
+    }
     hasStartedGeneration.current = false;
     setGenerationId(null);
     setGenerationFailed(error);
   }, [setGenerationFailed]);
 
-  const polledStatus = useGenerationPolling({ generationId, onCompleted: handleCompleted, onFailed: handleFailed });
+  const polledStatus = useGenerationPolling({
+    generationId,
+    onCompleted: handleCompleted,
+    onFailed: handleFailed,
+  });
 
   useEffect(() => {
+    if (hasStartedGeneration.current) return;
+
+    // The generation ID in the URL is the durable recovery reference. This
+    // survives a full browser refresh even when the in-memory session is gone.
+    const urlGenerationId =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("generationId")
+        : null;
+
+    if (urlGenerationId) {
+      hasStartedGeneration.current = true;
+      setActiveGeneration(urlGenerationId);
+      setGenerationId(urlGenerationId);
+      setGenerationStatus("generating");
+      console.info("[GENERATION_RECOVERY] restored generation from URL", {
+        generationId: urlGenerationId,
+        at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Keep sessionStorage as a secondary recovery path for previews that were
+    // already running before the URL-based recovery reference was introduced.
+    const activeGeneration = getActiveGeneration();
+    if (activeGeneration) {
+      const ageMs = Date.now() - Date.parse(activeGeneration.startedAt);
+      if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= MAX_ACTIVE_GENERATION_AGE_MS) {
+        hasStartedGeneration.current = true;
+        setGenerationId(activeGeneration.generationId);
+        setGenerationStatus("generating");
+        console.info("[GENERATION_RECOVERY] restored active generation", {
+          generationId: activeGeneration.generationId,
+          ageMs,
+          at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      clearActiveGeneration(activeGeneration.generationId);
+    }
+
     if (!session.uploadedFile) {
       router.replace("/upload");
       return;
@@ -40,13 +101,17 @@ export default function PreviewContent() {
       router.replace("/style-selection");
       return;
     }
-    if (hasStartedGeneration.current) return;
 
     hasStartedGeneration.current = true;
     const uploadedFile = session.uploadedFile;
     const selectedStyle = session.selectedStyle;
     const salonClientId = session.salonClientId;
     const nextGenerationId = crypto.randomUUID();
+
+    // Put the generation ID into the URL before starting the provider request.
+    // A refresh at any point during Vertex processing can now recover by ID.
+    router.replace(`/preview?generationId=${nextGenerationId}`);
+    setActiveGeneration(nextGenerationId);
     setGenerationId(nextGenerationId);
 
     async function generate() {
