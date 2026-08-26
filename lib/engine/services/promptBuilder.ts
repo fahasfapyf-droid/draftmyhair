@@ -8,7 +8,7 @@ import { PromptBuildRequest, PromptBuildResult } from "../types";
 
 // Preview-only experiment. Production remains master + style.
 const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single";
-const PREVIEW_STYLE_PROMPT_ONLY = true;
+const PREVIEW_STYLE_PROMPT_ONLY = false;
 
 function getMasterPrompt(): string {
   switch (ACTIVE_PROMPT_VERSION) {
