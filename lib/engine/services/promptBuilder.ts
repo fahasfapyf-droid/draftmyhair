@@ -6,8 +6,9 @@ import { STYLE_PROMPTS } from "../prompts/styles";
 import { prisma } from "@/lib/prisma";
 import { PromptBuildRequest, PromptBuildResult } from "../types";
 
-// Preview-only test branch: force v3-single without changing production behavior.
+// Preview-only experiment. Production remains master + style.
 const ACTIVE_PROMPT_VERSION = process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single";
+const PREVIEW_STYLE_PROMPT_ONLY = true;
 
 function getMasterPrompt(): string {
   switch (ACTIVE_PROMPT_VERSION) {
@@ -33,11 +34,14 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
   const stylePromptSource = databaseStyle
     ? `database-v${databaseStyle.version}`
     : "compiled";
-  const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
+
+  const prompt = PREVIEW_STYLE_PROMPT_ONLY
+    ? stylePrompt.trim()
+    : `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
 
   const diagnostics = {
     promptKey: request.promptKey,
-    masterPromptVersion: ACTIVE_PROMPT_VERSION,
+    masterPromptVersion: PREVIEW_STYLE_PROMPT_ONLY ? "style-only-preview" : ACTIVE_PROMPT_VERSION,
     stylePromptSource,
     stylePromptLength: stylePrompt.length,
     finalPromptLength: prompt.length,
