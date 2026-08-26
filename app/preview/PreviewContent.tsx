@@ -52,16 +52,11 @@ export default function PreviewContent() {
   });
 
   useEffect(() => {
-    if (!session.uploadedFile) {
-      router.replace("/upload");
-      return;
-    }
-    if (!session.selectedStyle) {
-      router.replace("/style-selection");
-      return;
-    }
     if (hasStartedGeneration.current) return;
 
+    // Recovery must run before the normal session guards. A full browser
+    // refresh can recreate the React session context without the uploaded
+    // File/style, while the server-side generation is still running.
     const activeGeneration = getActiveGeneration();
     if (activeGeneration) {
       const ageMs = Date.now() - Date.parse(activeGeneration.startedAt);
@@ -78,6 +73,15 @@ export default function PreviewContent() {
       }
 
       clearActiveGeneration(activeGeneration.generationId);
+    }
+
+    if (!session.uploadedFile) {
+      router.replace("/upload");
+      return;
+    }
+    if (!session.selectedStyle) {
+      router.replace("/style-selection");
+      return;
     }
 
     hasStartedGeneration.current = true;
