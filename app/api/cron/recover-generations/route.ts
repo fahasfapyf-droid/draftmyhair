@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { recoverStaleGenerations } from "@/lib/services/generation-recovery.service";
+import { expireOldGeneratedImages } from "@/lib/services/generated-image-retention.service";
 
 export const dynamic = "force-dynamic";
 
@@ -25,17 +26,19 @@ export async function GET(request: Request) {
   }
 
   try {
-    const summary = await recoverStaleGenerations();
+    const recovery = await recoverStaleGenerations();
+    const retention = await expireOldGeneratedImages();
 
     return NextResponse.json({
       success: true,
-      ...summary,
+      ...recovery,
+      generatedImages: retention,
     });
   } catch (error) {
-    console.error("Stale generation sweep failed:", error);
+    console.error("Generation maintenance sweep failed:", error);
 
     return NextResponse.json(
-      { success: false, error: "Recovery sweep failed." },
+      { success: false, error: "Maintenance sweep failed." },
       { status: 500 }
     );
   }
