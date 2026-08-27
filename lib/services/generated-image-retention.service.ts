@@ -5,6 +5,7 @@ import { deleteFromStorage } from "@/lib/storage";
 
 const GENERATED_IMAGE_RETENTION_DAYS = 7;
 const RETENTION_BATCH_SIZE = 100;
+const RETENTION_CONCURRENCY = 10;
 
 export type GeneratedImageRetentionSummary = {
   eligible: number;
@@ -50,31 +51,44 @@ export async function expireOldGeneratedImages(): Promise<GeneratedImageRetentio
   let deleted = 0;
   let failed = 0;
 
-  for (const image of candidates) {
-    try {
-      await deleteFromStorage({ blobUrl: image.blobUrl });
+  for (let index = 0; index < candidates.length; index += RETENTION_CONCURRENCY) {
+    const batch = candidates.slice(index, index + RETENTION_CONCURRENCY);
 
-      await prisma.$transaction(async (tx) => {
-        await tx.image.update({
-          where: { id: image.id },
-          data: { status: ImageStatus.DELETED },
-        });
+    const results = await Promise.allSettled(
+      batch.map(async (image) => {
+        await deleteFromStorage({ blobUrl: image.blobUrl });
 
-        if (image.generationId) {
-          await tx.generation.update({
-            where: { id: image.generationId },
-            data: {
-              outputImageUrl: null,
-              resultStorageKey: null,
-            },
+        await prisma.$transaction(async (tx) => {
+          await tx.image.update({
+            where: { id: image.id },
+            data: { status: ImageStatus.DELETED },
           });
-        }
-      });
 
-      deleted += 1;
-    } catch (error) {
-      failed += 1;
-      console.error(`Generated image retention cleanup failed for ${image.id}:`, error);
+          if (image.generationId) {
+            await tx.generation.update({
+              where: { id: image.generationId },
+              data: {
+                outputImageUrl: null,
+                resultStorageKey: null,
+              },
+            });
+          }
+        });
+      })
+    );
+
+    for (const [batchIndex, result] of results.entries()) {
+      const image = batch[batchIndex];
+
+      if (result.status === "fulfilled") {
+        deleted += 1;
+      } else {
+        failed += 1;
+        console.error(
+          `Generated image retention cleanup failed for ${image.id}:`,
+          result.reason
+        );
+      }
     }
   }
 
