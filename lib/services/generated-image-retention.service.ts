@@ -3,7 +3,7 @@ import { GenerationStatus, ImageStatus, ImageType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteFromStorage } from "@/lib/storage";
 
-const GENERATED_IMAGE_RETENTION_DAYS = 7;
+const GENERATED_IMAGE_RETENTION_HOURS = 1;
 const RETENTION_BATCH_SIZE = 100;
 const RETENTION_CONCURRENCY = 10;
 
@@ -15,12 +15,12 @@ export type GeneratedImageRetentionSummary = {
 
 function retentionCutoff() {
   return new Date(
-    Date.now() - GENERATED_IMAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000
+    Date.now() - GENERATED_IMAGE_RETENTION_HOURS * 60 * 60 * 1000
   );
 }
 
 /**
- * Deletes generated preview blobs once they are more than seven days old.
+ * Deletes generated preview blobs once they are more than one hour old.
  *
  * Feedback is intentionally preserved: feedback belongs to the Generation
  * record, while this sweep only removes the generated Image/blob and clears
