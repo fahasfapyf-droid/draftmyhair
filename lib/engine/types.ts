@@ -49,6 +49,14 @@ export interface GenerationContext {
   promptKey: string;
 
   /**
+   * Internal-only prompt override (optimizer candidate style block). When
+   * present, the provider receives THIS text as the hairstyle section instead
+   * of the promptKey-resolved style. The Generation row still records
+   * promptKey/promptVersion for provenance. Never set from a public route.
+   */
+  promptOverride?: string;
+
+  /**
    * Optional user identifier.
    */
   userId?: string;
@@ -110,6 +118,11 @@ export interface PromptBuildRequest {
    * Selected hairstyle prompt key.
    */
   promptKey: string;
+
+  /**
+   * Internal-only prompt override (optimizer candidate style block).
+   */
+  promptOverride?: string;
 }
 
 export interface PromptBuildDiagnostics {

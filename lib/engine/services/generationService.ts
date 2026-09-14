@@ -125,6 +125,9 @@ export async function generatePreview(
 
     const promptResult = await buildPrompt({
       promptKey: context.promptKey,
+      ...(context.promptOverride
+        ? { promptOverride: context.promptOverride }
+        : {}),
     });
 
     // Log provenance at the generation-service boundary as well as inside
