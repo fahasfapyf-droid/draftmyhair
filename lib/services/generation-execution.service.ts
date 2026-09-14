@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { GenerationStatus, ImageType } from "@prisma/client";
+import { GenerationStatus, ImageType, Prisma } from "@prisma/client";
 import { getImageMetadata } from "@/lib/image/metadata";
 import { generatePreview, getGenerationMetadata } from "@/lib/engine";
 import { prisma } from "@/lib/prisma";
@@ -80,6 +80,10 @@ async function generatePreviewWithRetry(
 
 export type GeneratePreviewJob = {
   generationId: string;
+  /**
+   * Internal-only prompt override (optimizer candidate style block).
+   */
+  promptOverride?: string;
   sourceImage: {
     buffer: Buffer;
     mimeType: string;
@@ -92,6 +96,20 @@ export type PrepareGeneratePreviewJobInput = {
   promptKey: string;
   imageBuffer: Buffer;
   mimeType: string;
+  /**
+   * Internal-only prompt override (optimizer candidate style block).
+   */
+  promptOverride?: string;
+  /**
+   * Internal-only flag: internal optimizer calls never consume customer
+   * credits. The public /api/generate route is the only credit-debit path.
+   */
+  skipCredits?: boolean;
+  /**
+   * Internal-only provenance (experimentId, internal: true, ...). Persisted
+   * on the Generation.metadata JSON column; used for per-experiment audit.
+   */
+  metadata?: Record<string, unknown>;
 };
 
 export type GenerationExecutionFailure = {
@@ -138,13 +156,28 @@ export async function prepareGeneratePreviewJob(
       userId: input.userId,
       hairstyleId: hairstyle.id,
       promptKey: input.promptKey,
+      metadata: input.metadata === undefined ? undefined : (JSON.parse(JSON.stringify(input.metadata)) as Prisma.InputJsonValue),
       ...getGenerationMetadata(),
     });
+
+    // Internal optimizer calls can carry a prompt override and always skip
+    // credit consumption; provenance is logged explicitly so every internal
+    // generation has an audit trail without touching public behavior.
+    console.log(
+      "[INTERNAL_GENERATION]",
+      JSON.stringify({
+        generationId: generation.id,
+        experimentId: input.metadata?.experimentId ?? null,
+        promptOverride: input.promptOverride ?? null,
+        skipCredits: input.skipCredits ?? false,
+      })
+    );
 
     return {
       ok: true,
       job: {
         generationId: generation.id,
+        promptOverride: input.promptOverride,
         sourceImage: {
           buffer: input.imageBuffer,
           mimeType: input.mimeType,
@@ -269,6 +302,9 @@ export async function executeGeneratePreviewJob(
       metadata,
       promptKey: generation.promptKey,
       userId: generation.userId,
+      ...(job.promptOverride
+        ? { promptOverride: job.promptOverride }
+        : {}),
     });
 
     if (!result.success) {
