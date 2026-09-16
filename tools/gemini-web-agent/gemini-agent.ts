@@ -212,6 +212,35 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
     return;
   }
 
+  if (source.startsWith("blob:")) {
+    const base64 = await page.evaluate(async (blobUrl) => {
+      const response = await fetch(blobUrl);
+      if (!response.ok) throw new Error(`Blob fetch failed: HTTP ${response.status}`);
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result !== "string") {
+            reject(new Error("Blob conversion did not produce a data URL."));
+            return;
+          }
+          const comma = result.indexOf(",");
+          if (comma < 0) {
+            reject(new Error("Invalid blob data URL."));
+            return;
+          }
+          resolve(result.slice(comma + 1));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error("Blob FileReader failed."));
+        reader.readAsDataURL(blob);
+      });
+    }, source);
+
+    await fs.writeFile(outputPath, Buffer.from(base64, "base64"));
+    return;
+  }
+
   const response = await page.request.get(source);
   if (!response.ok()) throw new Error(`Image download failed: HTTP ${response.status()}`);
   await fs.writeFile(outputPath, await response.body());
