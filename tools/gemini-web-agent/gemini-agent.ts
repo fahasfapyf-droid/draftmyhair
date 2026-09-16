@@ -1,11 +1,17 @@
 import { chromium, type BrowserContext, type Page, type Locator } from "playwright";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 
 const ROOT = path.resolve(process.cwd(), "tools/gemini-web-agent");
 const PROFILE_DIR = path.join(ROOT, "chrome-profile");
 const OUTPUT_DIR = path.join(ROOT, "output");
 const GEMINI_URL = "https://gemini.google.com/app";
+const GENERATION_LOG_PATH = path.join(PROFILE_DIR, "generation-log.json");
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const MAX_GENERATIONS_PER_HOUR = 12;
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -21,6 +27,54 @@ function requiredArg(name: string): string {
 async function pause(ms: number, reason: string): Promise<void> {
   console.log(`${reason} (${(ms / 1000).toFixed(1)}s)...`);
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readGenerationLog(): Promise<number[]> {
+  try {
+    const raw = await fs.readFile(GENERATION_LOG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  } catch {
+    return [];
+  }
+}
+
+async function writeGenerationLog(values: number[]): Promise<void> {
+  await fs.writeFile(GENERATION_LOG_PATH, JSON.stringify(values, null, 2), "utf8");
+}
+
+async function waitForGenerationSlot(): Promise<void> {
+  while (true) {
+    const now = Date.now();
+    const recent = (await readGenerationLog()).filter((stamp) => now - stamp < ONE_HOUR_MS);
+    await writeGenerationLog(recent);
+
+    if (recent.length >= MAX_GENERATIONS_PER_HOUR) {
+      const waitMs = Math.max(1_000, ONE_HOUR_MS - (now - recent[0]) + 1_000);
+      await pause(waitMs, "Hourly Gemini generation limit reached; waiting for the next rolling-hour slot");
+      continue;
+    }
+
+    const last = recent.at(-1);
+    if (last !== undefined) {
+      const waitMs = FIVE_MINUTES_MS - (now - last);
+      if (waitMs > 0) {
+        await pause(waitMs, "Waiting for the five-minute Gemini generation slot");
+        continue;
+      }
+    }
+
+    return;
+  }
+}
+
+async function recordGeneration(): Promise<void> {
+  const now = Date.now();
+  const recent = (await readGenerationLog()).filter((stamp) => now - stamp < ONE_HOUR_MS);
+  recent.push(now);
+  await writeGenerationLog(recent);
+  console.log(`Gemini generation recorded. Rolling-hour count: ${recent.length}/${MAX_GENERATIONS_PER_HOUR}.`);
 }
 
 async function firstVisible(locators: Locator[]): Promise<Locator> {
@@ -280,17 +334,37 @@ async function waitForManualSignIn(page: Page): Promise<void> {
   console.log("Gemini sign-in detected. Continuing...");
 }
 
+async function waitForHumanDecision(imagePath: string, prompt: string): Promise<{ action: "approve" | "regenerate" | "exit"; prompt?: string }> {
+  console.log("");
+  console.log("=== HUMAN APPROVAL GATE ===");
+  console.log(`Generated image: ${imagePath}`);
+  console.log(`Prompt: ${prompt}`);
+  console.log("This image is an internal R&D artifact. Review it before approval.");
+  console.log("Commands: APPROVE | REGENERATE <revised prompt> | EXIT");
+  const rl = createInterface({ input, output });
+  try {
+    const answer = (await rl.question("QA decision: ")).trim();
+    if (/^approve$/i.test(answer)) return { action: "approve" };
+    if (/^exit$/i.test(answer)) return { action: "exit" };
+    const match = answer.match(/^regenerate\\s+(.+)$/i);
+    if (match) return { action: "regenerate", prompt: match[1].trim() };
+    console.log("Unrecognized command. Leaving Chrome open.");
+    return { action: "exit" };
+  } finally {
+    rl.close();
+  }
+}
+
 async function keepBrowserOpen(): Promise<void> {
-  console.log("Generation complete. Chrome will remain open for inspection.");
-  console.log("The agent will keep this Gemini window open. Press Ctrl+C only when you want to stop the agent.");
+  console.log("Chrome will remain open. Stop the agent with Ctrl+C when finished.");
   await new Promise<void>(() => {
-    // Intentionally keep the process and browser alive for manual inspection.
+    // Intentionally keep the process and browser alive for inspection.
   });
 }
 
 async function main(): Promise<void> {
   const imagePath = path.resolve(requiredArg("image"));
-  const prompt = requiredArg("prompt");
+  let prompt = requiredArg("prompt");
 
   await fs.access(imagePath);
   await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -309,26 +383,38 @@ async function main(): Promise<void> {
   try {
     await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForTimeout(2_000);
-
     await waitForManualSignIn(page);
-    await uploadReference(page, imagePath);
 
-    // Capture the baseline only AFTER the reference image has been uploaded.
-    // This prevents the uploaded reference from being mistaken for Gemini's result.
-    const sourcesBeforeSubmit = new Set(await getLargeImageSources(page));
+    while (true) {
+      await waitForGenerationSlot();
+      await uploadReference(page, imagePath);
+      const sourcesBeforeSubmit = new Set(await getLargeImageSources(page));
 
-    await submitPrompt(page, prompt);
-    console.log("Prompt submitted. Waiting for Gemini image response...");
+      await submitPrompt(page, prompt);
+      await recordGeneration();
+      console.log("Prompt submitted. Waiting for Gemini image response...");
 
-    await waitForImageResponse(page, sourcesBeforeSubmit);
-    await pause(2_000, "Generated image detected; allowing the result UI to settle");
+      await waitForImageResponse(page, sourcesBeforeSubmit);
+      await pause(2_000, "Generated image detected; allowing the result UI to settle");
 
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const outputPath = path.join(OUTPUT_DIR, `gemini-${stamp}.png`);
-    await downloadGeneratedImage(page, outputPath, sourcesBeforeSubmit);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const outputPath = path.join(OUTPUT_DIR, `gemini-${stamp}.png`);
+      await downloadGeneratedImage(page, outputPath, sourcesBeforeSubmit);
+      console.log(`Generated image captured automatically: ${outputPath}`);
 
-    console.log(`Generated image saved to: ${outputPath}`);
-    await keepBrowserOpen();
+      const decision = await waitForHumanDecision(outputPath, prompt);
+      if (decision.action === "approve") {
+        console.log("APPROVED. Add this prompt/media pair to the internal Prompt Library.");
+        await keepBrowserOpen();
+        return;
+      }
+      if (decision.action === "exit") {
+        await keepBrowserOpen();
+        return;
+      }
+      prompt = decision.prompt!;
+      console.log("Targeted refinement accepted. The next generation is subject to the five-minute throttle.");
+    }
   } catch (error) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const diagnosticPath = path.join(OUTPUT_DIR, `gemini-failure-${stamp}.png`);
@@ -341,7 +427,6 @@ async function main(): Promise<void> {
     console.error(error instanceof Error ? error.message : error);
     console.error("Chrome has been left open so the Gemini state can be inspected.");
     process.exitCode = 1;
-    return;
   }
 }
 
