@@ -33,34 +33,12 @@ async function firstVisible(locators: Locator[]): Promise<Locator> {
   throw new Error("Could not find a required Gemini UI element.");
 }
 
-async function waitForManualSignIn(page: Page): Promise<void> {
-  const signIn = page.getByRole("link", { name: /sign in/i }).or(page.getByRole("button", { name: /sign in/i }));
-  const deadline = Date.now() + 10 * 60 * 1000;
-
-  if (!(await signIn.count()) || !(await signIn.first().isVisible().catch(() => false))) return;
-
-  console.log("Gemini requires sign-in. Complete sign-in in the opened Chrome window.");
-  console.log("The agent will continue automatically after sign-in (up to 10 minutes).");
-
-  while (Date.now() < deadline) {
-    await page.waitForTimeout(2_000);
-    if (!(await signIn.count()) || !(await signIn.first().isVisible().catch(() => false))) {
-      await page.waitForTimeout(2_000);
-      console.log("Gemini sign-in detected. Continuing...");
-      return;
-    }
-  }
-
-  throw new Error("Gemini sign-in was not completed within 10 minutes.");
-}
-
 async function clickAddFiles(page: Page): Promise<void> {
   const addFiles = [
     page.getByRole("button", { name: /add files|attach files|upload files/i }),
     page.locator('button[aria-label*="Add files" i]'),
     page.locator('button[aria-label*="Attach" i]'),
     page.locator('[role="button"][aria-label*="Add files" i]'),
-    page.getByText(/add files|attach files|upload files/i).last(),
   ];
 
   for (const locator of addFiles) {
@@ -78,10 +56,9 @@ async function clickAddFiles(page: Page): Promise<void> {
 
 async function uploadReference(page: Page, imagePath: string): Promise<void> {
   let fileInput = page.locator('input[type="file"]');
-
   if (await fileInput.count() === 0) {
     await clickAddFiles(page);
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(500);
     fileInput = page.locator('input[type="file"]');
   }
 
@@ -90,12 +67,11 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
       page.getByRole("menuitem", { name: /upload files|from computer|upload from computer/i }),
       page.getByText(/upload files|from computer|upload from computer/i).last(),
     ];
-
     for (const locator of uploadMenu) {
       try {
         const item = await firstVisible([locator]);
         await item.click();
-        await page.waitForTimeout(700);
+        await page.waitForTimeout(500);
         fileInput = page.locator('input[type="file"]');
         if (await fileInput.count() > 0) break;
       } catch {
@@ -109,7 +85,7 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
   }
 
   await fileInput.first().setInputFiles(imagePath);
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(1_000);
 }
 
 async function findComposer(page: Page): Promise<Locator> {
@@ -204,6 +180,24 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
   await fs.writeFile(outputPath, await response.body());
 }
 
+async function waitForManualSignIn(page: Page): Promise<void> {
+  const signIn = page.getByRole("link", { name: /sign in/i }).or(page.getByRole("button", { name: /sign in/i }));
+  if (!(await signIn.count()) || !(await signIn.first().isVisible().catch(() => false))) return;
+
+  console.log("Gemini requires sign-in. Complete Google sign-in in the opened Chrome window.");
+  console.log("Waiting up to 10 minutes for sign-in to complete...");
+
+  await page.waitForFunction(() => {
+    const text = document.body?.innerText?.toLowerCase() ?? "";
+    const hasSignIn = /sign in|sign-in|log in|login/.test(text);
+    const hasComposer = Boolean(document.querySelector("textarea, [contenteditable=\"true\"]"));
+    return !hasSignIn && hasComposer;
+  }, { timeout: 600_000, polling: 1_000 });
+
+  await page.waitForTimeout(2_000);
+  console.log("Gemini sign-in detected. Continuing...");
+}
+
 async function main(): Promise<void> {
   const imagePath = path.resolve(requiredArg("image"));
   const prompt = requiredArg("prompt");
@@ -225,8 +219,8 @@ async function main(): Promise<void> {
   try {
     await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForTimeout(2_000);
-    await waitForManualSignIn(page);
 
+    await waitForManualSignIn(page);
     await uploadReference(page, imagePath);
     await submitPrompt(page, prompt);
     console.log("Prompt submitted. Waiting for Gemini image response...");
