@@ -18,6 +18,11 @@ function requiredArg(name: string): string {
   return value;
 }
 
+async function pause(ms: number, reason: string): Promise<void> {
+  console.log(`${reason} (${(ms / 1000).toFixed(1)}s)...`);
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function firstVisible(locators: Locator[]): Promise<Locator> {
   for (const locator of locators) {
     try {
@@ -54,6 +59,7 @@ async function clickAddFiles(page: Page): Promise<void> {
     }
   }
 
+  // Gemini has also used an icon-only + button for the upload menu.
   const iconButton = page.locator('mat-icon[data-mat-icon-name="add_2"], mat-icon[fonticon="add"]');
   try {
     const icon = await firstVisible([iconButton]);
@@ -71,12 +77,12 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
   let fileInput = page.locator('input[type="file"]');
   if (await fileInput.count() > 0) {
     await fileInput.first().setInputFiles(imagePath);
-    await page.waitForTimeout(1_000);
+    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
     return;
   }
 
   await clickAddFiles(page);
-  await page.waitForTimeout(800);
+  await pause(900, "Upload menu opened; waiting for the file control");
 
   const localFileMenuItem = page.locator('[data-test-id="local-images-files-uploader-icon"]')
     .locator("xpath=ancestor::*[@role='menuitem' or self::button][1]");
@@ -95,14 +101,14 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
       const fileChooser = await fileChooserPromise;
       if (fileChooser) {
         await fileChooser.setFiles(imagePath);
-        await page.waitForTimeout(1_000);
+        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
         return;
       }
 
       fileInput = page.locator('input[type="file"]');
       if (await fileInput.count() > 0) {
         await fileInput.first().setInputFiles(imagePath);
-        await page.waitForTimeout(1_000);
+        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
         return;
       }
     } catch {
@@ -113,7 +119,7 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
   fileInput = page.locator('input[type="file"]');
   if (await fileInput.count() > 0) {
     await fileInput.first().setInputFiles(imagePath);
-    await page.waitForTimeout(1_000);
+    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
     return;
   }
 
@@ -132,7 +138,9 @@ async function findComposer(page: Page): Promise<Locator> {
 
 async function submitPrompt(page: Page, prompt: string): Promise<void> {
   const composer = await findComposer(page);
+  await pause(1_200, "Reference ready; preparing prompt");
   await composer.fill(prompt);
+  await pause(1_000, "Prompt entered; preparing submission");
 
   const sendButtons = [
     page.getByRole("button", { name: /send|submit/i }),
@@ -154,17 +162,39 @@ async function submitPrompt(page: Page, prompt: string): Promise<void> {
   await composer.press("Enter");
 }
 
-async function waitForImageResponse(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const images = Array.from(document.images);
-    return images.some((img) => {
-      const src = img.currentSrc || img.src;
-      return Boolean(src) && img.naturalWidth >= 512 && img.naturalHeight >= 512;
-    });
-  }, { timeout: 180_000 });
+async function getLargeImageSources(page: Page): Promise<string[]> {
+  return page.evaluate(() => Array.from(document.images)
+    .map((img) => ({ src: img.currentSrc || img.src, area: img.naturalWidth * img.naturalHeight }))
+    .filter((item) => item.src && item.area >= 512 * 512)
+    .sort((a, b) => b.area - a.area)
+    .map((item) => item.src));
 }
 
-async function downloadGeneratedImage(page: Page, outputPath: string): Promise<void> {
+async function waitForImageResponse(page: Page, sourcesBeforeSubmit: Set<string>): Promise<void> {
+  // Never treat the already-uploaded reference image as the generated result.
+  await pause(3_500, "Gemini is processing the request");
+
+  const deadline = Date.now() + 180_000;
+  let lastLog = 0;
+  while (Date.now() < deadline) {
+    const sources = await getLargeImageSources(page);
+    const newSources = sources.filter((src) => !sourcesBeforeSubmit.has(src));
+    if (newSources.length > 0) {
+      console.log("New generated image detected in Gemini.");
+      return;
+    }
+
+    if (Date.now() - lastLog >= 10_000) {
+      console.log("Still waiting for Gemini to finish processing...");
+      lastLog = Date.now();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+
+  throw new Error("Timed out waiting for a new generated image from Gemini.");
+}
+
+async function downloadGeneratedImage(page: Page, outputPath: string, sourcesBeforeSubmit: Set<string>): Promise<void> {
   const candidates = [
     page.getByRole("button", { name: /download full size/i }),
     page.getByRole("button", { name: /download/i }),
@@ -191,16 +221,8 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
     }
   }
 
-  const source = await page.evaluate(() => {
-    const images = Array.from(document.images);
-    const candidates = images
-      .map((img) => ({ src: img.currentSrc || img.src, area: img.naturalWidth * img.naturalHeight }))
-      .filter((item) => item.src && item.area >= 512 * 512)
-      .sort((a, b) => b.area - a.area);
-    return candidates[0]?.src ?? null;
-  });
-
-  if (!source) throw new Error("Gemini returned no downloadable image asset.");
+  const source = (await getLargeImageSources(page)).find((src) => !sourcesBeforeSubmit.has(src));
+  if (!source) throw new Error("Gemini returned no new downloadable image asset.");
 
   if (source.startsWith("data:")) {
     const base64 = source.split(",", 2)[1];
@@ -211,31 +233,28 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
 
   if (source.startsWith("blob:")) {
     const base64 = await page.evaluate(async (blobUrl) => {
-      const image = Array.from(document.images).find((candidate) =>
-        (candidate.currentSrc || candidate.src) === blobUrl,
-      );
-      if (!image) throw new Error("Blob image element was not found in the Gemini page.");
-
-      await image.decode().catch(() => undefined);
-      const width = image.naturalWidth;
-      const height = image.naturalHeight;
-      if (width < 512 || height < 512) {
-        throw new Error(`Blob image has unexpected dimensions: ${width}x${height}`);
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Could not create a canvas for Gemini image extraction.");
-      context.drawImage(image, 0, 0, width, height);
-
-      const dataUrl = canvas.toDataURL("image/png");
-      const comma = dataUrl.indexOf(",");
-      if (comma < 0) throw new Error("Canvas extraction did not produce a valid data URL.");
-      return dataUrl.slice(comma + 1);
+      const response = await fetch(blobUrl);
+      if (!response.ok) throw new Error(`Blob fetch failed: HTTP ${response.status}`);
+      const blob = await response.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result;
+          if (typeof result !== "string") {
+            reject(new Error("Blob conversion did not produce a data URL."));
+            return;
+          }
+          const comma = result.indexOf(",");
+          if (comma < 0) {
+            reject(new Error("Invalid blob data URL."));
+            return;
+          }
+          resolve(result.slice(comma + 1));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error("Failed to read blob."));
+        reader.readAsDataURL(blob);
+      });
     }, source);
-
     await fs.writeFile(outputPath, Buffer.from(base64, "base64"));
     return;
   }
@@ -263,6 +282,15 @@ async function waitForManualSignIn(page: Page): Promise<void> {
   console.log("Gemini sign-in detected. Continuing...");
 }
 
+async function waitForBrowserToRemainOpen(): Promise<void> {
+  console.log("Generation complete. Chrome will remain open for inspection.");
+  console.log("Press Enter in this terminal only when you want the agent to close Chrome and exit.");
+  await new Promise<void>((resolve) => {
+    process.stdin.resume();
+    process.stdin.once("data", () => resolve());
+  });
+}
+
 async function main(): Promise<void> {
   const imagePath = path.resolve(requiredArg("image"));
   const prompt = requiredArg("prompt");
@@ -286,18 +314,20 @@ async function main(): Promise<void> {
     await page.waitForTimeout(2_000);
 
     await waitForManualSignIn(page);
+    const sourcesBeforeSubmit = new Set(await getLargeImageSources(page));
     await uploadReference(page, imagePath);
     await submitPrompt(page, prompt);
     console.log("Prompt submitted. Waiting for Gemini image response...");
 
-    await waitForImageResponse(page);
-    await page.waitForTimeout(3_000);
+    await waitForImageResponse(page, sourcesBeforeSubmit);
+    await pause(2_000, "Generated image detected; allowing the result UI to settle");
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outputPath = path.join(OUTPUT_DIR, `gemini-${stamp}.png`);
-    await downloadGeneratedImage(page, outputPath);
+    await downloadGeneratedImage(page, outputPath, sourcesBeforeSubmit);
 
     console.log(`Generated image saved to: ${outputPath}`);
+    await waitForBrowserToRemainOpen();
   } catch (error) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const diagnosticPath = path.join(OUTPUT_DIR, `gemini-failure-${stamp}.png`);
@@ -307,10 +337,13 @@ async function main(): Promise<void> {
     } catch {
       // Preserve the original error if diagnostics cannot be captured.
     }
-    throw error;
-  } finally {
-    await context.close();
+    console.error(error instanceof Error ? error.message : error);
+    console.error("Chrome has been left open so the Gemini state can be inspected.");
+    process.exitCode = 1;
+    return;
   }
+
+  await context.close();
 }
 
 main().catch((error) => {
