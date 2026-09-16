@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type BrowserContext, type Page, type Locator } from "playwright";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -18,16 +18,108 @@ function requiredArg(name: string): string {
   return value;
 }
 
-async function firstVisible<T>(locators: Array<() => T>, visible: (value: T) => Promise<boolean>): Promise<T> {
-  for (const make of locators) {
+async function firstVisible(locators: Locator[]): Promise<Locator> {
+  for (const locator of locators) {
     try {
-      const value = make();
-      if (await visible(value)) return value;
+      const count = await locator.count();
+      for (let i = count - 1; i >= 0; i -= 1) {
+        const candidate = locator.nth(i);
+        if (await candidate.isVisible()) return candidate;
+      }
     } catch {
       // Try the next selector.
     }
   }
   throw new Error("Could not find a required Gemini UI element.");
+}
+
+async function clickAddFiles(page: Page): Promise<void> {
+  const addFiles = [
+    page.getByRole("button", { name: /add files|attach files|upload files/i }),
+    page.locator('button[aria-label*="Add files" i]'),
+    page.locator('button[aria-label*="Attach" i]'),
+    page.locator('[role="button"][aria-label*="Add files" i]'),
+  ];
+
+  for (const locator of addFiles) {
+    try {
+      const button = await firstVisible([locator]);
+      await button.click();
+      return;
+    } catch {
+      // Try another known label.
+    }
+  }
+
+  throw new Error("Could not find Gemini's Add files control.");
+}
+
+async function uploadReference(page: Page, imagePath: string): Promise<void> {
+  // Some Gemini builds keep the input in the DOM; others create it after Add files is clicked.
+  let fileInput = page.locator('input[type="file"]');
+  if (await fileInput.count() === 0) {
+    await clickAddFiles(page);
+    await page.waitForTimeout(500);
+    fileInput = page.locator('input[type="file"]');
+  }
+
+  if (await fileInput.count() === 0) {
+    // A menu may appear after Add files. Try an explicit upload-files menu item, then inspect again.
+    const uploadMenu = [
+      page.getByRole("menuitem", { name: /upload files|from computer|upload from computer/i }),
+      page.getByText(/upload files|from computer|upload from computer/i).last(),
+    ];
+    for (const locator of uploadMenu) {
+      try {
+        const item = await firstVisible([locator]);
+        await item.click();
+        await page.waitForTimeout(500);
+        fileInput = page.locator('input[type="file"]');
+        if (await fileInput.count() > 0) break;
+      } catch {
+        // Continue.
+      }
+    }
+  }
+
+  if (await fileInput.count() === 0) {
+    throw new Error("Gemini did not expose a file input after opening Add files.");
+  }
+
+  await fileInput.first().setInputFiles(imagePath);
+  await page.waitForTimeout(1_000);
+}
+
+async function findComposer(page: Page): Promise<Locator> {
+  return firstVisible([
+    page.locator('textarea').filter({ visible: true } as never),
+    page.locator('[contenteditable="true"]'),
+    page.locator('textarea[placeholder*="Enter a prompt" i]'),
+    page.locator('textarea[placeholder*="Ask Gemini" i]'),
+  ]);
+}
+
+async function submitPrompt(page: Page, prompt: string): Promise<void> {
+  const composer = await findComposer(page);
+  await composer.fill(prompt);
+
+  const sendButtons = [
+    page.getByRole("button", { name: /send|submit/i }),
+    page.locator('button[aria-label*="Send" i]'),
+    page.locator('button[type="submit"]'),
+  ];
+
+  for (const locator of sendButtons) {
+    try {
+      const button = await firstVisible([locator]);
+      await button.click({ timeout: 10_000 });
+      return;
+    } catch {
+      // Try keyboard fallback below.
+    }
+  }
+
+  await composer.press("Enter");
 }
 
 async function waitForImageResponse(page: Page): Promise<void> {
@@ -67,7 +159,6 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
     }
   }
 
-  // Gemini may expose the generated asset as an image source instead of a download event.
   const source = await page.evaluate(() => {
     const images = Array.from(document.images);
     const candidates = images
@@ -111,6 +202,7 @@ async function main(): Promise<void> {
 
   try {
     await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.waitForTimeout(2_000);
 
     const signIn = page.getByRole("link", { name: /sign in/i }).or(page.getByRole("button", { name: /sign in/i }));
     if (await signIn.count() && await signIn.first().isVisible().catch(() => false)) {
@@ -118,21 +210,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Current Gemini web UI uses a hidden file input behind Add files.
-    const fileInput = page.locator('input[type="file"]');
-    await firstVisible([() => fileInput], async (locator) => (await locator.count()) > 0);
-    await fileInput.first().setInputFiles(imagePath);
-
-    const composer = page.locator('textarea').first().or(page.locator('[contenteditable="true"]').first());
-    await composer.waitFor({ state: "visible", timeout: 30_000 });
-    await composer.fill(prompt);
-
-    const submit = await firstVisible([
-      () => page.getByRole("button", { name: /send|submit/i }).last(),
-      () => page.locator('button[type="submit"]').last(),
-    ], async (locator) => (await locator.count()) > 0 && await locator.isVisible().catch(() => false));
-
-    await submit.click();
+    await uploadReference(page, imagePath);
+    await submitPrompt(page, prompt);
     console.log("Prompt submitted. Waiting for Gemini image response...");
 
     await waitForImageResponse(page);
@@ -143,6 +222,16 @@ async function main(): Promise<void> {
     await downloadGeneratedImage(page, outputPath);
 
     console.log(`Generated image saved to: ${outputPath}`);
+  } catch (error) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const diagnosticPath = path.join(OUTPUT_DIR, `gemini-failure-${stamp}.png`);
+    try {
+      await page.screenshot({ path: diagnosticPath, fullPage: true });
+      console.error(`Diagnostic screenshot saved to: ${diagnosticPath}`);
+    } catch {
+      // Preserve the original error if diagnostics cannot be captured.
+    }
+    throw error;
   } finally {
     await context.close();
   }
