@@ -10,13 +10,17 @@
     "build": "prisma generate && (prisma migrate resolve --rolled-back 20260812000000_add_promo_codes || true) && (prisma migrate resolve --rolled-back 20260812140000_add_deleted_email || true) && (prisma migrate resolve --rolled-back 20260817120000_add_admin_content_library || true) && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint .",
+    "agent:gemini": "tsx tools/gemini-web-agent/gemini-agent.ts",
+    "agent:gemini:login": "tsx tools/gemini-web-agent/gemini-login.ts",
+    "agent:gemini:rnd": "tsx tools/gemini-web-agent/rnd-worker.ts",
+    "agent:gemini:rnd:enqueue": "tsx tools/gemini-web-agent/rnd-enqueue.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
     "@google/genai": "^2.10.0",
     "@prisma/client": "^6.16.3",
-    "@radix-ui/react-slot": "^1.3.0",
+    "@radix-ui/react-slot": "^1.3.1",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.1.0",
     "@vercel/blob": "^2.6.1",
@@ -44,11 +48,11 @@
     "autoprefixer": "^10.4.18",
     "eslint": "^9.31.0",
     "eslint-config-next": "^16.2.9",
+    "playwright": "^1.55.0",
     "postcss": "^8.4.35",
     "prisma": "^6.16.3",
     "tailwindcss": "^3.4.1",
-    "tsx": "^4.23.1",
-    "typescript": "^5.4.2"
+    "tsx": "^4.23.1"
   },
   "allowScripts": {
     "@google/genai@2.10.0": true,
@@ -57,7 +61,6 @@
     "argon2@0.45.1": true,
     "esbuild@0.28.1": true,
     "protobufjs@7.6.4": true,
-    "unrs-resolver@1.12.2": true,
     "prisma@6.16.3": true
   }
 }
