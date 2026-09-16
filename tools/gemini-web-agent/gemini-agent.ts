@@ -59,7 +59,6 @@ async function clickAddFiles(page: Page): Promise<void> {
     }
   }
 
-  // Gemini has also used an icon-only + button for the upload menu.
   const iconButton = page.locator('mat-icon[data-mat-icon-name="add_2"], mat-icon[fonticon="add"]');
   try {
     const icon = await firstVisible([iconButton]);
@@ -171,7 +170,6 @@ async function getLargeImageSources(page: Page): Promise<string[]> {
 }
 
 async function waitForImageResponse(page: Page, sourcesBeforeSubmit: Set<string>): Promise<void> {
-  // Never treat the already-uploaded reference image as the generated result.
   await pause(3_500, "Gemini is processing the request");
 
   const deadline = Date.now() + 180_000;
@@ -282,12 +280,11 @@ async function waitForManualSignIn(page: Page): Promise<void> {
   console.log("Gemini sign-in detected. Continuing...");
 }
 
-async function waitForBrowserToRemainOpen(): Promise<void> {
+async function keepBrowserOpen(): Promise<void> {
   console.log("Generation complete. Chrome will remain open for inspection.");
-  console.log("Press Enter in this terminal only when you want the agent to close Chrome and exit.");
-  await new Promise<void>((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", () => resolve());
+  console.log("The agent will keep this Gemini window open. Press Ctrl+C only when you want to stop the agent.");
+  await new Promise<void>(() => {
+    // Intentionally keep the process and browser alive for manual inspection.
   });
 }
 
@@ -314,8 +311,12 @@ async function main(): Promise<void> {
     await page.waitForTimeout(2_000);
 
     await waitForManualSignIn(page);
-    const sourcesBeforeSubmit = new Set(await getLargeImageSources(page));
     await uploadReference(page, imagePath);
+
+    // Capture the baseline only AFTER the reference image has been uploaded.
+    // This prevents the uploaded reference from being mistaken for Gemini's result.
+    const sourcesBeforeSubmit = new Set(await getLargeImageSources(page));
+
     await submitPrompt(page, prompt);
     console.log("Prompt submitted. Waiting for Gemini image response...");
 
@@ -327,7 +328,7 @@ async function main(): Promise<void> {
     await downloadGeneratedImage(page, outputPath, sourcesBeforeSubmit);
 
     console.log(`Generated image saved to: ${outputPath}`);
-    await waitForBrowserToRemainOpen();
+    await keepBrowserOpen();
   } catch (error) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const diagnosticPath = path.join(OUTPUT_DIR, `gemini-failure-${stamp}.png`);
@@ -342,8 +343,6 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-
-  await context.close();
 }
 
 main().catch((error) => {
