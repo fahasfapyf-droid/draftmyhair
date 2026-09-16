@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "agent:gemini": "tsx tools/gemini-web-agent/gemini-agent.ts",
+    "agent:gemini:login": "tsx tools/gemini-web-agent/gemini-login.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -42,7 +43,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.4.18",
+    "autoprefixer": "^10.4.0",
     "eslint": "^9.31.0",
     "eslint-config-next": "^16.2.9",
     "playwright": "^1.55.0",
