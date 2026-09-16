@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "agent:gemini": "tsx tools/gemini-web-agent/gemini-agent.ts",
     "agent:gemini:login": "tsx tools/gemini-web-agent/gemini-login.ts",
+    "agent:gemini:rnd": "tsx tools/gemini-web-agent/rnd-worker.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
