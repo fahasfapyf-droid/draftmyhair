@@ -35,10 +35,13 @@ async function firstVisible(locators: Locator[]): Promise<Locator> {
 
 async function clickAddFiles(page: Page): Promise<void> {
   const addFiles = [
-    page.getByRole("button", { name: /add files|attach files|upload files/i }),
-    page.locator('button[aria-label*="Add files" i]'),
+    page.getByRole("button", { name: /open upload file menu|add files|attach files|upload files/i }),
+    page.locator('button[aria-label="Open upload file menu"]'),
+    page.locator('button[aria-label*="Upload" i]'),
     page.locator('button[aria-label*="Attach" i]'),
-    page.locator('[role="button"][aria-label*="Add files" i]'),
+    page.locator('button[aria-label*="Add file" i]'),
+    page.locator('[role="button"][aria-label*="Upload" i]'),
+    page.locator('[role="button"][aria-label*="Attach" i]'),
   ];
 
   for (const locator of addFiles) {
@@ -51,46 +54,79 @@ async function clickAddFiles(page: Page): Promise<void> {
     }
   }
 
+  // Gemini has also used an icon-only + button for the upload menu.
+  const iconButton = page.locator('mat-icon[data-mat-icon-name="add_2"], mat-icon[fonticon="add"]');
+  try {
+    const icon = await firstVisible([iconButton]);
+    const parentButton = icon.locator("xpath=ancestor::button[1]");
+    await firstVisible([parentButton]).then((button) => button.click());
+    return;
+  } catch {
+    // Fall through to the diagnostic error.
+  }
+
   throw new Error("Could not find Gemini's Add files control.");
 }
 
 async function uploadReference(page: Page, imagePath: string): Promise<void> {
   let fileInput = page.locator('input[type="file"]');
-  if (await fileInput.count() === 0) {
-    await clickAddFiles(page);
-    await page.waitForTimeout(500);
-    fileInput = page.locator('input[type="file"]');
+  if (await fileInput.count() > 0) {
+    await fileInput.first().setInputFiles(imagePath);
+    await page.waitForTimeout(1_000);
+    return;
   }
 
-  if (await fileInput.count() === 0) {
-    const uploadMenu = [
-      page.getByRole("menuitem", { name: /upload files|from computer|upload from computer/i }),
-      page.getByText(/upload files|from computer|upload from computer/i).last(),
-    ];
-    for (const locator of uploadMenu) {
-      try {
-        const item = await firstVisible([locator]);
-        await item.click();
-        await page.waitForTimeout(500);
-        fileInput = page.locator('input[type="file"]');
-        if (await fileInput.count() > 0) break;
-      } catch {
-        // Continue.
+  await clickAddFiles(page);
+  await page.waitForTimeout(800);
+
+  // Gemini currently exposes the local-file menu item through this test id.
+  const localFileMenuItem = page.locator('[data-test-id="local-images-files-uploader-icon"]')
+    .locator("xpath=ancestor::*[@role='menuitem' or self::button][1]");
+
+  const uploadMenu = [
+    localFileMenuItem,
+    page.getByRole("menuitem", { name: /upload files|files|from computer|upload from computer/i }),
+    page.getByText(/upload files|from computer|upload from computer/i).last(),
+  ];
+
+  for (const locator of uploadMenu) {
+    try {
+      const item = await firstVisible([locator]);
+      const fileChooserPromise = page.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null);
+      await item.click({ timeout: 10_000 });
+      const fileChooser = await fileChooserPromise;
+      if (fileChooser) {
+        await fileChooser.setFiles(imagePath);
+        await page.waitForTimeout(1_000);
+        return;
       }
+
+      fileInput = page.locator('input[type="file"]');
+      if (await fileInput.count() > 0) {
+        await fileInput.first().setInputFiles(imagePath);
+        await page.waitForTimeout(1_000);
+        return;
+      }
+    } catch {
+      // Continue with the next upload-menu selector.
     }
   }
 
-  if (await fileInput.count() === 0) {
-    throw new Error("Gemini did not expose a file input after opening Add files.");
+  // Last-resort dynamic-input check after the menu interaction.
+  fileInput = page.locator('input[type="file"]');
+  if (await fileInput.count() > 0) {
+    await fileInput.first().setInputFiles(imagePath);
+    await page.waitForTimeout(1_000);
+    return;
   }
 
-  await fileInput.first().setInputFiles(imagePath);
-  await page.waitForTimeout(1_000);
+  throw new Error("Gemini did not expose a usable local-file upload control.");
 }
 
 async function findComposer(page: Page): Promise<Locator> {
   return firstVisible([
     page.locator('textarea'),
+    page.locator('[contenteditable="true"][role="textbox"]'),
     page.locator('[contenteditable="true"]'),
     page.locator('textarea[placeholder*="Enter a prompt" i]'),
     page.locator('textarea[placeholder*="Ask Gemini" i]'),
@@ -103,6 +139,7 @@ async function submitPrompt(page: Page, prompt: string): Promise<void> {
 
   const sendButtons = [
     page.getByRole("button", { name: /send|submit/i }),
+    page.locator('button[aria-label="Send message"]'),
     page.locator('button[aria-label*="Send" i]'),
     page.locator('button[type="submit"]'),
   ];
