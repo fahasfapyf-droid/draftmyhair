@@ -54,7 +54,6 @@ async function clickAddFiles(page: Page): Promise<void> {
     }
   }
 
-  // Gemini has also used an icon-only + button for the upload menu.
   const iconButton = page.locator('mat-icon[data-mat-icon-name="add_2"], mat-icon[fonticon="add"]');
   try {
     const icon = await firstVisible([iconButton]);
@@ -79,7 +78,6 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
   await clickAddFiles(page);
   await page.waitForTimeout(800);
 
-  // Gemini currently exposes the local-file menu item through this test id.
   const localFileMenuItem = page.locator('[data-test-id="local-images-files-uploader-icon"]')
     .locator("xpath=ancestor::*[@role='menuitem' or self::button][1]");
 
@@ -112,7 +110,6 @@ async function uploadReference(page: Page, imagePath: string): Promise<void> {
     }
   }
 
-  // Last-resort dynamic-input check after the menu interaction.
   fileInput = page.locator('input[type="file"]');
   if (await fileInput.count() > 0) {
     await fileInput.first().setInputFiles(imagePath);
@@ -214,27 +211,29 @@ async function downloadGeneratedImage(page: Page, outputPath: string): Promise<v
 
   if (source.startsWith("blob:")) {
     const base64 = await page.evaluate(async (blobUrl) => {
-      const response = await fetch(blobUrl);
-      if (!response.ok) throw new Error(`Blob fetch failed: HTTP ${response.status}`);
-      const blob = await response.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result;
-          if (typeof result !== "string") {
-            reject(new Error("Blob conversion did not produce a data URL."));
-            return;
-          }
-          const comma = result.indexOf(",");
-          if (comma < 0) {
-            reject(new Error("Invalid blob data URL."));
-            return;
-          }
-          resolve(result.slice(comma + 1));
-        };
-        reader.onerror = () => reject(reader.error ?? new Error("Blob FileReader failed."));
-        reader.readAsDataURL(blob);
-      });
+      const image = Array.from(document.images).find((candidate) =>
+        (candidate.currentSrc || candidate.src) === blobUrl,
+      );
+      if (!image) throw new Error("Blob image element was not found in the Gemini page.");
+
+      await image.decode().catch(() => undefined);
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      if (width < 512 || height < 512) {
+        throw new Error(`Blob image has unexpected dimensions: ${width}x${height}`);
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not create a canvas for Gemini image extraction.");
+      context.drawImage(image, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) throw new Error("Canvas extraction did not produce a valid data URL.");
+      return dataUrl.slice(comma + 1);
     }, source);
 
     await fs.writeFile(outputPath, Buffer.from(base64, "base64"));
