@@ -12,3 +12,5 @@ node_modules
 # Local Gemini web-agent state/output
 /tools/gemini-web-agent/chrome-profile/
 /tools/gemini-web-agent/output/
+/tools/gemini-web-agent/queue.json
+/tools/gemini-web-agent/approval-queue.json
