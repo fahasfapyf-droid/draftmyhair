@@ -8,3 +8,7 @@ node_modules
 .env.production
 
 /generated/prisma
+
+# Local Gemini web-agent state/output
+/tools/gemini-web-agent/chrome-profile/
+/tools/gemini-web-agent/output/
