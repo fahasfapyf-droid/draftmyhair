@@ -5,12 +5,8 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  try {
-    requireRndWorker(request.headers.get("authorization"));
-  } catch (response) {
-    if (response instanceof Response) return response;
-    throw response;
-  }
+  const authResponse = requireRndWorker(request.headers.get("authorization"));
+  if (authResponse) return authResponse;
 
   const body = await request.json().catch(() => null);
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
@@ -21,13 +17,8 @@ export async function POST(request: Request) {
     const job = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { id: true, targetId: true, status: true, leaseOwner: true } });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "PROCESSING" || job.leaseOwner !== workerId) return { kind: "lease" as const };
-
-    const updated = await tx.rnDJob.updateMany({
-      where: { id: jobId, status: "PROCESSING", leaseOwner: workerId },
-      data: { status: "QUEUED", leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null },
-    });
+    const updated = await tx.rnDJob.updateMany({ where: { id: jobId, status: "PROCESSING", leaseOwner: workerId }, data: { status: "QUEUED", leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null } });
     if (updated.count !== 1) return { kind: "lease" as const };
-
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED", currentJobId: job.id } });
     return { kind: "ok" as const };
   });
