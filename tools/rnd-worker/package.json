@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx worker.ts",
+    "start": "node --env-file=.env --import tsx worker.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
