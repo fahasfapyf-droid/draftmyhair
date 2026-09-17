@@ -19,20 +19,22 @@ export async function POST(request: Request) {
   if (authResponse) return authResponse;
 
   const body = (await request.json().catch(() => null)) as ReportBody | null;
-  const jobId = typeof body?.jobId === "string" ? body.jobId : null;
-  const attemptNumber = Number.isInteger(body?.attemptNumber) ? Number(body.attemptNumber) : null;
-  const prompt = typeof body?.prompt === "string" ? body.prompt : null;
-  const promptRevision = typeof body?.promptRevision === "string" ? body.promptRevision : null;
+  if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
+  const jobId = typeof body.jobId === "string" ? body.jobId : null;
+  const attemptNumber = Number.isInteger(body.attemptNumber) ? Number(body.attemptNumber) : null;
+  const prompt = typeof body.prompt === "string" ? body.prompt : null;
+  const promptRevision = typeof body.promptRevision === "string" ? body.promptRevision : null;
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || null;
   if (!jobId || !attemptNumber || attemptNumber < 1 || !prompt || !promptRevision || !workerId) return NextResponse.json({ error: "jobId, attemptNumber, prompt, promptRevision and x-rnd-worker-id are required" }, { status: 400 });
   if (attemptNumber > MAX_AUTONOMOUS_ATTEMPTS) return NextResponse.json({ error: "Maximum autonomous attempts exceeded" }, { status: 409 });
 
-  const generationStartedAt = dateOrNull(body?.generationStartedAt);
-  const generationCompletedAt = dateOrNull(body?.generationCompletedAt);
-  const submittedAt = dateOrNull(body?.submittedAt) ?? new Date();
-  const artifactId = typeof body?.artifactId === "string" ? body.artifactId : null;
-  const errorCode = typeof body?.errorCode === "string" ? body.errorCode : null;
-  const errorMessage = typeof body?.errorMessage === "string" ? body.errorMessage : null;
+  const generationStartedAt = dateOrNull(body.generationStartedAt);
+  const generationCompletedAt = dateOrNull(body.generationCompletedAt);
+  const submittedAt = dateOrNull(body.submittedAt) ?? new Date();
+  const artifactId = typeof body.artifactId === "string" ? body.artifactId : null;
+  const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
+  const errorMessage = typeof body.errorMessage === "string" ? body.errorMessage : null;
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
   const now = new Date();
 
