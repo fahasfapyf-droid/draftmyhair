@@ -1,20 +1,13 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import {
-  requireRndWorker,
-  RND_WORKER_LEASE_SECONDS,
-} from "@/lib/rnd/worker-auth";
+import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  try {
-    requireRndWorker(request.headers.get("authorization"));
-  } catch (response) {
-    if (response instanceof Response) return response;
-    throw response;
-  }
+  const authResponse = requireRndWorker(request.headers.get("authorization"));
+  if (authResponse) return authResponse;
 
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
   const now = new Date();
@@ -22,40 +15,20 @@ export async function POST(request: Request) {
 
   const claimed = await prisma.$transaction(async (tx) => {
     const candidate = await tx.rnDJob.findFirst({
-      where: {
-        OR: [
-          { status: "QUEUED" },
-          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
-        ],
-      },
+      where: { OR: [{ status: "QUEUED" }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
       orderBy: { queuedAt: "asc" },
       select: { id: true, targetId: true },
     });
-
     if (!candidate) return null;
 
     const updated = await tx.rnDJob.updateMany({
-      where: {
-        id: candidate.id,
-        OR: [
-          { status: "QUEUED" },
-          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
-        ],
-      },
+      where: { id: candidate.id, OR: [{ status: "QUEUED" }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
       data: { status: "PROCESSING", leaseOwner: workerId, leaseExpiresAt, heartbeatAt: now, startedAt: now },
     });
-
     if (updated.count !== 1) return null;
 
-    await tx.rnDTarget.update({
-      where: { id: candidate.targetId },
-      data: { status: "PROCESSING", currentJobId: candidate.id },
-    });
-
-    return tx.rnDJob.findUnique({
-      where: { id: candidate.id },
-      include: { target: { include: { sourceAsset: true } } },
-    });
+    await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "PROCESSING", currentJobId: candidate.id } });
+    return tx.rnDJob.findUnique({ where: { id: candidate.id }, include: { target: { include: { sourceAsset: true } } } });
   });
 
   if (!claimed) return NextResponse.json({ ok: true, job: null });
