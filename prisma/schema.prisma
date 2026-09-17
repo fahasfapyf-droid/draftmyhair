@@ -559,4 +559,4 @@ enum FeedbackIssue {
   BLENDING
   BACKGROUND
   OTHER
-}`r`n
+}
