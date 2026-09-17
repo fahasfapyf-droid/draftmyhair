@@ -320,7 +320,7 @@ model PromptVersion {
 }
 
 model GalleryItem {
-  id           String     @id
+  id           String     @id @default(cuid())
   hairstyleId  String?
   title        String
   category     String
@@ -559,4 +559,4 @@ enum FeedbackIssue {
   BLENDING
   BACKGROUND
   OTHER
-}
+}`r`n
