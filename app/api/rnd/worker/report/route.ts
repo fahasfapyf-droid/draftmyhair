@@ -6,18 +6,7 @@ export const runtime = "nodejs";
 
 const MAX_AUTONOMOUS_ATTEMPTS = 2;
 
-type ReportBody = {
-  jobId?: unknown;
-  attemptNumber?: unknown;
-  prompt?: unknown;
-  promptRevision?: unknown;
-  submittedAt?: unknown;
-  generationStartedAt?: unknown;
-  generationCompletedAt?: unknown;
-  artifactId?: unknown;
-  errorCode?: unknown;
-  errorMessage?: unknown;
-};
+type ReportBody = { jobId?: unknown; attemptNumber?: unknown; prompt?: unknown; promptRevision?: unknown; submittedAt?: unknown; generationStartedAt?: unknown; generationCompletedAt?: unknown; artifactId?: unknown; errorCode?: unknown; errorMessage?: unknown };
 
 function dateOrNull(value: unknown) {
   if (typeof value !== "string") return null;
@@ -26,12 +15,8 @@ function dateOrNull(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  try {
-    requireRndWorker(request.headers.get("authorization"));
-  } catch (response) {
-    if (response instanceof Response) return response;
-    throw response;
-  }
+  const authResponse = requireRndWorker(request.headers.get("authorization"));
+  if (authResponse) return authResponse;
 
   const body = (await request.json().catch(() => null)) as ReportBody | null;
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
@@ -39,10 +24,7 @@ export async function POST(request: Request) {
   const prompt = typeof body?.prompt === "string" ? body.prompt : null;
   const promptRevision = typeof body?.promptRevision === "string" ? body.promptRevision : null;
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || null;
-
-  if (!jobId || !attemptNumber || attemptNumber < 1 || !prompt || !promptRevision || !workerId) {
-    return NextResponse.json({ error: "jobId, attemptNumber, prompt, promptRevision and x-rnd-worker-id are required" }, { status: 400 });
-  }
+  if (!jobId || !attemptNumber || attemptNumber < 1 || !prompt || !promptRevision || !workerId) return NextResponse.json({ error: "jobId, attemptNumber, prompt, promptRevision and x-rnd-worker-id are required" }, { status: 400 });
   if (attemptNumber > MAX_AUTONOMOUS_ATTEMPTS) return NextResponse.json({ error: "Maximum autonomous attempts exceeded" }, { status: 409 });
 
   const generationStartedAt = dateOrNull(body?.generationStartedAt);
@@ -60,28 +42,8 @@ export async function POST(request: Request) {
     if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") return { kind: "lease" as const };
     if (attemptNumber !== job.attemptCount + 1) return { kind: "attempt" as const, expected: job.attemptCount + 1 };
 
-    await tx.rnDAttempt.create({
-      data: {
-        jobId, attemptNumber, prompt, promptRevision, submittedAt, generationStartedAt, generationCompletedAt,
-        artifactId, verdict: succeeded ? "REFINE" : "FAILED", errorCode, errorMessage,
-      },
-    });
-
-    const updatedJob = await tx.rnDJob.update({
-      where: { id: jobId },
-      data: {
-        status: succeeded ? "QA" : "FAILED",
-        attemptCount: attemptNumber,
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        heartbeatAt: now,
-        completedAt: succeeded ? generationCompletedAt : null,
-        failureCode: succeeded ? null : errorCode,
-        failureMessage: succeeded ? null : errorMessage,
-      },
-      select: { id: true, status: true, attemptCount: true },
-    });
-
+    await tx.rnDAttempt.create({ data: { jobId, attemptNumber, prompt, promptRevision, submittedAt, generationStartedAt, generationCompletedAt, artifactId, verdict: succeeded ? "REFINE" : "FAILED", errorCode, errorMessage } });
+    const updatedJob = await tx.rnDJob.update({ where: { id: jobId }, data: { status: succeeded ? "QA" : "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: succeeded ? generationCompletedAt : null, failureCode: succeeded ? null : errorCode, failureMessage: succeeded ? null : errorMessage }, select: { id: true, status: true, attemptCount: true } });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: succeeded ? "QA" : "FAILED" } });
     return { kind: "ok" as const, job: updatedJob };
   });
