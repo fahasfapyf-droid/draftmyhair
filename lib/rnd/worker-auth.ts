@@ -17,3 +17,11 @@ export function isRndWorkerAuthorized(authorization: string | null) {
 
   return timingSafeEqual(supplied, expected);
 }
+
+export function requireRndWorker(authorization: string | null): asserts authorization is string {
+  if (isRndWorkerAuthorized(authorization)) return;
+  throw new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+    headers: { "content-type": "application/json" },
+  });
+}
