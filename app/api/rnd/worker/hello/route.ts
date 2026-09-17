@@ -7,12 +7,8 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  try {
-    requireRndWorker(request.headers.get("authorization"));
-  } catch (response) {
-    if (response instanceof Response) return response;
-    throw response;
-  }
+  const authResponse = requireRndWorker(request.headers.get("authorization"));
+  if (authResponse) return authResponse;
 
   return NextResponse.json({
     ok: true,
