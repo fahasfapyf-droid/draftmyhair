@@ -6,7 +6,8 @@
     "compile:prompts": "tsx scripts/compile-prompts.ts && tsx scripts/compile-style-prompts.ts",
     "predev": "npm run compile:prompts",
     "dev": "next dev",
-    "prebuild": "prisma generate && prisma migrate deploy && next build",
+    "prebuild": "npm run compile:prompts",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate"
