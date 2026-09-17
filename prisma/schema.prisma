@@ -143,16 +143,16 @@ model Payment {
   provider            PaymentProvider
   type                PaymentType
   status              PaymentStatus       @default(PENDING)
-  amount              Decimal             @db.Decimal(10, 2)
-  currency            String              @default("USD")
+  amount             Decimal             @db.Decimal(10, 2)
+  currency           String              @default("USD")
   providerPaymentId  String?             @unique
   providerCustomerId String?
   providerSessionId  String?
   creditsPurchased   Int                 @default(0)
-  metadata            Json?
-  refundedAt          DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  metadata           Json?
+  refundedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -263,10 +263,10 @@ model ContactMessageReply {
   senderId         String
   senderRole       ContactReplySender
   message          String
-  readAt           DateTime?
-  createdAt        DateTime           @default(now())
+  readAt            DateTime?
+  createdAt         DateTime           @default(now())
   contactMessage   ContactMessage     @relation(fields: [contactMessageId], references: [id], onDelete: Cascade)
-  sender           User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender            User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([contactMessageId])
   @@index([senderId])
@@ -289,7 +289,7 @@ model Hairstyle {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   feedbacks      Feedback[]
-  generations   Generation[]
+  generations    Generation[]
   promptVersions PromptVersion[]
   galleryItems   GalleryItem[]
 
@@ -320,7 +320,7 @@ model PromptVersion {
 }
 
 model GalleryItem {
-  id           String     @id @default(cuid())
+  id           String     @id
   hairstyleId  String?
   title        String
   category     String
@@ -417,118 +417,6 @@ model PromoRedemption {
   @@unique([promoCodeId, userId])
   @@index([userId])
   @@index([redeemedAt])
-}
-
-model RnDCampaign {
-  id               String        @id @default(cuid())
-  name             String
-  status           RnDCampaignStatus @default(DRAFT)
-  autoAdvanceEnabled Boolean     @default(false)
-  createdByUserId  String
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  targets          RnDTarget[]
-
-  @@index([status])
-  @@index([createdAt])
-}
-
-model RnDTarget {
-  id                  String          @id @default(cuid())
-  campaignId          String
-  targetType          RnDTargetType   @default(SINGLE)
-  targetKey           String
-  hairstyleId         String?
-  hairColorKey        String?
-  beardKey            String?
-  hardCoreInstruction String?         @db.Text
-  sourceAssetId       String
-  currentJobId        String?
-  status              RnDTargetStatus @default(DRAFT)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  campaign            RnDCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  sourceAsset         RnDAsset         @relation(fields: [sourceAssetId], references: [id])
-  jobs                RnDJob[]
-
-  @@unique([campaignId, targetKey])
-  @@index([campaignId, status])
-  @@index([sourceAssetId])
-  @@index([status])
-}
-
-model RnDAsset {
-  id                    String       @id @default(cuid())
-  kind                  RnDAssetKind
-  storageKey            String       @unique
-  blobUrl               String       @unique
-  originalFilename      String?
-  mimeType              String
-  fileSize              Int
-  width                 Int?
-  height                Int?
-  checksum              String?
-  immutable             Boolean      @default(true)
-  createdAt             DateTime     @default(now())
-  sourceForTargets      RnDTarget[]
-  generatedForAttempts  RnDAttempt[] @relation("RnDAttemptArtifact")
-
-  @@index([kind])
-  @@index([checksum])
-}
-
-model RnDJob {
-  id                   String       @id @default(cuid())
-  targetId             String
-  status               RnDJobStatus  @default(QUEUED)
-  promptVersionNumber  Int
-  currentPrompt        String       @db.Text
-  attemptCount         Int          @default(0)
-  leaseOwner           String?
-  leaseExpiresAt       DateTime?
-  heartbeatAt          DateTime?
-  queuedAt             DateTime     @default(now())
-  startedAt            DateTime?
-  completedAt          DateTime?
-  updatedAt            DateTime     @updatedAt
-  failureCode          String?
-  failureMessage       String?      @db.Text
-  target               RnDTarget    @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  attempts             RnDAttempt[]
-
-  @@index([status, queuedAt])
-  @@index([leaseExpiresAt])
-  @@index([targetId])
-  @@index([leaseOwner])
-}
-
-model RnDAttempt {
-  id                    String       @id @default(cuid())
-  jobId                 String
-  attemptNumber         Int
-  prompt                String       @db.Text
-  promptRevision        String
-  submittedAt           DateTime     @default(now())
-  generationStartedAt   DateTime?
-  generationCompletedAt DateTime?
-  artifactId            String?
-  qaJson                Json?
-  overallScore          Decimal?     @db.Decimal(4, 2)
-  aiGatePassed          Boolean?
-  publicationTierPassed Boolean?
-  verdict               RnDAttemptVerdict
-  refinementSlot        String?
-  refinementReason      String?      @db.Text
-  errorCode             String?
-  errorMessage          String?      @db.Text
-  job                   RnDJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  artifact              RnDAsset?    @relation("RnDAttemptArtifact", fields: [artifactId], references: [id])
-
-  @@unique([jobId, attemptNumber])
-  @@index([jobId, submittedAt])
-  @@index([verdict])
-  @@index([aiGatePassed])
-  @@index([publicationTierPassed])
 }
 
 enum ImageType {
@@ -671,55 +559,4 @@ enum FeedbackIssue {
   BLENDING
   BACKGROUND
   OTHER
-}
-
-enum RnDCampaignStatus {
-  DRAFT
-  RUNNING
-  PAUSED
-  COMPLETED
-  CANCELLED
-}
-
-enum RnDTargetType {
-  SINGLE
-  COMPOSITE
-  PARALLEL
-}
-
-enum RnDTargetStatus {
-  DRAFT
-  QUEUED
-  PROCESSING
-  QA
-  HUMAN_APPROVAL
-  APPROVED
-  REJECTED
-  EXHAUSTED
-  FAILED
-}
-
-enum RnDAssetKind {
-  SOURCE
-  GENERATED
-}
-
-enum RnDJobStatus {
-  QUEUED
-  PROCESSING
-  QA
-  HUMAN_APPROVAL
-  COMPLETED
-  REFINING
-  EXHAUSTED
-  FAILED
-  CANCELLED
-}
-
-enum RnDAttemptVerdict {
-  REFINE
-  HUMAN_APPROVAL
-  APPROVED
-  EXHAUSTED
-  FAILED
 }
