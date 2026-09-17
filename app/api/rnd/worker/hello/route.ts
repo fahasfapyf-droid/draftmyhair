@@ -10,7 +10,8 @@ export async function GET(request: Request) {
   try {
     requireRndWorker(request.headers.get("authorization"));
   } catch (response) {
-    return response;
+    if (response instanceof Response) return response;
+    throw response;
   }
 
   return NextResponse.json({
