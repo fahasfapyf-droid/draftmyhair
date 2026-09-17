@@ -12,7 +12,8 @@ export async function POST(request: Request) {
   try {
     requireRndWorker(request.headers.get("authorization"));
   } catch (response) {
-    return response;
+    if (response instanceof Response) return response;
+    throw response;
   }
 
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
@@ -24,17 +25,11 @@ export async function POST(request: Request) {
       where: {
         OR: [
           { status: "QUEUED" },
-          {
-            status: "PROCESSING",
-            OR: [
-              { leaseExpiresAt: null },
-              { leaseExpiresAt: { lt: now } },
-            ],
-          },
+          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
         ],
       },
       orderBy: { queuedAt: "asc" },
-      select: { id: true },
+      select: { id: true, targetId: true },
     });
 
     if (!candidate) return null;
@@ -44,44 +39,26 @@ export async function POST(request: Request) {
         id: candidate.id,
         OR: [
           { status: "QUEUED" },
-          {
-            status: "PROCESSING",
-            OR: [
-              { leaseExpiresAt: null },
-              { leaseExpiresAt: { lt: now } },
-            ],
-          },
+          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
         ],
       },
-      data: {
-        status: "PROCESSING",
-        leaseOwner: workerId,
-        leaseExpiresAt,
-        heartbeatAt: now,
-        startedAt: now,
-      },
+      data: { status: "PROCESSING", leaseOwner: workerId, leaseExpiresAt, heartbeatAt: now, startedAt: now },
     });
 
     if (updated.count !== 1) return null;
 
     await tx.rnDTarget.update({
-      where: { id: (await tx.rnDJob.findUniqueOrThrow({ where: { id: candidate.id }, select: { targetId: true } })).targetId },
+      where: { id: candidate.targetId },
       data: { status: "PROCESSING", currentJobId: candidate.id },
     });
 
     return tx.rnDJob.findUnique({
       where: { id: candidate.id },
-      include: {
-        target: {
-          include: { sourceAsset: true },
-        },
-      },
+      include: { target: { include: { sourceAsset: true } } },
     });
   });
 
-  if (!claimed) {
-    return NextResponse.json({ ok: true, job: null });
-  }
+  if (!claimed) return NextResponse.json({ ok: true, job: null });
 
   return NextResponse.json({
     ok: true,
