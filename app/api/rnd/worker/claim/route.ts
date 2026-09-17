@@ -1,0 +1,120 @@
+import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/prisma";
+import {
+  requireRndWorker,
+  RND_WORKER_LEASE_SECONDS,
+} from "@/lib/rnd/worker-auth";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  try {
+    requireRndWorker(request.headers.get("authorization"));
+  } catch (response) {
+    return response;
+  }
+
+  const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
+  const now = new Date();
+  const leaseExpiresAt = new Date(now.getTime() + RND_WORKER_LEASE_SECONDS * 1000);
+
+  const claimed = await prisma.$transaction(async (tx) => {
+    const candidate = await tx.rnDJob.findFirst({
+      where: {
+        OR: [
+          { status: "QUEUED" },
+          {
+            status: "PROCESSING",
+            OR: [
+              { leaseExpiresAt: null },
+              { leaseExpiresAt: { lt: now } },
+            ],
+          },
+        ],
+      },
+      orderBy: { queuedAt: "asc" },
+      select: { id: true },
+    });
+
+    if (!candidate) return null;
+
+    const updated = await tx.rnDJob.updateMany({
+      where: {
+        id: candidate.id,
+        OR: [
+          { status: "QUEUED" },
+          {
+            status: "PROCESSING",
+            OR: [
+              { leaseExpiresAt: null },
+              { leaseExpiresAt: { lt: now } },
+            ],
+          },
+        ],
+      },
+      data: {
+        status: "PROCESSING",
+        leaseOwner: workerId,
+        leaseExpiresAt,
+        heartbeatAt: now,
+        startedAt: now,
+      },
+    });
+
+    if (updated.count !== 1) return null;
+
+    await tx.rnDTarget.update({
+      where: { id: (await tx.rnDJob.findUniqueOrThrow({ where: { id: candidate.id }, select: { targetId: true } })).targetId },
+      data: { status: "PROCESSING", currentJobId: candidate.id },
+    });
+
+    return tx.rnDJob.findUnique({
+      where: { id: candidate.id },
+      include: {
+        target: {
+          include: { sourceAsset: true },
+        },
+      },
+    });
+  });
+
+  if (!claimed) {
+    return NextResponse.json({ ok: true, job: null });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    workerId,
+    leaseExpiresAt: claimed.leaseExpiresAt?.toISOString() ?? null,
+    job: {
+      id: claimed.id,
+      targetId: claimed.targetId,
+      status: claimed.status,
+      promptVersionNumber: claimed.promptVersionNumber,
+      currentPrompt: claimed.currentPrompt,
+      attemptCount: claimed.attemptCount,
+      target: {
+        id: claimed.target.id,
+        targetType: claimed.target.targetType,
+        targetKey: claimed.target.targetKey,
+        hairstyleId: claimed.target.hairstyleId,
+        hairColorKey: claimed.target.hairColorKey,
+        beardKey: claimed.target.beardKey,
+        hardCoreInstruction: claimed.target.hardCoreInstruction,
+        sourceAssetId: claimed.target.sourceAssetId,
+      },
+      sourceAsset: {
+        id: claimed.target.sourceAsset.id,
+        kind: claimed.target.sourceAsset.kind,
+        storageKey: claimed.target.sourceAsset.storageKey,
+        blobUrl: claimed.target.sourceAsset.blobUrl,
+        mimeType: claimed.target.sourceAsset.mimeType,
+        fileSize: claimed.target.sourceAsset.fileSize,
+        width: claimed.target.sourceAsset.width,
+        height: claimed.target.sourceAsset.height,
+        checksum: claimed.target.sourceAsset.checksum,
+      },
+    },
+  });
+}
