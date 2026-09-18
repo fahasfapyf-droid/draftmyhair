@@ -34,7 +34,7 @@ interface ClaimedJob {
   status: string;
   promptVersionNumber: number | null;
   currentPrompt: string | null;
-  attemptCount: number;
+  attemptCount: number;\n  attemptNumber: number;
   target: {
     id: string;
     targetType: string;
@@ -317,7 +317,7 @@ async function captureGeneratedImage(page: Page, source: string, outputPath: str
 }
 
 async function processJob(page: Page, job: ClaimedJob) {
-  const attemptNumber = job.attemptCount + 1;
+  const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
   const generationStartedAt = new Date().toISOString();
   const heartbeatTimer = setInterval(() => {
@@ -388,7 +388,7 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
       continue;
     }
-    console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptCount + 1}).`);
+    console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
     await processJob(page, result.job);
   }
 }
