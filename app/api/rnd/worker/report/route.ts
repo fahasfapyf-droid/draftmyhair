@@ -95,6 +95,9 @@ export async function POST(request: Request) {
 
   const artifact = await prisma.rnDAsset.findUnique({ where: { id: artifactId }, select: { id: true, blobUrl: true, mimeType: true } });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+  if (!artifact.blobUrl || !artifact.mimeType) {
+    return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
+  }
 
   let qa;
   try {
