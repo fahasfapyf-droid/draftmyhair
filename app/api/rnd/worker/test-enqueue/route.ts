@@ -33,8 +33,6 @@ export async function POST(request: Request) {
   const compiledStyle = STYLE_PROMPTS[promptKey];
   if (!compiledStyle) return NextResponse.json({ error: "Unknown hairstyle prompt key" }, { status: 404 });
 
-  // R&D test enqueue must not depend on the production Preview hairstyle catalog being seeded.
-  // Reuse an existing hairstyle row when present; otherwise create a minimal R&D catalog row.
   const existingHairstyle = await prisma.hairstyle.findUnique({ where: { promptKey }, select: { id: true } });
   const hairstyle = existingHairstyle ?? await prisma.hairstyle.create({
     data: {
@@ -62,8 +60,13 @@ export async function POST(request: Request) {
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
-  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true, mimeType: true, fileSize: true, checksum: true } });
-  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType });
+  const existingSource = await prisma.rnDAsset.findUnique({
+    where: { storageKey },
+    select: { id: true, blobUrl: true, mimeType: true, fileSize: true, checksum: true },
+  });
+  const blob = !existingSource || !existingSource.blobUrl
+    ? await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType })
+    : null;
   const built = await buildRndPrompt({ promptKey });
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || "rnd-worker";
 
@@ -76,14 +79,16 @@ export async function POST(request: Request) {
       create: {
         kind: "SOURCE",
         storageKey,
-        blobUrl: blob!.url,
+        blobUrl: blob?.url ?? existingSource?.blobUrl ?? "",
         originalFilename: parsed.pathname.split("/").pop() || "test-source",
         mimeType,
         fileSize: buffer.length,
         checksum,
         immutable: true,
       },
-      update: {},
+      update: blob
+        ? { blobUrl: blob.url, mimeType, fileSize: buffer.length, checksum }
+        : {},
     });
     const target = await tx.rnDTarget.create({
       data: {
