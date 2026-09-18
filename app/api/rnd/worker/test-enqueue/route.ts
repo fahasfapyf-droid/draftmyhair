@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 
 export const runtime = "nodejs";
 
@@ -29,8 +30,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Test source URL is not allowed" }, { status: 400 });
   }
 
-  const hairstyle = await prisma.hairstyle.findFirst({ where: { promptKey, isActive: true }, select: { id: true } });
-  if (!hairstyle) return NextResponse.json({ error: "Active hairstyle prompt key not found" }, { status: 404 });
+  const compiledStyle = STYLE_PROMPTS[promptKey];
+  if (!compiledStyle) return NextResponse.json({ error: "Unknown hairstyle prompt key" }, { status: 404 });
+
+  // R&D test enqueue must not depend on the production Preview hairstyle catalog being seeded.
+  // Reuse an existing hairstyle row when present; otherwise create a minimal R&D catalog row.
+  const existingHairstyle = await prisma.hairstyle.findUnique({ where: { promptKey }, select: { id: true } });
+  const hairstyle = existingHairstyle ?? await prisma.hairstyle.create({
+    data: {
+      name: promptKey.replace(/[-_]+/g, " ").replace(/\\b\\w/g, (char) => char.toUpperCase()),
+      slug: promptKey,
+      serviceType: "HAIRSTYLE",
+      category: null,
+      gender: "UNISEX",
+      description: "R&D test hairstyle catalog entry.",
+      promptKey,
+      isActive: true,
+      displayOrder: 9000,
+    },
+    select: { id: true },
+  });
 
   const response = await fetch(parsed.toString(), { cache: "no-store", signal: AbortSignal.timeout(30_000) });
   if (!response.ok) return NextResponse.json({ error: "Test source image could not be fetched" }, { status: 502 });
