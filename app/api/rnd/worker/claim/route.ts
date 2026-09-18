@@ -15,14 +15,14 @@ export async function POST(request: Request) {
 
   const claimed = await prisma.$transaction(async (tx) => {
     const candidate = await tx.rnDJob.findFirst({
-      where: { OR: [{ status: "QUEUED" }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
+      where: { OR: [{ status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
       orderBy: { queuedAt: "asc" },
       select: { id: true, targetId: true },
     });
     if (!candidate) return null;
 
     const updated = await tx.rnDJob.updateMany({
-      where: { id: candidate.id, OR: [{ status: "QUEUED" }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
+      where: { id: candidate.id, OR: [{ status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
       data: { status: "PROCESSING", leaseOwner: workerId, leaseExpiresAt, heartbeatAt: now, startedAt: now },
     });
     if (updated.count !== 1) return null;
