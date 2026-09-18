@@ -34,7 +34,8 @@ interface ClaimedJob {
   status: string;
   promptVersionNumber: number | null;
   currentPrompt: string | null;
-  attemptCount: number;\n  attemptNumber: number;
+  attemptCount: number;
+  attemptNumber: number;
   target: {
     id: string;
     targetType: string;
