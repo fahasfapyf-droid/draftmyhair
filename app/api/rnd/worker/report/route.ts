@@ -93,6 +93,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, job: result });
   }
 
+  if (!artifactId) {
+    return NextResponse.json({ error: "Artifact ID is required for a successful report" }, { status: 400 });
+  }
+
   const artifact = await prisma.rnDAsset.findUnique({ where: { id: artifactId }, select: { id: true, blobUrl: true, mimeType: true } });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   if (!artifact.blobUrl || !artifact.mimeType) {
@@ -150,7 +154,9 @@ export async function POST(request: Request) {
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement) {
-      const rebuilt = await buildRndPrompt({ promptKey: (await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyle: { select: { promptKey: true } } } })).hairstyle.promptKey, refinement });
+      const target = await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyle: { select: { promptKey: true } } } });
+      if (!target.hairstyle) throw new Error("R&D target hairstyle is missing.");
+      const rebuilt = await buildRndPrompt({ promptKey: target.hairstyle.promptKey, refinement });
       const nextEligibleAt = new Date(Math.max(Date.now() + FIVE_MINUTES_MS, submittedAt.getTime() + FIVE_MINUTES_MS));
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
