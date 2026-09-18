@@ -12,5 +12,5 @@ export async function GET() {
     orderBy: { updatedAt: "asc" },
     include: { target: { select: { id: true, targetKey: true, hairstyleId: true, status: true } }, attempts: { orderBy: { attemptNumber: "desc" }, take: 1, select: { id: true, attemptNumber: true, artifactId: true, qaJson: true, overallScore: true, verdict: true, submittedAt: true } } },
   });
-  return NextResponse.json({ jobs }, { headers: { "Cache-Control": "no-store" } });
+  const enrichedJobs = jobs.map((job) => ({ ...job, attempts: job.attempts.map((attempt) => ({ ...attempt, artifactViewPath: attempt.artifactId ? `/api/rnd/approval/artifact?artifactId=${encodeURIComponent(attempt.artifactId)}` : null })) }));\n  return NextResponse.json({ jobs: enrichedJobs }, { headers: { "Cache-Control": "no-store" } });
 }
