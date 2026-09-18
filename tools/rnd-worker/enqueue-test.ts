@@ -1,6 +1,6 @@
 import "./vercel-bypass.ts";
 
-const apiBase = (process.env.RND_API_BASE ?? "https://draftmyhair-git-rnd-prompt-lab-v3-draftmyhair.vercel.app").replace(/\\/$/, "");
+const apiBase = (process.env.RND_API_BASE ?? "https://draftmyhair-git-rnd-prompt-lab-v3-draftmyhair.vercel.app").replace(/\/$/, "");
 const token = process.env.RND_WORKER_TOKEN?.trim();
 const workerId = process.env.RND_WORKER_ID?.trim() || "c9c51e78-b656-4e68-95df-82537829a59d";
 
