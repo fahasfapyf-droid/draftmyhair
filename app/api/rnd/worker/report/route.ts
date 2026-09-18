@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   const generationStartedAt = dateOrNull(body.generationStartedAt);
   const generationCompletedAt = dateOrNull(body.generationCompletedAt);
-  const artifactId = typeof body.artifactId === "string" ? body.artifactId : null;
+  const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
   const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
   const errorMessage = typeof body.errorMessage === "string" ? body.errorMessage : null;
   const now = new Date();
