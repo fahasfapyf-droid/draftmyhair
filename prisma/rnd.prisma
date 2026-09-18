@@ -119,6 +119,7 @@ model RnDJob {
   leaseExpiresAt      DateTime?
   heartbeatAt         DateTime?
   queuedAt            DateTime     @default(now())
+  nextEligibleAt      DateTime?
   startedAt           DateTime?
   completedAt         DateTime?
   updatedAt            DateTime     @updatedAt
