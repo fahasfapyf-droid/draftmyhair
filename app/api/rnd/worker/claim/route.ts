@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const leaseExpiresAt = new Date(now.getTime() + RND_WORKER_LEASE_SECONDS * 1000);
 
   const claimed = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))`;
+    await tx.$queryRaw`WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))) SELECT 1 AS locked FROM lock`;
 
     const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const recent = await tx.rnDAttempt.findMany({
