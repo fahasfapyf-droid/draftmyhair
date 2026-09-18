@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   const job = await prisma.rnDJob.findUnique({
     where: { id: jobId },
-    select: { id: true, targetId: true, attemptCount: true, status: true, leaseOwner: true, leaseExpiresAt: true, currentPrompt: true, target: { select: { hairstyleId: true } } },
+    select: { id: true, targetId: true, attemptCount: true, status: true, leaseOwner: true, leaseExpiresAt: true, currentPrompt: true, target: { select: { hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } } },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
@@ -77,11 +77,11 @@ export async function POST(request: Request) {
 
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
   const prompt = job.currentPrompt;
-  const revision = promptRevision(prompt);
+  const revision = promptRevision(prompt);\n\n  const reservedAttempt = await prisma.rnDAttempt.findUnique({\n    where: { jobId_attemptNumber: { jobId, attemptNumber } },\n    select: { id: true, submittedAt: true, artifactId: true, verdict: true },\n  });\n  if (!reservedAttempt) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });\n  if (reservedAttempt.artifactId && reservedAttempt.verdict !== "REFINE") return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
 
   if (!succeeded) {
     const result = await prisma.$transaction(async (tx) => {
-      await tx.rnDAttempt.create({ data: { jobId, attemptNumber, prompt, promptRevision: revision, submittedAt, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage } });
+      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage } });
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
         data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
