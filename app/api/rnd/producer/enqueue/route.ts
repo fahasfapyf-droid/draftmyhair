@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
-import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndProducer } from "@/lib/rnd/producer-auth";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 
 export const runtime = "nodejs";
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const auth = requireRndWorker(request.headers.get("authorization"));
+  const auth = requireRndProducer(request);
   if (auth) return auth;
 
   const form = await request.formData().catch(() => null);
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   if (!(image instanceof File) || !image.type.startsWith("image/")) return NextResponse.json({ error: "image must be an image file" }, { status: 400 });
   if (image.size <= 0 || image.size > MAX_SOURCE_BYTES) return NextResponse.json({ error: "source image size is outside the allowed range" }, { status: 413 });
-  if (!name || !targetKey || !promptKey || !createdByUserId) return NextResponse.json({ error: "campaignName, targetKey, promptKey and createdByUserId are required" }, { status: 400 });
+  if (!name || !targetKey || !promptKey) return NextResponse.json({ error: "campaignName, targetKey and promptKey are required" }, { status: 400 });
 
   const hairstyle = await prisma.hairstyle.findFirst({ where: { promptKey, isActive: true }, select: { id: true } });
   if (!hairstyle) return NextResponse.json({ error: "Active hairstyle prompt key not found" }, { status: 404 });
