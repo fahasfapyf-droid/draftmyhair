@@ -154,9 +154,11 @@ export async function POST(request: Request) {
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement) {
-      const target = await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyle: { select: { promptKey: true } } } });
-      if (!target.hairstyle) throw new Error("R&D target hairstyle is missing.");
-      const rebuilt = await buildRndPrompt({ promptKey: target.hairstyle.promptKey, refinement });
+      const target = await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyleId: true } });
+      if (!target.hairstyleId) throw new Error("R&D target hairstyle is missing.");
+      const hairstyle = await tx.hairstyle.findUnique({ where: { id: target.hairstyleId }, select: { promptKey: true } });
+      if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
+      const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
       const nextEligibleAt = new Date(Math.max(Date.now() + FIVE_MINUTES_MS, submittedAt.getTime() + FIVE_MINUTES_MS));
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
