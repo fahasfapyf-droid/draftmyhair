@@ -141,7 +141,7 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   const bytes = await readFile(filePath);
   form.append("jobId", job.id);
   form.append("attemptNumber", String(attemptNumber));
-  form.append("file", new Blob([bytes], { type: "image/png" }), path.basename(filePath));
+  form.append("file", new Blob([bytes], { type: mimeType }), path.basename(filePath));
   const response = await api("/api/rnd/worker/artifacts", { method: "POST", body: form });
   if (!response.ok) throw new Error(`Artifact upload failed: HTTP ${response.status} ${await response.text()}`);
   const body = await response.json() as { ok: boolean; asset?: { id: string } };
