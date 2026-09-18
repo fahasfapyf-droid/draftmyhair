@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   const existingHairstyle = await prisma.hairstyle.findUnique({ where: { promptKey }, select: { id: true } });
   const hairstyle = existingHairstyle ?? await prisma.hairstyle.create({
     data: {
-      name: promptKey.replace(/[-_]+/g, " ").replace(/\\b\\w/g, (char) => char.toUpperCase()),
+      name: promptKey.replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
       slug: promptKey,
       serviceType: "HAIRSTYLE",
       category: null,
