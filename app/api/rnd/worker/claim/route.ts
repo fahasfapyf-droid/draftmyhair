@@ -14,6 +14,18 @@ export async function POST(request: Request) {
   const leaseExpiresAt = new Date(now.getTime() + RND_WORKER_LEASE_SECONDS * 1000);
 
   const claimed = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))`;
+    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const recent = await tx.rnDAttempt.findMany({
+      where: { generationStartedAt: { gte: hourAgo } },
+      orderBy: { generationStartedAt: "desc" },
+      take: 12,
+      select: { generationStartedAt: true },
+    });
+    if (recent.length >= 12) return null;
+    const lastGeneration = recent[0]?.generationStartedAt;
+    if (lastGeneration && now.getTime() - lastGeneration.getTime() < 5 * 60 * 1000) return null;
+
     const candidate = await tx.rnDJob.findFirst({
       where: { OR: [{ status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] }, { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }] },
       orderBy: { queuedAt: "asc" },
