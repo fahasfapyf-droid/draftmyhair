@@ -7,6 +7,7 @@ import { buildRndPrompt } from "@/lib/rnd/prompt";
 export const runtime = "nodejs";
 const MAX_AUTONOMOUS_ATTEMPTS = 2;
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const QA_TIMEOUT_MS = 120_000;
 
 type ReportBody = {
   jobId?: unknown;
@@ -37,8 +38,12 @@ function promptRevision(prompt: string) {
 async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
-  const response = await fetch(blobUrl, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
-  if (!response.ok) throw new Error("Generated artifact could not be retrieved for QA.");
+  const response = await fetch(blobUrl, {
+    headers: { Authorization: "Bearer " + token },
+    cache: "no-store",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error("R&D artifact could not be retrieved for QA.");
   return { buffer: Buffer.from(await response.arrayBuffer()), mimeType };
 }
 
@@ -59,7 +64,6 @@ export async function POST(request: Request) {
 
   const generationStartedAt = dateOrNull(body.generationStartedAt);
   const generationCompletedAt = dateOrNull(body.generationCompletedAt);
-  const submittedAt = dateOrNull(body.submittedAt) ?? new Date();
   const artifactId = typeof body.artifactId === "string" ? body.artifactId : null;
   const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
   const errorMessage = typeof body.errorMessage === "string" ? body.errorMessage : null;
@@ -67,46 +71,69 @@ export async function POST(request: Request) {
 
   const job = await prisma.rnDJob.findUnique({
     where: { id: jobId },
-    select: { id: true, targetId: true, attemptCount: true, status: true, leaseOwner: true, leaseExpiresAt: true, currentPrompt: true, target: { select: { hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } } },
+    select: {
+      id: true,
+      targetId: true,
+      attemptCount: true,
+      status: true,
+      leaseOwner: true,
+      leaseExpiresAt: true,
+      currentPrompt: true,
+      target: { select: { hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+    },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
-  if (attemptNumber !== job.attemptCount + 1) return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
+  if (attemptNumber !== job.attemptCount + 1) {
+    return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
+  }
 
-  const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
+  const reservation = await prisma.rnDAttempt.findUnique({
+    where: { jobId_attemptNumber: { jobId, attemptNumber } },
+    select: { id: true, submittedAt: true, artifactId: true, verdict: true },
+  });
+  if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
+  if (reservation.artifactId) return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+
   const prompt = job.currentPrompt;
-  const revision = promptRevision(prompt);\n\n  const reservedAttempt = await prisma.rnDAttempt.findUnique({\n    where: { jobId_attemptNumber: { jobId, attemptNumber } },\n    select: { id: true, submittedAt: true, artifactId: true, verdict: true },\n  });\n  if (!reservedAttempt) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });\n  if (reservedAttempt.artifactId && reservedAttempt.verdict !== "REFINE") return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+  const revision = promptRevision(prompt);
+  const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
 
   if (!succeeded) {
     const result = await prisma.$transaction(async (tx) => {
-      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage } });
-      const updatedJob = await tx.rnDJob.update({
+      const attempt = await tx.rnDAttempt.update({
+        where: { jobId_attemptNumber: { jobId, attemptNumber } },
+        data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage },
+      });
+      await tx.rnDJob.update({
         where: { id: jobId },
         data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
-        select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
-      return updatedJob;
+      return attempt;
     });
-    return NextResponse.json({ ok: true, job: result });
+    return NextResponse.json({ ok: true, jobId, attemptId: result.id, status: "FAILED" });
   }
 
-  if (!artifactId) {
-    return NextResponse.json({ error: "Artifact ID is required for a successful report" }, { status: 400 });
-  }
-
-  const artifact = await prisma.rnDAsset.findUnique({ where: { id: artifactId }, select: { id: true, blobUrl: true, mimeType: true } });
+  const artifact = await prisma.rnDAsset.findUnique({
+    where: { id: artifactId },
+    select: { id: true, blobUrl: true, mimeType: true },
+  });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
-  if (!artifact.blobUrl || !artifact.mimeType) {
-    return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
-  }
+  if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
 
   let qa;
   try {
-    const image = await fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType);
-    qa = await runRndQa(image.buffer, image.mimeType, prompt);
+    const [source, generated] = await Promise.all([
+      fetchPrivateArtifact(job.target.sourceAsset.blobUrl, job.target.sourceAsset.mimeType),
+      fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType),
+    ]);
+    qa = await Promise.race([
+      runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
+    ]);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Automated QA failed." }, { status: 503 });
   }
@@ -122,14 +149,13 @@ export async function POST(request: Request) {
     qa.artifacts === "NONE";
 
   const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+
   const finalResult = await prisma.$transaction(async (tx) => {
-    await tx.rnDAttempt.create({
+    await tx.rnDAttempt.update({
+      where: { jobId_attemptNumber: { jobId, attemptNumber } },
       data: {
-        jobId,
-        attemptNumber,
         prompt,
         promptRevision: revision,
-        submittedAt,
         generationStartedAt,
         generationCompletedAt,
         artifactId,
@@ -140,6 +166,8 @@ export async function POST(request: Request) {
         verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "REFINE" : "EXHAUSTED",
         refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "AUTO_1" : null,
         refinementReason: hardPass ? null : refinement,
+        errorCode: null,
+        errorMessage: null,
       },
     });
 
@@ -159,7 +187,7 @@ export async function POST(request: Request) {
       const hairstyle = await tx.hairstyle.findUnique({ where: { id: target.hairstyleId }, select: { promptKey: true } });
       if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
       const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
-      const nextEligibleAt = new Date(Math.max(Date.now() + FIVE_MINUTES_MS, submittedAt.getTime() + FIVE_MINUTES_MS));
+      const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
         data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
