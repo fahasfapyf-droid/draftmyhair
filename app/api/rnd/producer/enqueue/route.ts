@@ -17,7 +17,6 @@ export async function POST(request: Request) {
   const name = typeof form?.get("campaignName") === "string" ? String(form!.get("campaignName")).trim() : "";
   const targetKey = typeof form?.get("targetKey") === "string" ? String(form!.get("targetKey")).trim() : "";
   const promptKey = typeof form?.get("promptKey") === "string" ? String(form!.get("promptKey")).trim() : "";
-  const createdByUserId = typeof form?.get("createdByUserId") === "string" ? String(form!.get("createdByUserId")).trim() : "";
   const hardCoreInstruction = typeof form?.get("hardCoreInstruction") === "string" ? String(form!.get("hardCoreInstruction")).trim() : "";
 
   if (!(image instanceof File) || !image.type.startsWith("image/")) return NextResponse.json({ error: "image must be an image file" }, { status: 400 });
@@ -31,12 +30,19 @@ export async function POST(request: Request) {
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
-  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
+  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true } });
+  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
   const built = await buildRndPrompt({ promptKey });
+  const createdByUserId = process.env.RND_PRODUCER_USER_ID?.trim();
+  if (!createdByUserId) return NextResponse.json({ error: "R&D producer identity is not configured." }, { status: 503 });
 
   const result = await prisma.$transaction(async (tx) => {
     const campaign = await tx.rnDCampaign.create({ data: { name, status: "RUNNING", autoAdvanceEnabled: true, createdByUserId } });
-    const source = await tx.rnDAsset.create({ data: { kind: "SOURCE", storageKey, blobUrl: blob.url, originalFilename: image.name || null, mimeType: image.type, fileSize: image.size, checksum, immutable: true } });
+    const source = await tx.rnDAsset.upsert({
+      where: { storageKey },
+      create: { kind: "SOURCE", storageKey, blobUrl: blob!.url, originalFilename: image.name || null, mimeType: image.type, fileSize: image.size, checksum, immutable: true },
+      update: {},
+    });
     const target = await tx.rnDTarget.create({
       data: { campaignId: campaign.id, targetType: "SINGLE", targetKey, hairstyleId: hairstyle.id, hardCoreInstruction: hardCoreInstruction || null, sourceAssetId: source.id, status: "QUEUED" },
     });
