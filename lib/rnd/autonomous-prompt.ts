@@ -4,7 +4,7 @@ import { MASTER_PROMPT_V2 } from "@/lib/engine/prompts/master-v2";
 import { MASTER_PROMPT_V3 } from "@/lib/engine/prompts/master-v3";
 import { MASTER_PROMPT_V3_SINGLE } from "@/lib/engine/prompts/master-v3-single";
 
-type PromptModelResult = { prompt: string; revisionNote: string };
+type ModelResult = { stylePrompt: string; revisionNote: string };
 
 function getMasterPrompt() {
   switch ((process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single")) {
@@ -29,80 +29,96 @@ function getClient() {
 const OUTPUT_SCHEMA = {
   type: "OBJECT",
   properties: {
-    prompt: { type: "STRING" },
+    stylePrompt: { type: "STRING" },
     revisionNote: { type: "STRING" },
   },
-  required: ["prompt", "revisionNote"],
-  propertyOrdering: ["prompt", "revisionNote"],
+  required: ["stylePrompt", "revisionNote"],
+  propertyOrdering: ["stylePrompt", "revisionNote"],
 } as const;
 
 const SYSTEM = [
-  "You are Draft My Hair's autonomous production prompt engineer.",
-  "The human supplies only a hairstyle objective. You own the prompt engineering.",
-  "Produce a production-grade photorealistic hair-only transformation prompt.",
-  "The master prompt is mandatory and is supplied separately; never weaken, remove, reorder, or contradict its identity-preservation, geometry-lock, skin-preservation, color-authority, or negative constraints.",
-  "The style-specific section must make the requested hairstyle visually unambiguous using concrete salon geometry: length, silhouette, weight distribution, perimeter, layering, texture, direction, styling, and distinguishing characteristics.",
+  "You are Draft My Hair's autonomous hairstyle prompt engineer.",
+  "The human supplies only the hairstyle objective. You own the style-specific prompt engineering.",
+  "Return ONLY the requested hairstyle's STYLE-SPECIFIC PROMPT BLOCK. Do not reproduce the master prompt.",
+  "The application will deterministically prepend the immutable master prompt.",
+  "Make the requested hairstyle visually unambiguous using concrete salon geometry: length, silhouette, weight distribution, perimeter, layering, texture, direction, styling, and distinguishing characteristics.",
   "Explicitly distinguish the requested style from nearby/confusable styles when that reduces model ambiguity.",
-  "Do not add generic self-check lists or hedging. Be decisive and concrete.",
+  "Be decisive and concrete. Do not add generic self-check lists or hedging.",
   "Never instruct the image model to regenerate the face, skin, ears, neck, skull, background, pose, framing, lighting, or body.",
-  "The final output must be the COMPLETE prompt, including the master constraints and the requested hairstyle section.",
+  "For non-dye styles, preserve the original hair color through the existing master root-authority system; do not invent a new color.",
+  "For refinement, preserve every previously passing style requirement and modify only what is necessary to address the supplied QA defect.",
   "Return JSON only.",
 ].join("\n");
 
-async function callModel(instruction: string, currentPrompt?: string, defect?: string): Promise<PromptModelResult> {
+async function callModel(instruction: string, currentStylePrompt?: string, defect?: string): Promise<ModelResult> {
   const ai = getClient();
-  const master = getMasterPrompt();
-  const task = currentPrompt
+  const task = currentStylePrompt
     ? [
         "OPTIMIZATION TASK.",
         "Human objective:", instruction,
-        "Current complete prompt:", currentPrompt,
+        "Current style-specific prompt block:", currentStylePrompt,
         "Automated QA defect diagnosis:", defect ?? "Improve the most important remaining transformation defect.",
-        "Rewrite the COMPLETE prompt, preserving every passing requirement and changing only what is necessary to address the diagnosed defect.",
-        "Do not merely append the diagnosis. Integrate the correction into the appropriate style-specific language.",
+        "Rewrite the STYLE-SPECIFIC BLOCK only.",
+        "Preserve every passing requirement from the current block.",
+        "Change only the language necessary to correct the diagnosed defect.",
       ].join("\n\n")
     : [
         "INITIAL PROMPT TASK.",
         "Human objective:", instruction,
-        "Use the master framework below as immutable constraints.",
-        "Write a complete prompt whose style-specific section is derived from the human objective.",
+        "Create the strongest possible style-specific block for the requested hairstyle.",
       ].join("\n\n");
 
   const response = await ai.models.generateContent({
     model: process.env.RND_PROMPT_MODEL ?? "gemini-2.5-flash",
     contents: [{
       role: "user",
-      parts: [{ text: SYSTEM + "\n\nMASTER PROMPT:\n" + master + "\n\n" + task }],
+      parts: [{ text: SYSTEM + "\n\n" + task }],
     }],
     config: {
       responseMimeType: "application/json",
       responseSchema: OUTPUT_SCHEMA,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 4096,
     },
   });
 
   const raw = response.text ?? response.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
   if (!raw) throw new Error("Prompt model returned an empty response.");
-  const result = JSON.parse(raw) as PromptModelResult;
-  if (typeof result.prompt !== "string" || result.prompt.trim().length < 500) throw new Error("Prompt model returned an invalid production prompt.");
-  if (!result.prompt.includes("# INPAINT HAIR ONLY") && !result.prompt.includes("INPAINT HAIR ONLY")) {
-    throw new Error("Generated prompt does not contain the mandatory master constraints.");
+  const result = JSON.parse(raw) as ModelResult;
+  if (typeof result.stylePrompt !== "string" || result.stylePrompt.trim().length < 80) {
+    throw new Error("Prompt model returned an invalid style-specific prompt.");
   }
-  return { prompt: result.prompt.trim(), revisionNote: result.revisionNote?.trim() ?? "" };
+  return { stylePrompt: result.stylePrompt.trim(), revisionNote: result.revisionNote?.trim() ?? "" };
+}
+
+function compile(stylePrompt: string) {
+  const prompt = [
+    getMasterPrompt().trim(),
+    "",
+    "------------------------------------------------------------",
+    "",
+    "# REQUESTED HAIRSTYLE",
+    "",
+    stylePrompt.trim(),
+  ].join("\n").trim();
+  if (!prompt.includes("INPAINT HAIR ONLY")) throw new Error("Master prompt compilation failed.");
+  return prompt;
 }
 
 export async function generateAutonomousPrompt(instruction: string) {
   const clean = instruction.trim();
   if (!clean) throw new Error("Human hairstyle instruction is required.");
   const result = await callModel(clean);
+  const prompt = compile(result.stylePrompt);
   return {
-    prompt: result.prompt,
+    prompt,
     diagnostics: {
       source: "autonomous",
       model: process.env.RND_PROMPT_MODEL ?? "gemini-2.5-flash",
+      masterPromptVersion: process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single",
       revisionNote: result.revisionNote,
       instruction: clean,
-      promptLength: result.prompt.length,
+      stylePromptLength: result.stylePrompt.length,
+      promptLength: prompt.length,
     },
   };
 }
@@ -113,16 +129,22 @@ export async function optimizeAutonomousPrompt(input: {
   defect: string;
   attemptNumber: number;
 }) {
-  const result = await callModel(input.instruction.trim(), input.currentPrompt, input.defect.trim());
+  const marker = "\n# REQUESTED HAIRSTYLE\n";
+  const index = input.currentPrompt.lastIndexOf(marker);
+  const currentStylePrompt = index >= 0 ? input.currentPrompt.slice(index + marker.length).trim() : input.currentPrompt;
+  const result = await callModel(input.instruction.trim(), currentStylePrompt, input.defect.trim());
+  const prompt = compile(result.stylePrompt);
   return {
-    prompt: result.prompt,
+    prompt,
     diagnostics: {
       source: "autonomous-optimizer",
       model: process.env.RND_PROMPT_MODEL ?? "gemini-2.5-flash",
+      masterPromptVersion: process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single",
       attemptNumber: input.attemptNumber,
       revisionNote: result.revisionNote,
       defect: input.defect.trim(),
-      promptLength: result.prompt.length,
+      stylePromptLength: result.stylePrompt.length,
+      promptLength: prompt.length,
     },
   };
 }
