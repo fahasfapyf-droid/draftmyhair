@@ -130,52 +130,79 @@ async function clickAddFiles(page: Page) {
 }
 
 export async function uploadReference(page: Page, imagePath: string) {
-  let input = page.locator('input[type="file"]');
-  if (await input.count() > 0) {
-    await input.first().setInputFiles(imagePath);
-    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-    return;
-  }
+  const uploadDirectInput = async () => {
+    const inputs = page.locator('input[type="file"]');
+    for (let i = await inputs.count() - 1; i >= 0; i -= 1) {
+      const candidate = inputs.nth(i);
+      try {
+        await candidate.setInputFiles(imagePath);
+        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
+        return true;
+      } catch {}
+    }
+    return false;
+  };
+
+  if (await uploadDirectInput()) return;
 
   await clickAddFiles(page);
   await pause(900, "Upload menu opened; waiting for the file control");
 
-  const localFileMenuItem = page.locator('[data-test-id="local-images-files-uploader-icon"]')
-    .locator("xpath=ancestor::*[@role='menuitem' or self::button][1]");
-
-  const menuItems = [
-    localFileMenuItem,
-    page.getByRole("menuitem", { name: /upload files|files|from computer|upload from computer/i }),
-    page.getByText(/upload files|from computer|upload from computer/i).last(),
+  // Gemini's upload UI changes frequently. Prefer explicit semantic controls,
+  // then fall back to stable accessibility/data-test attributes.
+  const uploadControls = [
+    page.getByRole("menuitem", { name: /upload|file|computer|device|photo|image/i }),
+    page.getByRole("button", { name: /upload|file|computer|device|photo|image/i }),
+    page.locator('[role="menuitem"][aria-label*="upload" i]'),
+    page.locator('[role="menuitem"][aria-label*="computer" i]'),
+    page.locator('[role="menuitem"][aria-label*="device" i]'),
+    page.locator('[role="menuitem"][aria-label*="file" i]'),
+    page.locator('[role="menuitem"][aria-label*="photo" i]'),
+    page.locator('[role="menuitem"][aria-label*="image" i]'),
+    page.locator('[data-test-id*="upload" i]'),
+    page.locator('[data-test-id*="file" i]'),
+    page.locator('[data-test-id*="local" i]'),
+    page.locator('[aria-label*="upload" i]'),
+    page.locator('[aria-label*="computer" i]'),
+    page.locator('[aria-label*="device" i]'),
+    page.locator('[aria-label*="file" i]'),
   ];
 
-  for (const locator of menuItems) {
+  for (const locator of uploadControls) {
     try {
       const item = await firstVisible([locator]);
-      const chooserPromise = page.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null);
-      await item.click({ timeout: 10_000 });
+      const chooserPromise = page.waitForEvent("filechooser", { timeout: 5_000 }).catch(() => null);
+      await item.click({ timeout: 5_000 });
       const chooser = await chooserPromise;
       if (chooser) {
         await chooser.setFiles(imagePath);
         await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
         return;
       }
-      input = page.locator('input[type="file"]');
-      if (await input.count() > 0) {
-        await input.first().setInputFiles(imagePath);
-        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-        return;
-      }
+      if (await uploadDirectInput()) return;
     } catch {}
   }
 
-  input = page.locator('input[type="file"]');
-  if (await input.count() > 0) {
-    await input.first().setInputFiles(imagePath);
-    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-    return;
-  }
+  // Last diagnostic fallback: capture the visible upload-menu labels so a
+  // future Gemini UI change is observable rather than silently guessed.
+  const visibleControls = await page.locator(
+    '[role="menuitem"], [role="option"], button, [role="button"]'
+  ).evaluateAll((elements) => elements
+    .filter((element) => {
+      const rect = (element as HTMLElement).getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })
+    .map((element) => ({
+      tag: element.tagName,
+      text: (element.textContent ?? "").trim().replace(/\\s+/g, " ").slice(0, 120),
+      aria: element.getAttribute("aria-label"),
+      testId: element.getAttribute("data-test-id"),
+    }))
+    .filter((item) => item.text || item.aria || item.testId)
+    .slice(-40));
+  console.log(`Gemini upload controls observed: ${JSON.stringify(visibleControls)}`);
 
+  if (await uploadDirectInput()) return;
   throw new Error("Gemini did not expose a usable local-file upload control.");
 }
 
