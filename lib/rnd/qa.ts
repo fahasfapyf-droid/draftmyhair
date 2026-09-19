@@ -127,8 +127,7 @@ async function judge(
 }
 
 function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
-  const scores = ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const;
-  const result = {
+  const result: RndQaResult = {
     overall: Math.min(primary.overall, challenger.overall),
     identity: Math.min(primary.identity, challenger.identity),
     hairOnly: (primary.hairOnly === "PASS" && challenger.hairOnly === "PASS") ? "PASS" as const : "FAIL" as const,
