@@ -268,30 +268,10 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>) {
 }
 
 export async function captureGeneratedImage(page: Page, outputPath: string, before: Set<string>) {
-  const downloadButtons = [
-    page.getByRole("button", { name: /download full size/i }),
-    page.getByRole("button", { name: /download/i }),
-    page.locator('button[aria-label*="Download" i]'),
-    page.locator('[title*="Download" i]'),
-  ];
-
-  for (const candidate of downloadButtons) {
-    try {
-      for (let i = await candidate.count() - 1; i >= 0; i -= 1) {
-        const button = candidate.nth(i);
-        if (!(await button.isVisible())) continue;
-        const downloadPromise = page.waitForEvent("download", { timeout: 20_000 }).catch(() => null);
-        await button.click({ timeout: 10_000 });
-        const download = await downloadPromise;
-        if (download) {
-          await download.saveAs(outputPath);
-          console.log("Generated image captured through Gemini download control.");
-          return;
-        }
-      }
-    } catch {}
-  }
-
+  // Do not click Gemini download controls here. In the persistent Gemini
+  // profile those controls can close/navigate the worker page while the
+  // generated asset is still available in the DOM. Capture the generated
+  // asset directly instead.
   const source = (await largeImages(page)).find((src) => !before.has(src));
   if (!source) throw new Error("Gemini returned no new downloadable image asset.");
 
