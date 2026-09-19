@@ -122,7 +122,9 @@ async function report(job: ClaimedJob, attemptNumber: number, payload: Record<st
     }),
   });
   if (!response.ok) throw new Error(`Report failed: HTTP ${response.status} ${await response.text()}`);
-  return await response.json();
+  const result = await response.json();
+  console.log(`R&D report response for ${job.id} attempt ${attemptNumber}: ${JSON.stringify(result)}`);
+  return result;
 }
 
 async function release(jobId: string) {
