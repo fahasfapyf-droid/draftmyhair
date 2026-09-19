@@ -87,7 +87,15 @@ async function assertServer() {
 }
 
 async function claim(): Promise<ClaimResponse> {
-  const response = await api("/api/rnd/worker/claim", { method: "POST" });
+  console.log("Polling R&D claim endpoint...");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await api("/api/rnd/worker/claim", { method: "POST", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`Claim failed: HTTP ${response.status} ${await response.text()}`);
   return await response.json() as ClaimResponse;
 }
@@ -232,7 +240,10 @@ async function main() {
     throw error;
   }
   console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
-  const page = context.pages()[0] ?? await context.newPage();
+  console.log(`Chrome context currently has ${context.pages().length} page(s).`);
+  console.log("Creating/selecting worker page...");
+  const page = context.pages()[0] ?? await context.newPage({ timeout: 30_000 });
+  console.log("Worker page ready.");
 
   process.on("SIGINT", async () => {
     console.log("Stopping worker; closing Chrome.");
@@ -243,6 +254,7 @@ async function main() {
   while (true) {
     const result = await claim();
     if (!result.job) {
+      console.log("No queued R&D job available; waiting 10s.");
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
       continue;
     }
