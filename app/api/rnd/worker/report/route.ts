@@ -149,7 +149,7 @@ export async function POST(request: Request) {
   const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
 
   let nextPrompt: string | null = null;
-  let nextPromptDiagnostics: Record<string, unknown> | null = null;
+  let nextPromptDiagnostics: unknown = null;
   if (refinement) {
     try {
       if (job.target.hardCoreInstruction?.trim()) {
