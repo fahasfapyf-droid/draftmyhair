@@ -10,16 +10,10 @@ const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
-const configuredProfile = process.env.DMH_GEMINI_PROFILE_DIR?.trim();
-const HISTORICAL_PROFILE_SUFFIX = path.join("tools", "gemini-web-agent", "chrome-profile");
-const PROFILE_DIR = configuredProfile
-  ? (path.isAbsolute(configuredProfile)
-      ? configuredProfile
-      : configuredProfile.toLowerCase().includes(HISTORICAL_PROFILE_SUFFIX.replace(/\\/g, "/"))
-        ? path.resolve(REPO_ROOT, HISTORICAL_PROFILE_SUFFIX)
-        : path.resolve(REPO_ROOT, configuredProfile))
-  : path.resolve(REPO_ROOT, HISTORICAL_PROFILE_SUFFIX);
-const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR ?? path.resolve(WORKER_DIR, "output");
+const PROFILE_DIR = path.resolve(REPO_ROOT, "tools", "gemini-web-agent", "chrome-profile");
+const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR
+  ? (path.isAbsolute(process.env.DMH_RND_OUTPUT_DIR) ? process.env.DMH_RND_OUTPUT_DIR : path.resolve(REPO_ROOT, process.env.DMH_RND_OUTPUT_DIR))
+  : path.resolve(WORKER_DIR, "output");
 const CHROME_PATH = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
