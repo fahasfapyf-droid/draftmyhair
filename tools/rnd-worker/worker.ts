@@ -243,8 +243,13 @@ async function main() {
   }
   console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
   console.log(`Chrome context currently has ${context.pages().length} page(s).`);
-  console.log("Creating/selecting worker page...");
-  const page = context.pages()[0] ?? await context.newPage({ timeout: 30_000 });
+  context.on("close", () => console.error("DIAGNOSTIC: Playwright BrowserContext emitted close."));
+  for (const existingPage of context.pages()) {
+    existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
+  }
+  console.log("Creating dedicated worker page...");
+  let page = await context.newPage({ timeout: 30_000 });
+  page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
   console.log("Worker page ready.");
 
   process.on("SIGINT", async () => {
@@ -261,6 +266,11 @@ async function main() {
       continue;
     }
     console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
+    if (page.isClosed()) {
+      console.error("DIAGNOSTIC: Worker page was already closed; creating replacement page before processing job.");
+      page = await context.newPage({ timeout: 30_000 });
+      page.on("close", () => console.error("DIAGNOSTIC: Replacement worker Playwright page emitted close."));
+    }
     await processJob(page, result.job);
   }
 }
