@@ -208,3 +208,48 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa });
 }
+
+
+export async function GET(request: Request) {
+  const authResponse = requireRndWorker(request.headers.get("authorization"));
+  if (authResponse) return authResponse;
+
+  const jobId = new URL(request.url).searchParams.get("jobId")?.trim();
+  if (!jobId) return NextResponse.json({ error: "jobId is required" }, { status: 400 });
+
+  const job = await prisma.rnDJob.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      status: true,
+      attemptCount: true,
+      targetId: true,
+      completedAt: true,
+      failureCode: true,
+      failureMessage: true,
+      currentPrompt: true,
+      attempts: {
+        orderBy: { attemptNumber: "desc" },
+        select: {
+          id: true,
+          attemptNumber: true,
+          verdict: true,
+          overallScore: true,
+          aiGatePassed: true,
+          publicationTierPassed: true,
+          qaJson: true,
+          refinementSlot: true,
+          refinementReason: true,
+          errorCode: true,
+          errorMessage: true,
+          artifactId: true,
+          generationStartedAt: true,
+          generationCompletedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  return NextResponse.json({ ok: true, job });
+}
