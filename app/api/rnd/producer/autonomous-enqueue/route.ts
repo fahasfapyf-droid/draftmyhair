@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
-  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true } });
+  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
   const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
 
   let built;
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const source = await tx.rnDAsset.upsert({
       where: { storageKey },
       create: {
-        kind: "SOURCE", storageKey, blobUrl: blob!.url, originalFilename: image.name || null,
+        kind: "SOURCE", storageKey, blobUrl: blob?.url ?? "", originalFilename: image.name || null,
         mimeType: image.type, fileSize: image.size, checksum, immutable: true,
       },
       update: {},
