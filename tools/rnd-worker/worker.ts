@@ -3,12 +3,14 @@ import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGe
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-prompt-lab-v3-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
-const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(".rnd-worker-id");
-const PROFILE_DIR = process.env.DMH_GEMINI_PROFILE_DIR ?? path.resolve("tools/gemini-web-agent/chrome-profile");
-const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR ?? path.resolve("tools/rnd-worker/output");
+const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
+const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
+const PROFILE_DIR = process.env.DMH_GEMINI_PROFILE_DIR ?? path.resolve(WORKER_DIR, "../gemini-web-agent/chrome-profile");
+const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR ?? path.resolve(WORKER_DIR, "output");
 const CHROME_PATH = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
@@ -207,6 +209,7 @@ async function main() {
   console.log(`API: ${API_BASE}`);
   await assertServer();
 
+  console.log(`Launching Chrome with persistent Gemini profile: ${PROFILE_DIR}`);
   const context: BrowserContext = await chromium.launchPersistentContext(PROFILE_DIR, {
     executablePath: CHROME_PATH,
     headless: false,
