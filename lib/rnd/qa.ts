@@ -95,7 +95,7 @@ export async function runRndQa(
     config: {
       responseMimeType: "application/json",
       responseSchema: QA_SCHEMA,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
     },
   });
   const text = response.text ?? response.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
