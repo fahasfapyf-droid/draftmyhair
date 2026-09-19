@@ -1,4 +1,5 @@
-import { chromium, type BrowserContext, type Locator, type Page } from "playwright";
+import { chromium, type BrowserContext, type Page } from "playwright";
+import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,7 +10,6 @@ const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(".rnd-work
 const PROFILE_DIR = process.env.DMH_GEMINI_PROFILE_DIR ?? path.resolve("tools/gemini-web-agent/chrome-profile");
 const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR ?? path.resolve("tools/rnd-worker/output");
 const CHROME_PATH = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-const GEMINI_URL = "https://gemini.google.com/app";
 const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
 const GENERATION_TIMEOUT_MS = 180_000;
@@ -155,173 +155,6 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   return body.asset.id;
 }
 
-async function firstVisible(locators: Locator[]) {
-  for (const locator of locators) {
-    try {
-      for (let index = await locator.count() - 1; index >= 0; index--) {
-        const candidate = locator.nth(index);
-        if (await candidate.isVisible()) return candidate;
-      }
-    } catch { /* try next selector */ }
-  }
-  throw new Error("Required Gemini control was not found.");
-}
-
-async function waitForComposer(page: Page) {
-  return firstVisible([
-    page.locator("textarea"),
-    page.locator('[contenteditable="true"][role="textbox"]'),
-    page.locator('[contenteditable="true"]'),
-  ]);
-}
-
-async function ensureSignedIn(page: Page) {
-  await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForTimeout(1_500);
-  const signIn = page.getByRole("link", { name: /sign in/i }).or(page.getByRole("button", { name: /sign in/i }));
-  if (await signIn.count() && await signIn.first().isVisible().catch(() => false)) {
-    console.log("Gemini requires sign-in. Complete Google/Gemini sign-in in the visible Chrome window.");
-    await page.waitForFunction(() => Boolean(document.querySelector('textarea,[contenteditable="true"]')), { timeout: 600_000, polling: 1_000 });
-  }
-}
-
-async function openImagesMode(page: Page) {
-  try {
-    const entry = await firstVisible([
-      page.getByRole("link", { name: /^Images$/i }),
-      page.getByRole("button", { name: /^Images$/i }),
-      page.getByText("Images", { exact: true }),
-    ]);
-    await entry.click();
-    await page.waitForTimeout(1_500);
-  } catch { /* current composer may already be image mode */ }
-
-  const discovery = page.locator('[data-test-id="image-creation-discovery-card"]');
-  if (await discovery.count() && await discovery.first().isVisible().catch(() => false)) {
-    try { await discovery.first().click({ force: true, timeout: 5_000 }); }
-    catch { await discovery.first().evaluate((el) => (el as HTMLElement).click()); }
-    await page.waitForTimeout(1_500);
-    return;
-  }
-
-  const createImages = page.getByText("Create images", { exact: true });
-  if (await createImages.count() && await createImages.first().isVisible().catch(() => false)) {
-    try { await createImages.first().click({ force: true, timeout: 5_000 }); }
-    catch { await createImages.first().evaluate((el) => (el.parentElement?.parentElement as HTMLElement | null)?.click()); }
-    await page.waitForTimeout(1_500);
-  }
-}
-
-async function uploadReference(page: Page, filePath: string) {
-  const directInput = page.locator('input[type="file"]');
-  if (await directInput.count()) {
-    await directInput.first().setInputFiles(filePath);
-    return;
-  }
-
-  const attach = await firstVisible([
-    page.getByRole("button", { name: /open upload file menu|add files|attach files|upload files/i }),
-    page.locator('button[aria-label*="Upload" i]'),
-    page.locator('button[aria-label*="Attach" i]'),
-  ]);
-  const chooser = page.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null);
-  await attach.click();
-  const event = await chooser;
-  if (event) {
-    await event.setFiles(filePath);
-    return;
-  }
-  const fallback = page.locator('input[type="file"]');
-  if (await fallback.count()) {
-    await fallback.first().setInputFiles(filePath);
-    return;
-  }
-  throw new Error("Gemini upload control unavailable.");
-}
-
-async function submitPrompt(page: Page, prompt: string) {
-  const composer = await waitForComposer(page);
-  await composer.fill(prompt);
-  for (const locator of [
-    page.getByRole("button", { name: /send|submit/i }),
-    page.locator('button[aria-label*="Send" i]'),
-  ]) {
-    try {
-      const button = await firstVisible([locator]);
-      await button.click();
-      return;
-    } catch { /* fallback */ }
-  }
-  await composer.press("Enter");
-}
-
-async function largeImages(page: Page) {
-  return await page.evaluate(() => Array.from(document.images)
-    .map((image) => ({ src: image.currentSrc || image.src, area: image.naturalWidth * image.naturalHeight }))
-    .filter((image) => image.src && image.area >= 512 * 512)
-    .sort((a, b) => b.area - a.area)
-    .map((image) => image.src));
-}
-
-async function waitForGeneratedImage(page: Page, before: Set<string>) {
-  const deadline = Date.now() + GENERATION_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const current = await largeImages(page);
-    const generated = current.find((src) => !before.has(src));
-    if (generated) return generated;
-    await page.waitForTimeout(1_000);
-  }
-  throw new Error("Timed out waiting for Gemini generated image.");
-}
-
-async function captureGeneratedImage(page: Page, source: string, outputPath: string) {
-  if (source.startsWith("data:")) {
-    const encoded = source.split(",", 2)[1];
-    if (!encoded) throw new Error("Invalid data image.");
-    await writeFile(outputPath, Buffer.from(encoded, "base64"));
-    return;
-  }
-
-  if (source.startsWith("blob:")) {
-    try {
-      const encoded = await page.evaluate(async (url) => {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Blob fetch failed: ${response.status}`);
-        const blob = await response.blob();
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const value = String(reader.result);
-            const comma = value.indexOf(",");
-            comma < 0 ? reject(new Error("Invalid blob data")) : resolve(value.slice(comma + 1));
-          };
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(blob);
-        });
-      }, source);
-      await writeFile(outputPath, Buffer.from(encoded, "base64"));
-      return;
-    } catch { /* element screenshot fallback below */ }
-  }
-
-  if (source.startsWith("http")) {
-    const response = await page.request.get(source);
-    if (response.ok()) {
-      await writeFile(outputPath, await response.body());
-      return;
-    }
-  }
-
-  const index = await page.locator("img").evaluateAll((images, target) => images.findIndex((image) => {
-    const element = image as HTMLImageElement;
-    return (element.currentSrc || element.src) === target;
-  }), source);
-  if (index < 0) throw new Error("Generated image element not found.");
-  const image = page.locator("img").nth(index);
-  await image.scrollIntoViewIfNeeded();
-  await image.screenshot({ path: outputPath });
-}
-
 async function processJob(page: Page, job: ClaimedJob) {
   const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
@@ -331,19 +164,19 @@ async function processJob(page: Page, job: ClaimedJob) {
   }, LEASE_HEARTBEAT_MS);
 
   try {
-    await ensureSignedIn(page);
-    await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForTimeout(1_000);
-    await openImagesMode(page);
+    await openGemini(page);
+    await assertReady(page);
+    await freshChat(page);
+    await openImageGenerationMode(page);
     await uploadReference(page, sourcePath);
     const before = new Set(await largeImages(page));
     if (!job.currentPrompt) throw new Error("Claimed job has no current prompt.");
 
     console.log(`Job ${job.id}: submitting attempt ${attemptNumber}.`);
     await submitPrompt(page, job.currentPrompt);
-    const generatedSource = await waitForGeneratedImage(page, before);
+    await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
-    await captureGeneratedImage(page, generatedSource, outputPath);
+    await captureGeneratedImage(page, outputPath, before);
     const artifactId = await uploadArtifact(job, attemptNumber, outputPath);
 
     await report(job, attemptNumber, {
