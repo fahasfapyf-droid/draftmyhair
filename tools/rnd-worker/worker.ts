@@ -213,12 +213,25 @@ async function main() {
   await assertServer();
 
   console.log(`Launching Chrome with persistent Gemini profile: ${PROFILE_DIR}`);
-  const context: BrowserContext = await chromium.launchPersistentContext(PROFILE_DIR, {
-    executablePath: CHROME_PATH,
-    headless: false,
-    acceptDownloads: true,
-    viewport: { width: 1440, height: 1000 },
-  });
+  console.log(`Chrome executable: ${CHROME_PATH}`);
+  console.log("Starting Playwright persistent-context launch (30s diagnostic timeout)...");
+  const launchStartedAt = Date.now();
+  let context: BrowserContext;
+  try {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+      executablePath: CHROME_PATH,
+      headless: false,
+      acceptDownloads: true,
+      viewport: { width: 1440, height: 1000 },
+      timeout: 30_000,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    console.error(`Chrome persistent-context launch failed after ${Date.now() - launchStartedAt}ms:`);
+    console.error(message);
+    throw error;
+  }
+  console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
   const page = context.pages()[0] ?? await context.newPage();
 
   process.on("SIGINT", async () => {
