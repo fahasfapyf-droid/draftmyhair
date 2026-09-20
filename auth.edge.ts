@@ -10,7 +10,12 @@ export const { auth: middleware } = NextAuth({
   },
 
   callbacks: {
-    async authorized({ auth }) {
+    async authorized({ auth, request }) {
+      const pathname = request.nextUrl.pathname;
+      if (pathname === "/dashboard/admin/rnd/calibration") {
+        return true;
+      }
+
       return !!auth?.user;
     },
 
