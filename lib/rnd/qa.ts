@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { runTransformationGate, type TransformationGateResult } from "@/lib/rnd/transformation-gate";
 
 export type RndQaCategory =
   | "HAIRSTYLE"
@@ -25,6 +26,7 @@ export type RndQaResult = {
   reason: string;
   refinement: string;
   verifier: RndQaVerifierResult;
+  transformationGate: TransformationGateResult;
 };
 
 const QA_SCHEMA = {
@@ -263,7 +265,7 @@ async function judge(
   return parseQa(text);
 }
 
-function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQaResult, "verifier">, verifier: RndQaVerifierResult): RndQaResult {
+function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">, challenger: Omit<RndQaResult, "verifier" | "transformationGate">, verifier: RndQaVerifierResult, transformationGate: TransformationGateResult): RndQaResult {
   const applicableCategories = [...new Set([...primary.applicableCategories, ...challenger.applicableCategories])];
 
   const scoreFor = (category: RndQaCategory) => {
@@ -290,6 +292,7 @@ function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQ
     reason: "",
     refinement: "",
     verifier,
+    transformationGate,
   };
 
   result.overall = Math.min(
@@ -303,12 +306,13 @@ function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQ
     result.overall >= 9.5 &&
     result.transformationOnly === "PASS" &&
     result.artifacts === "NONE" &&
-    !verifier.blockingDefect;
+    !verifier.blockingDefect &&
+    transformationGate.passed;
 
   result.verdict = hardPass ? "APPROVE" : "REGENERATE";
 
   if (hardPass) {
-    result.reason = "Independent primary and challenger judges passed the transformation hard gates, and the fail-only verifier found no concrete blocking transformation defect; aggregate scores use the lower judge score for each metric.";
+    result.reason = "Independent primary and challenger judges passed the transformation hard gates, the fail-only verifier found no concrete blocking transformation defect, and the deterministic transformation gate detected a measurable change; aggregate scores use the lower judge score for each metric.";
     result.refinement = "";
   } else {
     const candidates = [
@@ -317,7 +321,7 @@ function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQ
     ].filter((item) => item.text);
     candidates.sort((a, b) => a.score - b.score);
     result.reason =
-      "Hair-transformation QA hard gate failed under independent adversarial review. Primary: " +
+      "Hair-transformation QA hard gate failed. Deterministic gate: " + transformationGate.reason + " Primary: " +
       primary.reason +
       " Challenger: " +
       challenger.reason +
@@ -337,10 +341,11 @@ export async function runRndQa(
   prompt: string,
 ) {
   const ai = getClient();
-  const [primary, challenger, verifier] = await Promise.all([
+  const [primary, challenger, verifier, transformationGate] = await Promise.all([
     judge(ai, PRIMARY_PROMPT, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
     judge(ai, CHALLENGER_PROMPT, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
     verify(ai, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
+    runTransformationGate(sourceBuffer, generatedBuffer),
   ]);
-  return aggregate(primary, challenger, verifier);
+  return aggregate(primary, challenger, verifier, transformationGate);
 }
