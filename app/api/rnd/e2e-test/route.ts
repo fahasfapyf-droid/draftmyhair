@@ -41,7 +41,9 @@ async function invokeEnqueue(sourceBuffer: Buffer, sourceMime: string) {
   if (!token) throw new Error("RND_PRODUCER_TOKEN is not configured.");
 
   const form = new FormData();
-  form.set("image", new File([sourceBuffer], "e2e-source.webp", { type: sourceMime }));
+  const sourceBytes = new Uint8Array(sourceBuffer.byteLength);
+  sourceBytes.set(sourceBuffer);
+  form.set("image", new File([sourceBytes.buffer], "e2e-source.webp", { type: sourceMime }));
   form.set("campaignName", CAMPAIGN);
   form.set("targetKey", TARGET_KEY + "-" + Date.now());
   form.set("instruction", INSTRUCTION);
