@@ -156,6 +156,29 @@ async function generateAndReport(claimed: any) {
 export async function GET(request: Request) {
   if (process.env.VERCEL_ENV === "production") return json({ error: "E2E route is disabled in production." }, 404);
 
+  // Preview-only harness: seed ephemeral internal credentials so the test can
+  // exercise the real authenticated handlers without requiring separate
+  // R&D secrets to be configured on this temporary branch.
+  if (!process.env.RND_PRODUCER_TOKEN?.trim()) {
+    process.env.RND_PRODUCER_TOKEN = "e2e-producer-" + crypto.randomUUID();
+  }
+  if (!process.env.RND_WORKER_TOKEN?.trim()) {
+    process.env.RND_WORKER_TOKEN = "e2e-worker-" + crypto.randomUUID();
+  }
+  if (!process.env.RND_PRODUCER_USER_ID?.trim()) {
+    const producerUser = await prisma.user.findFirst({
+      where: { isActive: true, isDeleted: false, role: "ADMIN" },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    }) ?? await prisma.user.findFirst({
+      where: { isActive: true, isDeleted: false },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!producerUser) return json({ error: "No active user is available for the E2E producer identity." }, 503);
+    process.env.RND_PRODUCER_USER_ID = producerUser.id;
+  }
+
   const sourceResponse = await fetch(SOURCE_URL, {
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
