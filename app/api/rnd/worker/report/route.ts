@@ -144,7 +144,8 @@ export async function POST(request: Request) {
     qa.overall >= 9.5 &&
     qa.rootIntegration >= 9.5 &&
     qa.transformationOnly === "PASS" &&
-    qa.artifacts === "NONE";
+    qa.artifacts === "NONE" &&
+    qa.transformationGate.passed;
 
   const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
 
