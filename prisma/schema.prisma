@@ -681,12 +681,22 @@ model RnDAsset {
   width                 Int?
   height                Int?
   checksum              String?
+  displayName           String?
+  genderPresentation    String?
+  cohortLabel           String?
+  hairTexture           String?
+  hairLength            String?
+  notes                 String?         @db.Text
   immutable             Boolean         @default(true)
   createdAt             DateTime        @default(now())
   sourceForTargets      RnDTarget[]
   generatedForAttempts  RnDAttempt[]
 
   @@index([kind])
+  @@index([genderPresentation])
+  @@index([cohortLabel])
+  @@index([hairTexture])
+  @@index([hairLength])
   @@index([createdAt])
 }
 
