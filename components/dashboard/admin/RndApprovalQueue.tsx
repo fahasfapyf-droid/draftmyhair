@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 type Attempt = {
   id: string;
   attemptNumber: number;
+  prompt: string;
+  promptRevision: string;
   artifactId: string | null;
   artifactViewPath: string | null;
   qaJson: unknown;
@@ -43,6 +45,7 @@ export function RndApprovalQueue() {
   const [loading, setLoading] = useState(true);
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [expandedPromptJobId, setExpandedPromptJobId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -200,6 +203,46 @@ export function RndApprovalQueue() {
                         <p className="mt-3 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
                           {qaReason(attempt?.qaJson)}
                         </p>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-lg border border-border p-4 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-medium">Exact prompt used</div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Prompt revision: {attempt?.promptRevision ?? "—"}
+                          </p>
+                        </div>
+                        {attempt?.prompt ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedPromptJobId((current) =>
+                                current === job.id ? null : job.id,
+                              )
+                            }
+                            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold"
+                          >
+                            {expandedPromptJobId === job.id ? "Hide prompt" : "Show prompt"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {expandedPromptJobId === job.id && attempt?.prompt ? (
+                        <div className="mt-3">
+                          <div className="max-h-[420px] overflow-auto rounded-md border border-border bg-muted p-3">
+                            <pre className="whitespace-pre-wrap break-words text-xs leading-5">
+                              {attempt.prompt}
+                            </pre>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void navigator.clipboard?.writeText(attempt.prompt)}
+                            className="mt-2 rounded-md border border-border px-3 py-1.5 text-xs font-semibold"
+                          >
+                            Copy exact prompt
+                          </button>
+                        </div>
                       ) : null}
                     </div>
 
