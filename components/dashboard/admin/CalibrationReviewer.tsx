@@ -9,7 +9,9 @@ type Sample = {
 };
 
 export function CalibrationReviewer() {
-  const [reviewerKey, setReviewerKey] = useState("");
+  const [reviewerKey, setReviewerKey] = useState(() =>
+    typeof window === "undefined" ? "" : sessionStorage.getItem("rnd-calibration-reviewer") ?? "",
+  );
   const [sample, setSample] = useState<Sample | null>(null);
   const [overall, setOverall] = useState("");
   const [hairstyle, setHairstyle] = useState("");
@@ -18,15 +20,20 @@ export function CalibrationReviewer() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setReviewerKey(sessionStorage.getItem("rnd-calibration-reviewer") ?? "");
-    void loadSample();
-  }, []);
+    if (reviewerKey.trim()) void loadSample(reviewerKey.trim());
+  }, [reviewerKey]);
 
-  async function loadSample() {
+  async function loadSample(key = reviewerKey.trim()) {
+    if (!key) {
+      setStatus("Enter a reviewer key to load blind samples.");
+      return;
+    }
     setStatus("Loading next blind sample…");
-    const response = await fetch("/api/rnd/qa-calibration/review", {
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `/api/rnd/qa-calibration/review?reviewerKey=${encodeURIComponent(key)}`,
+
+      { cache: "no-store" },
+    );
     const body = await response.json();
     if (!response.ok) {
       setStatus(body?.error ?? "Unable to load sample.");
@@ -91,7 +98,7 @@ export function CalibrationReviewer() {
 
     sessionStorage.setItem("rnd-calibration-reviewer", reviewerKey.trim());
     setSaving(false);
-    await loadSample();
+    await loadSample(reviewerKey.trim());
   }
 
   return (
