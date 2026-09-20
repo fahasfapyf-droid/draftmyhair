@@ -91,12 +91,12 @@ const BASE_RULES = [
   "Artifacts: inspect only transformation-related artifacts such as wig edges, painted-on hair, broken hair strands, malformed beard boundaries, scalp artifacts, color spill, duplicate hair structures, or other generation defects in the transformed region.",
   "Determine applicableCategories from the requested transformation: HAIRSTYLE for haircut/style requests; BEARD for beard addition/removal; COLOR for dye/color-change requests; BUZZ_BALD for buzz-cut or bald requests. Multiple categories may apply.",
   "For non-applicable category scores, return 10. They must not affect the verdict.",
-  "A 9.5+ score means the applicable requirement has been verified at near-production quality, not merely that the result looks good.",
+  "Score only from directly observed transformation evidence. Do not infer a score from the existence of an approval threshold or from the expected business outcome.",
   "Use the full 0-10 scale. Do not cluster acceptable outputs at 9.5-10.",
   "Assume defects may exist until visually checked. If uncertain, choose the lower score.",
   "The overall score must reflect the weakest applicable transformation category and rootIntegration; do not average away a weak hairstyle, beard, color, buzz/bald, or integration result.",
   "Return one JSON object matching the supplied schema. No markdown.",
-  "APPROVE requires every applicable category >= 9.5, rootIntegration >= 9.5, transformationOnly PASS, and artifacts NONE.",
+  "APPROVE means the observed transformation is production-ready under this rubric; the application, not the model, enforces the numeric approval threshold.",
   "If any applicable hard gate fails, verdict must be REGENERATE.",
   "If regenerating, refinement must identify ONLY the single most important transformation defect and preserve all passing requirements.",
 ].join("\n");
@@ -147,7 +147,7 @@ function getClient() {
   return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
 }
 
-function parseQa(text: string): RndQaResult {
+function parseQa(text: string): Omit<RndQaResult, "verifier"> {
   const value = JSON.parse(text) as RndQaResult;
   for (const key of [
     "overall",
