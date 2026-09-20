@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Sample = {
   attemptId: string;
@@ -18,10 +18,6 @@ export function CalibrationReviewer() {
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Loading…");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (reviewerKey.trim()) void loadSample(reviewerKey.trim());
-  }, [reviewerKey]);
 
   async function loadSample(key = reviewerKey.trim()) {
     if (!key) {
@@ -108,12 +104,21 @@ export function CalibrationReviewer() {
         <p className="mt-1 text-sm text-muted-foreground">
           Use a stable reviewer key for the same human across all samples. Do not share keys between reviewers.
         </p>
-        <input
-          value={reviewerKey}
-          onChange={(event) => setReviewerKey(event.target.value)}
-          placeholder="Reviewer A"
-          className="mt-3 w-full max-w-sm rounded-md border border-border bg-background px-3 py-2 text-sm"
-        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            value={reviewerKey}
+            onChange={(event) => setReviewerKey(event.target.value)}
+            placeholder="Reviewer A"
+            className="w-full max-w-sm rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void loadSample()}
+            className="rounded-md border border-border bg-background px-4 py-2 text-sm font-medium"
+          >
+            Load next sample
+          </button>
+        </div>
       </div>
 
       {sample ? (
