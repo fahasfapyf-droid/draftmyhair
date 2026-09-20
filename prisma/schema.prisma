@@ -606,6 +606,21 @@ enum RnDJobStatus {
   CANCELLED
 }
 
+model RnDQAReferenceRating {
+  id                  String    @id @default(cuid())
+  attemptId           String
+  reviewerKey         String
+  humanOverallScore   Decimal   @db.Decimal(4, 2)
+  humanHairstyleScore Decimal?  @db.Decimal(4, 2)
+  notes               String?   @db.Text
+  createdAt           DateTime  @default(now())
+  attempt             RnDAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, reviewerKey])
+  @@index([attemptId])
+  @@index([createdAt])
+}
+
 enum RnDAttemptVerdict {
   REFINE
   HUMAN_APPROVAL
@@ -720,6 +735,7 @@ model RnDAttempt {
   errorMessage          String?           @db.Text
   job                   RnDJob            @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifact              RnDAsset?         @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  calibrationRatings     RnDQAReferenceRating[]
 
   @@unique([jobId, attemptNumber])
   @@index([jobId, submittedAt])
