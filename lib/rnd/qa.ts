@@ -149,7 +149,7 @@ function getClient() {
   return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
 }
 
-function parseQa(text: string): Omit<RndQaResult, "verifier"> {
+function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGate"> {
   const value = JSON.parse(text) as RndQaResult;
   for (const key of [
     "overall",
