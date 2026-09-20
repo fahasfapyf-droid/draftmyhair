@@ -308,10 +308,12 @@ model PromptVersion {
   prompt      String          @db.Text
   status      PromptStatus    @default(DRAFT)
   qaStatus    PromptQAStatus  @default(DRAFT)
-  notes       String?         @db.Text
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  hairstyle   Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+  notes              String?         @db.Text
+  sourceRnDAttemptId String?         @unique
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  hairstyle          Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+  sourceRnDAttempt   RnDAttempt?     @relation(fields: [sourceRnDAttemptId], references: [id], onDelete: SetNull)
 
   @@unique([hairstyleId, version])
   @@index([hairstyleId, status])
@@ -736,6 +738,7 @@ model RnDAttempt {
   job                   RnDJob            @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifact              RnDAsset?         @relation(fields: [artifactId], references: [id], onDelete: Restrict)
   calibrationRatings     RnDQAReferenceRating[]
+  promptVersion         PromptVersion?
 
   @@unique([jobId, attemptNumber])
   @@index([jobId, submittedAt])
