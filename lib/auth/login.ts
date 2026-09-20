@@ -76,7 +76,10 @@ export async function loginUser(
     return { status: "ACCOUNT_DISABLED" };
   }
 
-  if (!user.emailVerified) {
+  const allowUnverifiedAdminOnPreview =
+    process.env.VERCEL_ENV === "preview" && user.role === "ADMIN";
+
+  if (!user.emailVerified && !allowUnverifiedAdminOnPreview) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
