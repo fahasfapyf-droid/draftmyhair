@@ -272,7 +272,7 @@ function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQ
       BEARD: "beardAccuracy",
       COLOR: "colorAccuracy",
       BUZZ_BALD: "buzzBaldAccuracy",
-    }[category] as keyof RndQaResult;
+    }[category] as keyof Omit<RndQaResult, "verifier">;
     return Math.min(primary[field] as number, challenger[field] as number);
   };
 
