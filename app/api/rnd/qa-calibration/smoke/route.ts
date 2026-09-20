@@ -26,12 +26,12 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 export async function GET(request: Request) {
-  if (process.env.VERCEL_ENV === "production") {
+  if (process.env.VERCEL_ENV !== "preview") {
     return json({ error: "Not found." }, 404);
   }
 
-  const unauthorized = requireRndWorker(request.headers.get("authorization"));
-  if (unauthorized) return unauthorized;
+  const internalToken = process.env.RND_WORKER_TOKEN;
+  if (!internalToken) return json({ error: "RND_WORKER_TOKEN is not configured." }, 503);
 
   const suffix = `qa-calibration-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let assetId: string | null = null;
@@ -106,7 +106,7 @@ export async function GET(request: Request) {
     });
     attemptId = attempt.id;
 
-    const auth = request.headers.get("authorization") ?? "";
+    const auth = `Bearer ${internalToken}`;
     const humanScores = [9.4, 9.6, 9.5];
     const hairstyleScores = [9.2, 9.4, 9.3];
 
