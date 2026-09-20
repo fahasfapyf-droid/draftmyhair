@@ -6,6 +6,7 @@ import { loginUser } from "@/lib/auth/login";
 import { prisma } from "@/lib/prisma";
 
 export default {
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
