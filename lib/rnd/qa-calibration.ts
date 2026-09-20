@@ -73,11 +73,12 @@ export function buildCalibrationSamples(
     samples.push({
       attemptId,
       humanOverallScore: median(bucket.map((r) => r.humanOverallScore)),
-      humanHairstyleScore: median(
-        bucket
+      humanHairstyleScore: (() => {
+        const hairstyleScores = bucket
           .map((r) => r.humanHairstyleScore)
-          .filter((v): v is number => typeof v === "number"),
-      ) || null,
+          .filter((v): v is number => typeof v === "number");
+        return hairstyleScores.length ? median(hairstyleScores) : null;
+      })(),
       reviewerCount: bucket.length,
       aiOverallScore,
     });
