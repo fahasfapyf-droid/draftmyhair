@@ -18,9 +18,12 @@ function json(data: unknown, status = 200) {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireAdmin();
   if (!session) return json({ error: "Unauthorized" }, 401);
+
+  const reviewerKey = new URL(request.url).searchParams.get("reviewerKey")?.trim() ?? "";
+  if (!reviewerKey) return json({ error: "reviewerKey is required." }, 400);
 
   const attempt = await prisma.rnDAttempt.findFirst({
     where: {
@@ -30,6 +33,9 @@ export async function GET() {
         target: {
           hardCoreInstruction: { not: null },
         },
+      },
+      calibrationRatings: {
+        none: { reviewerKey },
       },
     },
     orderBy: { submittedAt: "asc" },
