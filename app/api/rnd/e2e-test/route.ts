@@ -75,7 +75,6 @@ async function invokeClaim(jobId: string) {
 
   const body = await response.json();
   if (!response.ok) throw new Error(body?.error ?? `Worker claim failed: HTTP ${response.status}`);
-  if (!body.job) throw new Error("Worker claim returned no job.");
   return body as any;
 }
 
@@ -193,6 +192,7 @@ export async function GET(request: Request) {
 
   for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
     const claimed = await invokeClaim(enqueue.jobId);
+    if (!claimed.job) break;
     const result = await generateAndReport(claimed);
     attempts.push({
       attemptNumber: claimed.attemptNumber,
