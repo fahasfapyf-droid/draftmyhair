@@ -6,6 +6,11 @@ export type RndQaCategory =
   | "COLOR"
   | "BUZZ_BALD";
 
+export type RndQaVerifierResult = {
+  blockingDefect: boolean;
+  reason: string;
+};
+
 export type RndQaResult = {
   overall: number;
   hairstyleAccuracy: number;
@@ -19,6 +24,7 @@ export type RndQaResult = {
   verdict: "APPROVE" | "REGENERATE";
   reason: string;
   refinement: string;
+  verifier: RndQaVerifierResult;
 };
 
 const QA_SCHEMA = {
@@ -85,14 +91,37 @@ const BASE_RULES = [
   "Artifacts: inspect only transformation-related artifacts such as wig edges, painted-on hair, broken hair strands, malformed beard boundaries, scalp artifacts, color spill, duplicate hair structures, or other generation defects in the transformed region.",
   "Determine applicableCategories from the requested transformation: HAIRSTYLE for haircut/style requests; BEARD for beard addition/removal; COLOR for dye/color-change requests; BUZZ_BALD for buzz-cut or bald requests. Multiple categories may apply.",
   "For non-applicable category scores, return 10. They must not affect the verdict.",
-  "A 9.5+ score means the applicable requirement has been verified at near-production quality, not merely that the result looks good.",
+  "Score only from directly observed transformation evidence. Do not infer a score from the existence of an approval threshold or from the expected business outcome.",
   "Use the full 0-10 scale. Do not cluster acceptable outputs at 9.5-10.",
   "Assume defects may exist until visually checked. If uncertain, choose the lower score.",
   "The overall score must reflect the weakest applicable transformation category and rootIntegration; do not average away a weak hairstyle, beard, color, buzz/bald, or integration result.",
   "Return one JSON object matching the supplied schema. No markdown.",
-  "APPROVE requires every applicable category >= 9.5, rootIntegration >= 9.5, transformationOnly PASS, and artifacts NONE.",
+  "APPROVE means the observed transformation is production-ready under this rubric; the application, not the model, enforces the numeric approval threshold.",
   "If any applicable hard gate fails, verdict must be REGENERATE.",
   "If regenerating, refinement must identify ONLY the single most important transformation defect and preserve all passing requirements.",
+].join("\n");
+
+const VERIFIER_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    blockingDefect: { type: "BOOLEAN" },
+    reason: { type: "STRING" },
+  },
+  required: ["blockingDefect", "reason"],
+  propertyOrdering: ["blockingDefect", "reason"],
+} as const;
+
+const VERIFIER_PROMPT = [
+  "You are the final fail-only production verifier for Draft My Hair transformation QA.",
+  "You are NOT allowed to approve, score, or promote an image.",
+  "Your only authority is to VETO approval when you can identify a visible, material defect in the requested hair/beard/color transformation.",
+  "SOURCE is the original photograph. GENERATED is the transformed result.",
+  "Inspect only the requested transformation and its immediate integration. Do not score identity, facial similarity, skin, expression, jawline, ears, neck, head geometry, pose, framing, lighting, background, or other locked attributes.",
+  "Try to disprove production readiness. Actively search for wrong haircut structure, wrong length or silhouette, incorrect weight distribution, styling mismatch, beard errors, color errors, weak root/scalp integration, transformation spill, wig-like edges, painted-on hair, malformed strands, duplicate structures, or other transformation-region artifacts.",
+  "Set blockingDefect=true only when you can identify a concrete visible defect that should prevent automatic approval.",
+  "If you cannot identify a concrete blocking defect after actively searching, set blockingDefect=false.",
+  "Do not use or infer any numeric approval threshold. Return only the structured veto decision and concise evidence.",
+  "Return one JSON object matching the supplied schema. No markdown.",
 ].join("\n");
 
 const PRIMARY_PROMPT = [
@@ -118,7 +147,7 @@ function getClient() {
   return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
 }
 
-function parseQa(text: string): RndQaResult {
+function parseQa(text: string): Omit<RndQaResult, "verifier"> {
   const value = JSON.parse(text) as RndQaResult;
   for (const key of [
     "overall",
@@ -171,6 +200,39 @@ function parseQa(text: string): RndQaResult {
   return value;
 }
 
+async function verify(
+  ai: GoogleGenAI,
+  sourceBuffer: Buffer,
+  sourceMimeType: string,
+  generatedBuffer: Buffer,
+  generatedMimeType: string,
+  prompt: string,
+): Promise<RndQaVerifierResult> {
+  const response = await ai.models.generateContent({
+    model: process.env.RND_QA_VERIFIER_MODEL ?? process.env.RND_QA_MODEL ?? "gemini-2.5-flash",
+    contents: [{
+      role: "user",
+      parts: [
+        { text: VERIFIER_PROMPT + "\n\nREQUESTED TRANSFORMATION PROMPT:\n" + prompt + "\n\nIMAGE ORDER: SOURCE, then GENERATED." },
+        { inlineData: { mimeType: sourceMimeType, data: sourceBuffer.toString("base64") } },
+        { inlineData: { mimeType: generatedMimeType, data: generatedBuffer.toString("base64") } },
+      ],
+    }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: VERIFIER_SCHEMA,
+      maxOutputTokens: 2048,
+    },
+  });
+  const text = response.text ?? response.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+  if (!text) throw new Error("QA verifier returned an empty response.");
+  const value = JSON.parse(text) as RndQaVerifierResult;
+  if (typeof value.blockingDefect !== "boolean" || typeof value.reason !== "string") {
+    throw new Error("QA verifier returned an invalid result.");
+  }
+  return value;
+}
+
 async function judge(
   ai: GoogleGenAI,
   systemPrompt: string,
@@ -201,7 +263,7 @@ async function judge(
   return parseQa(text);
 }
 
-function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
+function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQaResult, "verifier">, verifier: RndQaVerifierResult): RndQaResult {
   const applicableCategories = [...new Set([...primary.applicableCategories, ...challenger.applicableCategories])];
 
   const scoreFor = (category: RndQaCategory) => {
@@ -210,7 +272,7 @@ function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
       BEARD: "beardAccuracy",
       COLOR: "colorAccuracy",
       BUZZ_BALD: "buzzBaldAccuracy",
-    }[category] as keyof RndQaResult;
+    }[category] as keyof Omit<RndQaResult, "verifier">;
     return Math.min(primary[field] as number, challenger[field] as number);
   };
 
@@ -227,6 +289,7 @@ function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
     verdict: "REGENERATE",
     reason: "",
     refinement: "",
+    verifier,
   };
 
   result.overall = Math.min(
@@ -239,12 +302,13 @@ function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
     challenger.verdict === "APPROVE" &&
     result.overall >= 9.5 &&
     result.transformationOnly === "PASS" &&
-    result.artifacts === "NONE";
+    result.artifacts === "NONE" &&
+    !verifier.blockingDefect;
 
   result.verdict = hardPass ? "APPROVE" : "REGENERATE";
 
   if (hardPass) {
-    result.reason = "Independent primary and challenger judges passed every applicable hair-transformation hard gate; aggregate scores use the lower judge score for each metric.";
+    result.reason = "Independent primary and challenger judges passed the transformation hard gates, and the fail-only verifier found no concrete blocking transformation defect; aggregate scores use the lower judge score for each metric.";
     result.refinement = "";
   } else {
     const candidates = [
@@ -256,7 +320,9 @@ function aggregate(primary: RndQaResult, challenger: RndQaResult): RndQaResult {
       "Hair-transformation QA hard gate failed under independent adversarial review. Primary: " +
       primary.reason +
       " Challenger: " +
-      challenger.reason;
+      challenger.reason +
+      " Verifier: " +
+      verifier.reason;
     result.refinement = candidates[0]?.text ?? "Correct the most important visible transformation defect.";
   }
 
@@ -271,9 +337,10 @@ export async function runRndQa(
   prompt: string,
 ) {
   const ai = getClient();
-  const [primary, challenger] = await Promise.all([
+  const [primary, challenger, verifier] = await Promise.all([
     judge(ai, PRIMARY_PROMPT, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
     judge(ai, CHALLENGER_PROMPT, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
+    verify(ai, sourceBuffer, sourceMimeType, generatedBuffer, generatedMimeType, prompt),
   ]);
-  return aggregate(primary, challenger);
+  return aggregate(primary, challenger, verifier);
 }

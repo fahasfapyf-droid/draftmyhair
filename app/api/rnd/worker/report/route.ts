@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
+import { optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 
 export const runtime = "nodejs";
-const MAX_AUTONOMOUS_ATTEMPTS = 2;
+const MAX_AUTONOMOUS_ATTEMPTS = Math.max(2, Number(process.env.RND_MAX_AUTONOMOUS_ATTEMPTS ?? 8));
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const QA_TIMEOUT_MS = 120_000;
 
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
       leaseOwner: true,
       leaseExpiresAt: true,
       currentPrompt: true,
-      target: { select: { hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+      target: { select: { hairstyleId: true, hardCoreInstruction: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -147,6 +148,37 @@ export async function POST(request: Request) {
 
   const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
 
+  let nextPrompt: string | null = null;
+  let nextPromptDiagnostics: unknown = null;
+  if (refinement) {
+    try {
+      if (job.target.hardCoreInstruction?.trim()) {
+        const optimized = await optimizeAutonomousPrompt({
+          instruction: job.target.hardCoreInstruction,
+          currentPrompt: prompt,
+          defect: refinement,
+          attemptNumber,
+        });
+        nextPrompt = optimized.prompt;
+        nextPromptDiagnostics = optimized.diagnostics;
+      } else if (job.target.hairstyleId) {
+        const hairstyle = await prisma.hairstyle.findUnique({
+          where: { id: job.target.hairstyleId },
+          select: { promptKey: true },
+        });
+        if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
+        const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
+        nextPrompt = rebuilt.prompt;
+        nextPromptDiagnostics = rebuilt.diagnostics;
+      }
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Autonomous prompt optimization failed." },
+        { status: 503 },
+      );
+    }
+  }
+
   const finalResult = await prisma.$transaction(async (tx) => {
     await tx.rnDAttempt.update({
       where: { jobId_attemptNumber: { jobId, attemptNumber } },
@@ -160,8 +192,8 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "REFINE" : "EXHAUSTED",
-        refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "AUTO_1" : null,
+        verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt ? "REFINE" : "EXHAUSTED",
+        refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt ? `AUTO_${attemptNumber}` : null,
         refinementReason: hardPass ? null : refinement,
         errorCode: null,
         errorMessage: null,
@@ -175,23 +207,28 @@ export async function POST(request: Request) {
         select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
-      return { job: updatedJob, action: "HUMAN_APPROVAL" as const };
+      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null };
     }
 
-    if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement) {
-      const target = await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyleId: true } });
-      if (!target.hairstyleId) throw new Error("R&D target hairstyle is missing.");
-      const hairstyle = await tx.hairstyle.findUnique({ where: { id: target.hairstyleId }, select: { promptKey: true } });
-      if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
-      const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
+    if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
       const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        data: {
+          status: "QUEUED",
+          currentPrompt: nextPrompt,
+          promptVersionNumber: attemptNumber + 1,
+          attemptCount: attemptNumber,
+          nextEligibleAt,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: now,
+          completedAt: null,
+        },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
-      return { job: updatedJob, action: "REFINE" as const };
+      return { job: updatedJob, action: "REFINE" as const, promptDiagnostics: nextPromptDiagnostics };
     }
 
     const updatedJob = await tx.rnDJob.update({
@@ -200,10 +237,10 @@ export async function POST(request: Request) {
       select: { id: true, status: true, attemptCount: true },
     });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
-    return { job: updatedJob, action: "EXHAUSTED" as const };
+    return { job: updatedJob, action: "EXHAUSTED" as const, promptDiagnostics: null };
   });
 
-  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa });
+  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa, promptDiagnostics: finalResult.promptDiagnostics });
 }
 
 

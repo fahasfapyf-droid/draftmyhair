@@ -10,6 +10,8 @@ export async function POST(request: Request) {
   if (authResponse) return authResponse;
 
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
+  const body = (await request.json().catch(() => null)) as { jobId?: unknown } | null;
+  const requestedJobId = typeof body?.jobId === "string" ? body.jobId.trim() : null;
   const now = new Date();
   const leaseExpiresAt = new Date(now.getTime() + RND_WORKER_LEASE_SECONDS * 1000);
 
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
 
     const candidate = await tx.rnDJob.findFirst({
       where: {
+        ...(requestedJobId ? { id: requestedJobId } : {}),
         OR: [
           { status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] },
           { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
