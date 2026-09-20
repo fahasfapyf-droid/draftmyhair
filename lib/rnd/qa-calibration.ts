@@ -96,14 +96,16 @@ export function summarizeCalibration(
   const minSamples = policy.minSamples ?? 20;
   const maxFalsePassRate = policy.maxFalsePassRate ?? 0.02;
   const minCorrelation = policy.minCorrelation ?? 0.75;
+  const humanFails = samples.filter((s) => s.humanOverallScore < 9.5).length;
+  const humanPasses = samples.filter((s) => s.humanOverallScore >= 9.5).length;
   const falsePassCount = samples.filter(
     (s) => s.aiOverallScore >= 9.5 && s.humanOverallScore < 9.5,
   ).length;
   const falseFailCount = samples.filter(
     (s) => s.aiOverallScore < 9.5 && s.humanOverallScore >= 9.5,
   ).length;
-  const falsePassRate = samples.length ? falsePassCount / samples.length : null;
-  const falseFailRate = samples.length ? falseFailCount / samples.length : null;
+  const falsePassRate = humanFails ? falsePassCount / humanFails : null;
+  const falseFailRate = humanPasses ? falseFailCount / humanPasses : null;
   const correlation = pearson(
     samples.map((s) => s.aiOverallScore),
     samples.map((s) => s.humanOverallScore),
