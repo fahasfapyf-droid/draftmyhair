@@ -100,7 +100,10 @@ function compile(stylePrompt: string) {
     "",
     stylePrompt.trim(),
   ].join("\n").trim();
-  if (!prompt.includes("INPAINT HAIR ONLY")) throw new Error("Master prompt compilation failed.");
+  const master = getMasterPrompt();
+  if (!master.includes("Modify only the hair.") || !master.includes("IDENTITY LOCK")) {
+    throw new Error("Master prompt compilation failed.");
+  }
   return prompt;
 }
 
