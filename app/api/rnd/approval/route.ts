@@ -7,12 +7,11 @@ export const runtime = "nodejs";
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Preview-only cleanup for the obsolete pre-transformation-gate E2E record.
+  // Remove the obsolete pre-transformation-gate E2E record on this R&D branch.
   // The old harness used this exact target key; current E2E runs use unique keys.
-  if (process.env.VERCEL_ENV === "preview") {
     await prisma.$transaction(async (tx) => {
       const staleTargets = await tx.rnDTarget.findMany({
-        where: { targetKey: "m2-real-e2e-italian-bob-001", status: "APPROVED" },
+        where: { targetKey: "m2-real-e2e-italian-bob-001" },
         select: { id: true },
       });
       if (staleTargets.length) {
@@ -32,7 +31,6 @@ export async function GET() {
         });
       }
     });
-  }
 
   const jobs = await prisma.rnDJob.findMany({
     where: { status: "HUMAN_APPROVAL" },
