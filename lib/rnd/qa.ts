@@ -311,6 +311,13 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
 
   result.verdict = hardPass ? "APPROVE" : "REGENERATE";
 
+  if (transformationGate.noOp) {
+    result.overall = 0;
+    result.reason = "Deterministic transformation gate failed: " + transformationGate.reason;
+    result.refinement = "Regenerate the image so the requested hairstyle transformation is visibly and materially applied; preserve all locked non-hair regions.";
+    return result;
+  }
+
   if (hardPass) {
     result.reason = "Independent primary and challenger judges passed the transformation hard gates, the fail-only verifier found no concrete blocking transformation defect, and the deterministic transformation gate detected a measurable change; aggregate scores use the lower judge score for each metric.";
     result.refinement = "";
