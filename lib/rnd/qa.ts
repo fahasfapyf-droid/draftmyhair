@@ -263,7 +263,7 @@ async function judge(
   return parseQa(text);
 }
 
-function aggregate(primary: RndQaResult, challenger: RndQaResult, verifier: RndQaVerifierResult): RndQaResult {
+function aggregate(primary: Omit<RndQaResult, "verifier">, challenger: Omit<RndQaResult, "verifier">, verifier: RndQaVerifierResult): RndQaResult {
   const applicableCategories = [...new Set([...primary.applicableCategories, ...challenger.applicableCategories])];
 
   const scoreFor = (category: RndQaCategory) => {
