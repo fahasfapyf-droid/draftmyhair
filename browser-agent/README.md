@@ -46,14 +46,14 @@ The worker never receives the Vercel Blob storage token. It downloads the privat
 Run from this directory:
 
 ```bash
-bb functions publish index.ts --dry-run
-bb functions publish index.ts
+bb publish index.ts --dry-run
+bb publish index.ts
 ```
 
 Then invoke the supervised login flow:
 
 ```bash
-bb functions invoke <function-id> --params '{"mode":"supervised-login"}'
+bb invoke <function-id> --params '{"mode":"supervised-login"}'
 ```
 
 Open the resulting Browserbase session/live view and complete the normal Google/Gemini login. The function keeps the browser alive for 10 minutes, then exits and persists the Context state.
