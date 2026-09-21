@@ -7,11 +7,12 @@
     "predev": "npm run compile:prompts",
     "dev": "next dev",
     "prebuild": "npm run compile:prompts",
-    "build": "prisma generate && npm run migrate:deploy && next build",
+    "build": "prisma generate && npm run migrate:deploy && if [ \"$VERCEL_ENV\" = \"preview\" ]; then npm run db:sync-catalog; fi && next build",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate",
-    "migrate:deploy": "prisma migrate deploy || (sleep 5 && prisma migrate deploy) || (sleep 5 && prisma migrate deploy)"
+    "migrate:deploy": "prisma migrate deploy || (sleep 5 && prisma migrate deploy) || (sleep 5 && prisma migrate deploy)",
+    "db:sync-catalog": "tsx prisma/seed.ts"
   },
   "prisma": {
     "schema": "prisma"
