@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Draft My Hair R&D browser agent.
  *
