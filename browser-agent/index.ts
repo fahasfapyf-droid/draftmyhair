@@ -181,7 +181,7 @@ async function captureImageElement(page: any): Promise<Buffer> {
 }
 
 async function runCalibration(page: any) {
-  const generationStartedAt = new Date().toISOString();\n\n  await page.goto("https://gemini.google.com/", {
+  await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
