@@ -181,7 +181,7 @@ async function captureImageElement(page: any): Promise<Buffer> {
 }
 
 async function runCalibration(page: any) {
-  await page.goto("https://gemini.google.com/", {
+  const generationStartedAt = new Date().toISOString();\n\n  await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
@@ -203,7 +203,7 @@ async function runGeneration(page: any, job: {
   id: string;
   attemptNumber: number;
   prompt: string;
-}): Promise<{ artifactBytes: Buffer }> {
+}): Promise<{ artifactBytes: Buffer; generationStartedAt: string }> {
   await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
@@ -228,49 +228,55 @@ async function runGeneration(page: any, job: {
 
 defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) => {
   const mode = params?.mode || "calibrate";
-  const page = await chromium
-    .connectOverCDP(context.session.connectUrl)
-    .then((browser) => {
-      const browserContext = browser.contexts()[0];
-      return browserContext.pages()[0] || browserContext.newPage();
-    });
+  const browser = await chromium.connectOverCDP(context.session.connectUrl);
+  const browserContext = browser.contexts()[0];
+  const page = browserContext.pages()[0] || await browserContext.newPage();
+
+  if (mode === "calibrate") {
+    try {
+      return await runCalibration(page);
+    } finally {
+      await page.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+  }
+
+  const claimed = await rndFetch("/api/rnd/agent/claim", { method: "POST" });
+  const job = typeof claimed.job === "object" ? claimed.job : null;
+  if (!job) {
+    await page.close().catch(() => {});
+    await browser.close().catch(() => {});
+    return { ok: true, message: "No R&D job is ready." };
+  }
+
+  const heartbeatTimer = setInterval(() => {
+    void heartbeat(job.id).catch(() => {});
+  }, 60_000);
 
   try {
-    if (mode === "calibrate") {
-      return await runCalibration(page);
-    }
-
-    const claimed = params?.jobId
-      ? { job: params.jobId }
-      : await rndFetch("/api/rnd/agent/claim", { method: "POST" });
-
-    const job = typeof claimed.job === "object" ? claimed.job : null;
-    if (!job) return { ok: true, message: "No R&D job is ready." };
-
-    const heartbeatTimer = setInterval(() => {
-      void heartbeat(job.id).catch(() => {});
-    }, 60_000);
     await heartbeat(job.id);
+    const result = await runGeneration(page, job);
+    const artifactId = await uploadArtifact(job.id, job.attemptNumber, result.artifactBytes);
 
-    try {
-      const result = await runGeneration(page, job);
-      const artifactId = await uploadArtifact(job.id, job.attemptNumber, result.artifactBytes);
-        await rndFetch("/api/rnd/worker/report", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jobId: job.id,
-          attemptNumber: job.attemptNumber,
-          generationStartedAt: new Date().toISOString(),
-          generationCompletedAt: new Date().toISOString(),
-          artifactId,
-        }),
-      });
-      return { ok: true, jobId: job.id, attemptNumber: job.attemptNumber };
-    } catch (error) {
-      await reportFailure(job.id, job.attemptNumber, error);
-      throw error;
-    } finally {
+    await rndFetch("/api/rnd/worker/report", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jobId: job.id,
+        attemptNumber: job.attemptNumber,
+        generationStartedAt: result.generationStartedAt,
+        generationCompletedAt: new Date().toISOString(),
+        artifactId,
+      }),
+    });
+
+    return { ok: true, jobId: job.id, attemptNumber: job.attemptNumber, artifactId };
+  } catch (error) {
+    await reportFailure(job.id, job.attemptNumber, error);
+    throw error;
+  } finally {
+    clearInterval(heartbeatTimer);
     await page.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
 });
