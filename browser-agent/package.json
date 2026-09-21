@@ -1,0 +1,9 @@
+{
+  "name": "draftmyhair-rnd-browserbase-agent",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@browserbasehq/sdk-functions": "1.0.1",
+    "playwright-core": "1.63.0"
+  }
+}
