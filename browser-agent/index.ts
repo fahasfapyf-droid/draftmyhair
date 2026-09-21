@@ -204,6 +204,7 @@ async function runGeneration(page: any, job: {
   attemptNumber: number;
   prompt: string;
 }): Promise<{ artifactBytes: Buffer; generationStartedAt: string }> {
+  const generationStartedAt = new Date().toISOString();
   await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
