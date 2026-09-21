@@ -70,6 +70,9 @@ async function uploadArtifact(jobId: string, attemptNumber: number, bytes: Buffe
     method: "POST",
     body: form,
   });
+  const artifactId = result?.artifact?.id ?? result?.artifactId;
+  if (typeof artifactId !== "string") throw new Error("Artifact upload did not return an artifact id.");
+  return artifactId;
 }
 
 async function reportFailure(jobId: string, attemptNumber: number, error: unknown): Promise<void> {
@@ -244,12 +247,15 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
     const job = typeof claimed.job === "object" ? claimed.job : null;
     if (!job) return { ok: true, message: "No R&D job is ready." };
 
+    const heartbeatTimer = setInterval(() => {
+      void heartbeat(job.id).catch(() => {});
+    }, 60_000);
     await heartbeat(job.id);
 
     try {
       const result = await runGeneration(page, job);
-      await uploadArtifact(job.id, job.attemptNumber, result.artifactBytes);
-      await rndFetch("/api/rnd/worker/report", {
+      const artifactId = await uploadArtifact(job.id, job.attemptNumber, result.artifactBytes);
+        await rndFetch("/api/rnd/worker/report", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -264,8 +270,7 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
     } catch (error) {
       await reportFailure(job.id, job.attemptNumber, error);
       throw error;
-    }
-  } finally {
+    } finally {
     await page.close().catch(() => {});
   }
 });
