@@ -10,8 +10,9 @@ The function is intentionally deployed separately from the Next.js application. 
 
 ## Current safety state
 
-The function has two modes:
+The function has three modes:
 
+- `supervised-login`: opens the normal Gemini website using the configured persistent Context and holds the session for 10 minutes so the account owner can complete a normal Google/Gemini login through Browserbase's live session view. It does not handle credentials.
 - `calibrate`: opens the normal Gemini website and reports observable UI controls. It does not upload a source, submit a prompt, or generate an image.
 - `generate`: claims/uses one R&D job, but currently stops before clicking Gemini's generate/send control until a supervised calibration has identified the correct visible control.
 
@@ -35,6 +36,7 @@ BROWSERBASE_PROJECT_ID
 RND_APP_URL
 RND_WORKER_TOKEN
 RND_WORKER_ID
+RND_BROWSERBASE_CONTEXT_ID
 ```
 
 The worker never receives the Vercel Blob storage token. It downloads the private source through the authenticated Draft My Hair control-plane endpoint.
@@ -48,7 +50,15 @@ bb functions publish index.ts --dry-run
 bb functions publish index.ts
 ```
 
-Then invoke calibration:
+Then invoke the supervised login flow:
+
+```bash
+bb functions invoke <function-id> --params '{"mode":"supervised-login"}'
+```
+
+Open the resulting Browserbase session/live view and complete the normal Google/Gemini login. The function keeps the browser alive for 10 minutes, then exits and persists the Context state.
+
+After login, invoke calibration:
 
 ```bash
 bb functions invoke <function-id> --params '{"mode":"calibrate"}'
@@ -60,7 +70,7 @@ Do not invoke `generate` yet.
 
 ## Gemini authentication
 
-Before generation, create one Browserbase Context for the authorized Gemini account and complete the normal Google/Gemini login in that context. Do not put Google credentials in source code or environment variables.
+Before generation, create one Browserbase Context for the authorized Gemini account and set its ID as `RND_BROWSERBASE_CONTEXT_ID`. Complete the normal Google/Gemini login in that context. Do not put Google credentials in source code or environment variables.
 
 Browserbase documents Contexts as the mechanism for persisting cookies, storage, and authentication state between sessions.
 
