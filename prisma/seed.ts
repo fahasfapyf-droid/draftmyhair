@@ -245,7 +245,7 @@ async function main() {
   for (const hairstyle of hairstyles) {
     await prisma.hairstyle.upsert({
       where: { slug: hairstyle.slug },
-      update: hairstyle,
+      update: {},
       create: hairstyle,
     });
   }
