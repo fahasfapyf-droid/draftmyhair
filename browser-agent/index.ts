@@ -60,13 +60,13 @@ async function heartbeat(jobId: string): Promise<void> {
   });
 }
 
-async function uploadArtifact(jobId: string, attemptNumber: number, bytes: Buffer): Promise<void> {
+async function uploadArtifact(jobId: string, attemptNumber: number, bytes: Buffer): Promise<string> {
   const form = new FormData();
   form.append("jobId", jobId);
   form.append("attemptNumber", String(attemptNumber));
   form.append("image", new Blob([bytes], { type: "image/png" }), "gemini-result.png");
 
-  await rndFetch("/api/rnd/agent/artifact", {
+  const result = await rndFetch("/api/rnd/agent/artifact", {
     method: "POST",
     body: form,
   });
@@ -110,7 +110,7 @@ async function describeGeminiUi(page: any) {
 
 async function findPromptBox(page: any) {
   const candidates = [
-    page.locator("textarea").filter({ visible: true }).first(),
+    page.locator("textarea").first(),
     page.getByRole("textbox").first(),
   ];
 
@@ -208,7 +208,7 @@ async function runGeneration(page: any, job: {
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
 
   const source = await getSource(job.id);
-  const sourceFile = new File([source], "rnd-source.jpg", { type: "image/jpeg" });
+  const sourceFile = { name: "rnd-source.jpg", mimeType: "image/jpeg", buffer: source };
 
   const fileInput = await findFileInput(page);
   await fileInput.setInputFiles(sourceFile);
@@ -257,7 +257,7 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
           attemptNumber: job.attemptNumber,
           generationStartedAt: new Date().toISOString(),
           generationCompletedAt: new Date().toISOString(),
-          artifactId: "uploaded-by-agent",
+          artifactId,
         }),
       });
       return { ok: true, jobId: job.id, attemptNumber: job.attemptNumber };
