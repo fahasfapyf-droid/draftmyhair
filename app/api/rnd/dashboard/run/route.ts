@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const assignments = Array.isArray(body?.assignments)
     ? body.assignments
         .filter((x: unknown): x is { styleId: string; sourceAssetId: string } => Boolean(x && typeof x === "object" && typeof (x as { styleId?: unknown }).styleId === "string" && typeof (x as { sourceAssetId?: unknown }).sourceAssetId === "string"))
-        .map((x) => ({ styleId: x.styleId, sourceAssetId: x.sourceAssetId }))
+        .map((x: { styleId: string; sourceAssetId: string }) => ({ styleId: x.styleId, sourceAssetId: x.sourceAssetId }))
     : [];
   const name = typeof body?.name === "string" ? body.name.trim().slice(0, 120) : "";
   const uniqueAssignments = Array.from(new Map(assignments.map((x) => [x.styleId + ":" + x.sourceAssetId, x])).values());
