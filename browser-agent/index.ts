@@ -1,5 +1,6 @@
 import { defineFn } from "@browserbasehq/sdk-functions";
 import { chromium } from "playwright-core";
+import { z } from "zod";
 
 type AgentParams = {
   mode?: "calibrate" | "generate" | "supervised-login";
@@ -12,6 +13,13 @@ const WORKER_TOKEN = required("RND_WORKER_TOKEN");
 const WORKER_ID = required("RND_WORKER_ID");
 const GEMINI_CONTEXT_ID = required("RND_BROWSERBASE_CONTEXT_ID");
 const SUPERVISED_LOGIN_HOLD_MS = 10 * 60 * 1000;
+
+const agentParamsSchema = z.object({
+  mode: z.enum(["calibrate", "generate", "supervised-login"]).optional(),
+  jobId: z.string().optional(),
+  contextId: z.string().optional(),
+});
+
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -319,6 +327,7 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
   }
   },
   {
+    parametersSchema: agentParamsSchema,
     sessionConfig: {
       browserSettings: {
         context: {
