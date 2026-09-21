@@ -2,7 +2,7 @@ import { defineFn } from "@browserbasehq/sdk-functions";
 import { chromium } from "playwright-core";
 
 type AgentParams = {
-  mode?: "calibrate" | "generate";
+  mode?: "calibrate" | "generate" | "supervised-login";
   jobId?: string;
   contextId?: string;
 };
