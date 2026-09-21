@@ -20,11 +20,22 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null);
-  const assignments = Array.isArray(body?.assignments)
-    ? body.assignments
-        .filter((x: unknown): x is { styleId: string; sourceAssetId: string } => Boolean(x && typeof x === "object" && typeof (x as { styleId?: unknown }).styleId === "string" && typeof (x as { sourceAssetId?: unknown }).sourceAssetId === "string"))
-        .map((x: { styleId: string; sourceAssetId: string }) => ({ styleId: x.styleId, sourceAssetId: x.sourceAssetId }))
-    : [];
+  type Assignment = { styleId: string; sourceAssetId: string };
+  const rawAssignments: unknown[] = Array.isArray(body?.assignments) ? body.assignments : [];
+  const assignments: Assignment[] = [];
+  for (const value of rawAssignments) {
+    if (
+      value &&
+      typeof value === "object" &&
+      typeof (value as { styleId?: unknown }).styleId === "string" &&
+      typeof (value as { sourceAssetId?: unknown }).sourceAssetId === "string"
+    ) {
+      assignments.push({
+        styleId: (value as { styleId: string }).styleId,
+        sourceAssetId: (value as { sourceAssetId: string }).sourceAssetId,
+      });
+    }
+  }
   const name = typeof body?.name === "string" ? body.name.trim().slice(0, 120) : "";
   const uniqueAssignments = Array.from(new Map(assignments.map((x) => [x.styleId + ":" + x.sourceAssetId, x])).values());
   if (!uniqueAssignments.length) return NextResponse.json({ error: "Assign a source photo to at least one R&D target." }, { status: 400 });
