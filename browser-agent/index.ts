@@ -320,9 +320,12 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
   },
   {
     sessionConfig: {
-      browserContext: {
-        id: GEMINI_CONTEXT_ID,
-        persist: true,
+      browserSettings: {
+        context: {
+          id: GEMINI_CONTEXT_ID,
+          persist: true,
+        },
+        solveCaptchas: false,
       },
     },
   }
