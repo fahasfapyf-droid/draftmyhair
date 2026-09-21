@@ -43,6 +43,7 @@ export function RndRunBuilder() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [genderPresentation, setGenderPresentation] = useState("");
@@ -147,69 +148,80 @@ export function RndRunBuilder() {
         </div>
 
         {uploadOpen ? (
-          <div className="mt-5 grid gap-3 rounded-lg border border-border p-4 md:grid-cols-2">
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="md:col-span-2 text-sm" />
-            <input
-              placeholder="Display name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-            <select
-              value={genderPresentation}
-              onChange={(e) => setGenderPresentation(e.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Gender presentation</option>
-              <option value="Feminine">Feminine</option>
-              <option value="Masculine">Masculine</option>
-              <option value="Androgynous / neutral">Androgynous / neutral</option>
-              <option value="Unspecified">Unspecified</option>
-            </select>
-            <select
-              value={cohortLabel}
-              onChange={(e) => setCohortLabel(e.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Cohort / demographic label</option>
-              <option value="Young adult">Young adult</option>
-              <option value="Adult">Adult</option>
-              <option value="Middle-aged adult">Middle-aged adult</option>
-              <option value="Older adult">Older adult</option>
-              <option value="Senior">Senior</option>
-              <option value="Unspecified">Unspecified</option>
-            </select>
-            <select
-              value={hairTexture}
-              onChange={(e) => setHairTexture(e.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Hair texture</option>
-              <option value="Straight">Straight</option>
-              <option value="Wavy">Wavy</option>
-              <option value="Curly">Curly</option>
-              <option value="Coily">Coily</option>
-              <option value="Locs / locked">Locs / locked</option>
-              <option value="Unspecified">Unspecified</option>
-            </select>
-            <select
-              value={hairLength}
-              onChange={(e) => setHairLength(e.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Natural hair length</option>
-              <option value="Bald / none">Bald / none</option>
-              <option value="Buzz / very short">Buzz / very short</option>
-              <option value="Short">Short</option>
-              <option value="Medium">Medium</option>
-              <option value="Shoulder length">Shoulder length</option>
-              <option value="Long">Long</option>
-              <option value="Very long">Very long</option>
-              <option value="Unspecified">Unspecified</option>
-            </select>
-            <textarea placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="md:col-span-2 rounded-md border border-border bg-background px-3 py-2 text-sm" />
-            <button disabled={!file || busy} onClick={() => void uploadSource()} className="rounded-md border border-border px-4 py-2 text-sm font-semibold disabled:opacity-50 md:col-span-2">
-              Upload source
+          <div className="mt-5 rounded-lg border border-border bg-background/40 p-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Source photo</label>
+                <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
+              </div>
+              <button type="button" onClick={() => setMetadataOpen((v) => !v)} className="rounded-md border border-border px-3 py-2 text-sm">
+                {metadataOpen ? "Hide metadata" : "Add metadata (optional)"}
+              </button>
+            </div>
+
+            {metadataOpen ? (
+              <div className="mt-4 grid gap-3 border-t border-border pt-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Display name</label>
+                  <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Gender presentation</label>
+                  <select value={genderPresentation} onChange={(e) => setGenderPresentation(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                    <option value="">Select</option>
+                    <option value="Feminine">Feminine</option>
+                    <option value="Masculine">Masculine</option>
+                    <option value="Androgynous / neutral">Androgynous / neutral</option>
+                    <option value="Unspecified">Unspecified</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Cohort</label>
+                  <select value={cohortLabel} onChange={(e) => setCohortLabel(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                    <option value="">Select</option>
+                    <option value="Young adult">Young adult</option>
+                    <option value="Adult">Adult</option>
+                    <option value="Middle-aged adult">Middle-aged adult</option>
+                    <option value="Older adult">Older adult</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Unspecified">Unspecified</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Hair texture</label>
+                  <select value={hairTexture} onChange={(e) => setHairTexture(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                    <option value="">Select</option>
+                    <option value="Straight">Straight</option>
+                    <option value="Wavy">Wavy</option>
+                    <option value="Curly">Curly</option>
+                    <option value="Coily">Coily</option>
+                    <option value="Locs / locked">Locs / locked</option>
+                    <option value="Unspecified">Unspecified</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Natural hair length</label>
+                  <select value={hairLength} onChange={(e) => setHairLength(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                    <option value="">Select</option>
+                    <option value="Bald / none">Bald / none</option>
+                    <option value="Buzz / very short">Buzz / very short</option>
+                    <option value="Short">Short</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Shoulder length">Shoulder length</option>
+                    <option value="Long">Long</option>
+                    <option value="Very long">Very long</option>
+                    <option value="Unspecified">Unspecified</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (optional)</label>
+                  <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm" />
+                </div>
+              </div>
+            ) : null}
+
+            <button disabled={!file || busy} onClick={() => void uploadSource()} className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {busy ? "Uploading…" : "Upload source photo"}
             </button>
           </div>
         ) : null}
