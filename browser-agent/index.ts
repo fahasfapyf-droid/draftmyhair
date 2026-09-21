@@ -10,6 +10,8 @@ type AgentParams = {
 const APP_URL = required("RND_APP_URL").replace(/\\/$/, "");
 const WORKER_TOKEN = required("RND_WORKER_TOKEN");
 const WORKER_ID = required("RND_WORKER_ID");
+const GEMINI_CONTEXT_ID = required("RND_BROWSERBASE_CONTEXT_ID");
+const SUPERVISED_LOGIN_HOLD_MS = 10 * 60 * 1000;
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -180,6 +182,32 @@ async function captureImageElement(page: any): Promise<Buffer> {
   throw new Error("No generated image was detected in the Gemini UI.");
 }
 
+async function runSupervisedLogin(page: any, sessionId?: string) {
+  await page.goto("https://gemini.google.com/", {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  });
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+
+  const ui = await describeGeminiUi(page);
+  console.log("GEMINI_UI_SUPERVISED_LOGIN", JSON.stringify(ui));
+
+  // Keep this session alive so the account owner can complete a normal
+  // Google/Gemini login through Browserbase's live session view.
+  // Credentials are entered only by the account owner, never by this code.
+  await new Promise((resolve) => setTimeout(resolve, SUPERVISED_LOGIN_HOLD_MS));
+
+  const finalUi = await describeGeminiUi(page);
+  console.log("GEMINI_UI_AFTER_SUPERVISED_LOGIN", JSON.stringify(finalUi));
+
+  return {
+    mode: "supervised-login",
+    contextId: GEMINI_CONTEXT_ID,
+    sessionId,
+    ui: finalUi,
+  };
+}
+
 async function runCalibration(page: any) {
   await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
@@ -233,6 +261,15 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
   const browserContext = browser.contexts()[0];
   const page = browserContext.pages()[0] || await browserContext.newPage();
 
+  if (mode === "supervised-login") {
+    try {
+      return await runSupervisedLogin(page, context.session.id);
+    } finally {
+      await page.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+  }
+
   if (mode === "calibrate") {
     try {
       return await runCalibration(page);
@@ -280,4 +317,13 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
     await page.close().catch(() => {});
     await browser.close().catch(() => {});
   }
-});
+  },
+  {
+    sessionConfig: {
+      browserContext: {
+        id: GEMINI_CONTEXT_ID,
+        persist: true,
+      },
+    },
+  }
+);
