@@ -107,7 +107,11 @@ export function RndRunBuilder() {
       const response = await fetch("/api/rnd/dashboard/sources", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) { setNotice(body?.error ?? "Upload failed."); return; }
-      setNotice("Source photo added to the library.");
+      if (assigningStyle && body?.source?.id) {
+        setAssignments((v) => ({ ...v, [assigningStyle]: body.source.id }));
+        setAssigningStyle(null);
+      }
+      setNotice("Source photo added to the library and assigned to the target.");
       setFile(null); setDisplayName(""); setGenderPresentation(""); setCohortLabel(""); setHairTexture(""); setHairLength(""); setNotes(""); setUploadOpen(false);
       await load();
     } catch {
@@ -145,7 +149,7 @@ export function RndRunBuilder() {
             <h2 className="text-lg font-semibold">Source Photo Library</h2>
             <p className="mt-1 text-sm text-muted-foreground">Reusable test photos. Cohort labels are curator-provided; the system does not infer them from the image.</p>
           </div>
-          <button onClick={() => setUploadOpen((v) => !v)} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+          <button onClick={() => { setAssigningStyle(null); setUploadOpen((v) => !v); }} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
             {uploadOpen ? "Close" : "Add source photo"}
           </button>
         </div>
@@ -285,7 +289,7 @@ export function RndRunBuilder() {
                               {sources.map((s) => <option key={s.id} value={s.id}>{s.displayName || s.originalFilename || "Source photo"}{s.genderPresentation ? ` · ${s.genderPresentation}` : ""}</option>)}
                             </select>
                           ) : null}
-                          <button type="button" onClick={() => setAssigningStyle(assigningStyle === style.id ? null : style.id)} className="rounded-md border border-border px-3 py-2 text-xs">
+                          <button type="button" onClick={() => { setAssigningStyle(style.id); setUploadOpen(true); setMetadataOpen(true); }} className="rounded-md border border-border px-3 py-2 text-xs">
                             {active ? "Change photo" : "Select / upload photo"}
                           </button>
                         </div>
@@ -293,7 +297,7 @@ export function RndRunBuilder() {
                       {active ? <div className="mt-2 pl-8 text-xs text-muted-foreground">Assigned: {source?.displayName || source?.originalFilename || "Source photo"}</div> : null}
                       {assigningStyle === style.id ? (
                         <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
-                          Choose an existing photo from the dropdown, or use <strong>Add source photo</strong> above to upload a new model. After upload, select it here.
+                          Choose an existing model photo above, or upload a new one. A new upload will be assigned to <strong>{style.name}</strong> automatically.
                         </div>
                       ) : null}
                     </div>
