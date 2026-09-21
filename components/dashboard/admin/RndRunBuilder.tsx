@@ -36,6 +36,8 @@ export function RndRunBuilder() {
   const [sources, setSources] = useState<Source[]>([]);
   const [styles, setStyles] = useState<Style[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [assigningStyle, setAssigningStyle] = useState<string | null>(null);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [cohort, setCohort] = useState("");
@@ -114,19 +116,20 @@ export function RndRunBuilder() {
   }
 
   async function startRun() {
-    if (!selectedStyles.length || !selectedSources.length) return;
+    const runAssignments = Object.entries(assignments).filter(([, sourceId]) => Boolean(sourceId)).map(([styleId, sourceAssetId]) => ({ styleId, sourceAssetId }));
+    if (!runAssignments.length) return;
     setBusy(true);
     setNotice("Building R&D run and queuing jobs…");
     try {
       const response = await fetch("/api/rnd/dashboard/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ styleIds: selectedStyles, sourceAssetIds: selectedSources, name: runName }),
+        body: JSON.stringify({ assignments: runAssignments, name: runName }),
       });
       const body = await response.json();
       if (!response.ok) { setNotice(body?.error ?? "Could not start R&D run."); return; }
       setNotice(body.message ?? "R&D run started.");
-      setSelectedStyles([]); setSelectedSources([]); setRunName("");
+      setSelectedStyles([]); setSelectedSources([]); setAssignments({}); setRunName("");
     } catch {
       setNotice("Could not start R&D run.");
     } finally { setBusy(false); }
@@ -255,20 +258,45 @@ export function RndRunBuilder() {
 
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="text-lg font-semibold">R&D Targets</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Select styles/services. Each selected target will run against every selected source photo.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Each target gets its own source photo. Existing library photos can be reused, or a new photo can be added above.</p>
         <div className="mt-5 space-y-5">
           {groupedStyles.map(([group, groupStyles]) => (
             <div key={group}>
               <h3 className="mb-2 text-sm font-semibold">{group}</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
                 {groupStyles.map((style) => {
-                  const checked = selectedStyles.includes(style.id);
+                  const sourceId = assignments[style.id] ?? "";
+                  const source = sources.find((s) => s.id === sourceId);
+                  const active = Boolean(sourceId);
                   return (
-                    <label key={style.id} className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm ${checked ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <input type="checkbox" checked={checked} onChange={() => setSelectedStyles((v) => checked ? v.filter((id) => id !== style.id) : [...v, style.id])} />
-                      <span>{style.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{style.gender}</span>
-                    </label>
+                    <div key={style.id} className={`rounded-lg border p-3 ${active ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input type="checkbox" checked={active} onChange={() => setAssignments((v) => {
+                          const next = { ...v };
+                          if (next[style.id]) delete next[style.id]; else if (sources[0]) next[style.id] = sources[0].id;
+                          return next;
+                        })} />
+                        <span className="font-medium">{style.name}</span>
+                        <span className="text-xs text-muted-foreground">{style.gender}</span>
+                        <div className="ml-auto flex items-center gap-2">
+                          {active ? (
+                            <select value={sourceId} onChange={(e) => setAssignments((v) => ({ ...v, [style.id]: e.target.value }))} className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm">
+                              <option value="">Select model photo</option>
+                              {sources.map((s) => <option key={s.id} value={s.id}>{s.displayName || s.originalFilename || "Source photo"}{s.genderPresentation ? ` · ${s.genderPresentation}` : ""}</option>)}
+                            </select>
+                          ) : null}
+                          <button type="button" onClick={() => setAssigningStyle(assigningStyle === style.id ? null : style.id)} className="rounded-md border border-border px-3 py-2 text-xs">
+                            {active ? "Change photo" : "Select / upload photo"}
+                          </button>
+                        </div>
+                      </div>
+                      {active ? <div className="mt-2 pl-8 text-xs text-muted-foreground">Assigned: {source?.displayName || source?.originalFilename || "Source photo"}</div> : null}
+                      {assigningStyle === style.id ? (
+                        <div className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+                          Choose an existing photo from the dropdown, or use <strong>Add source photo</strong> above to upload a new model. After upload, select it here.
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
@@ -280,11 +308,11 @@ export function RndRunBuilder() {
       <section className="sticky bottom-4 rounded-xl border border-border bg-card p-5 shadow-lg">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex-1 text-sm">
-            <div className="font-semibold">{selectedStyles.length} styles × {selectedSources.length} source photos</div>
-            <div className="text-muted-foreground">{selectedStyles.length * selectedSources.length} jobs will be queued.</div>
+            <div className="font-semibold">{Object.keys(assignments).filter((id) => assignments[id]).length} targets assigned</div>
+            <div className="text-muted-foreground">{Object.values(assignments).filter(Boolean).length} jobs will be queued.</div>
           </div>
           <input value={runName} onChange={(e) => setRunName(e.target.value)} placeholder="Run name (optional)" className="rounded-md border border-border bg-background px-3 py-2 text-sm" />
-          <button disabled={busy || !selectedStyles.length || !selectedSources.length} onClick={() => void startRun()} className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+          <button disabled={busy || !Object.values(assignments).some(Boolean)} onClick={() => void startRun()} className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
             {busy ? "Starting…" : "START R&D RUN"}
           </button>
         </div>
