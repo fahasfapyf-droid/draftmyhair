@@ -20,6 +20,12 @@ export async function POST(request: Request) {
 
   try {
     const inspected = await inspectSupervisedGeminiSession(sessionId);
+    if (!inspected.ui.authenticatedLikely) {
+      return NextResponse.json({
+        error: "Gemini authentication is not verified. Complete Google/Gemini login in Live View, then verify again.",
+        ui: inspected.ui,
+      }, { status: 409 });
+    }
     const released = await releaseSupervisedGeminiSession(sessionId);
     return NextResponse.json({
       ok: true,
