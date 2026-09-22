@@ -152,26 +152,9 @@ export function RndRunBuilder() {
       if (!response.ok) { setGeminiStatus(body?.error ?? "Could not start Gemini session."); return; }
       setGeminiSessionId(body.sessionId ?? "");
       setGeminiLiveUrl(body.liveViewUrl ?? "");
-      setGeminiStatus("Session ready. Open Live View and complete Google/Gemini login normally. Then click Verify.");
+      setGeminiStatus("Session ready. Open Live View and complete Google/Gemini login normally. When Gemini is fully authenticated, click Finish & verify Context.");
     } catch {
       setGeminiStatus("Could not start Gemini session.");
-    } finally { setGeminiBusy(false); }
-  }
-
-  async function verifyGeminiLogin() {
-    if (!geminiSessionId) return;
-    setGeminiBusy(true);
-    setGeminiStatus("Inspecting the live Gemini session…");
-    try {
-      const response = await fetch("/api/rnd/browserbase/supervised-login/status", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: geminiSessionId }),
-      });
-      const body = await response.json();
-      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not inspect Gemini session."); return; }
-      const authenticated = Boolean(body?.ui?.authenticatedLikely);
-      setGeminiStatus(authenticated ? "Gemini appears authenticated and the persistent context is ready." : "Gemini is not yet verified as authenticated. Complete login in Live View and verify again.");
-    } catch {
-      setGeminiStatus("Could not inspect Gemini session.");
     } finally { setGeminiBusy(false); }
   }
 
@@ -205,7 +188,7 @@ export function RndRunBuilder() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Gemini Authentication</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Create a persistent Browserbase session, log in through Live View, verify the authenticated Gemini UI, then release the session so the Context is saved.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Create a persistent Browserbase session, log in through Live View, then release it and run an automated Gemini calibration against the saved Context.</p>
           </div>
           {!geminiSessionId ? (
             <button disabled={geminiBusy} onClick={() => void startGeminiLogin()} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
@@ -218,8 +201,7 @@ export function RndRunBuilder() {
             <div className="text-xs text-muted-foreground">Session: <span className="font-mono">{geminiSessionId}</span></div>
             {geminiLiveUrl ? <a href={geminiLiveUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-border px-3 py-2 text-sm font-medium underline">Open Browserbase Live View</a> : null}
             <div className="flex flex-wrap gap-2">
-              <button disabled={geminiBusy} onClick={() => void verifyGeminiLogin()} className="rounded-md border border-border px-3 py-2 text-sm">Verify login</button>
-              <button disabled={geminiBusy} onClick={() => void finishGeminiLogin()} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Finish & save Context</button>
+              <button disabled={geminiBusy} onClick={() => void finishGeminiLogin()} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Finish & verify Context</button>
             </div>
           </div>
         ) : null}
