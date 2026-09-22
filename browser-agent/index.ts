@@ -8,10 +8,7 @@ type AgentParams = {
   contextId?: string;
 };
 
-const APP_URL = required("RND_APP_URL").replace(/\\/$/, "");
-const WORKER_TOKEN = required("RND_WORKER_TOKEN");
-const WORKER_ID = required("RND_WORKER_ID");
-const GEMINI_CONTEXT_ID = required("RND_BROWSERBASE_CONTEXT_ID");
+const GEMINI_CONTEXT_ID = "5e5965ad-a02e-48f6-a9f9-a0f48369298e";
 const SUPERVISED_LOGIN_HOLD_MS = 10 * 60 * 1000;
 
 const agentParamsSchema = z.object({
@@ -27,12 +24,21 @@ function required(name: string): string {
   return value;
 }
 
+function runtimeConfig() {
+  return {
+    appUrl: required("RND_APP_URL").replace(/\/$/, ""),
+    workerToken: required("RND_WORKER_TOKEN"),
+    workerId: required("RND_WORKER_ID"),
+  };
+}
+
 async function rndFetch(path: string, init: RequestInit = {}) {
-  const response = await fetch(APP_URL + path, {
+  const config = runtimeConfig();
+  const response = await fetch(config.appUrl + path, {
     ...init,
     headers: {
-      authorization: "Bearer " + WORKER_TOKEN,
-      "x-rnd-worker-id": WORKER_ID,
+      authorization: "Bearer " + config.workerToken,
+      "x-rnd-worker-id": config.workerId,
       ...(init.headers || {}),
     },
   });
@@ -46,12 +52,13 @@ async function rndFetch(path: string, init: RequestInit = {}) {
 }
 
 async function getSource(jobId: string): Promise<Buffer> {
+  const config = runtimeConfig();
   const response = await fetch(
-    APP_URL + "/api/rnd/agent/source?jobId=" + encodeURIComponent(jobId),
+    config.appUrl + "/api/rnd/agent/source?jobId=" + encodeURIComponent(jobId),
     {
       headers: {
-        authorization: "Bearer " + WORKER_TOKEN,
-        "x-rnd-worker-id": WORKER_ID,
+        authorization: "Bearer " + config.workerToken,
+        "x-rnd-worker-id": config.workerId,
       },
       cache: "no-store",
     }
