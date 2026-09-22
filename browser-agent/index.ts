@@ -197,30 +197,10 @@ async function captureImageElement(page: any): Promise<Buffer> {
   throw new Error("No generated image was detected in the Gemini UI.");
 }
 
-async function runSupervisedLogin(page: any, sessionId?: string) {
-  await page.goto("https://gemini.google.com/", {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  });
-  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-
-  const ui = await describeGeminiUi(page);
-  console.log("GEMINI_UI_SUPERVISED_LOGIN", JSON.stringify(ui));
-
-  // Keep this session alive so the account owner can complete a normal
-  // Google/Gemini login through Browserbase's live session view.
-  // Credentials are entered only by the account owner, never by this code.
-  await new Promise((resolve) => setTimeout(resolve, SUPERVISED_LOGIN_HOLD_MS));
-
-  const finalUi = await describeGeminiUi(page);
-  console.log("GEMINI_UI_AFTER_SUPERVISED_LOGIN", JSON.stringify(finalUi));
-
-  return {
-    mode: "supervised-login",
-    contextId: GEMINI_CONTEXT_ID,
-    sessionId,
-    ui: finalUi,
-  };
+async function runSupervisedLogin() {
+  throw new Error(
+    "SUPERVISED_LOGIN_REPLACED: Use the R&D dashboard Browserbase Live View session flow. This Function mode no longer holds a browser open for human login."
+  );
 }
 
 async function runCalibration(page: any) {
