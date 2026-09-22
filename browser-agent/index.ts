@@ -119,6 +119,7 @@ async function describeGeminiUi(page: any) {
       accept: el.accept,
       multiple: el.multiple,
     })),
+    bodyText: (document.body?.innerText || "").slice(0, 12000),
     buttons: Array.from(document.querySelectorAll("button")).slice(0, 80).map((el: HTMLButtonElement) => ({
       text: (el.innerText || "").trim().slice(0, 120),
       ariaLabel: el.getAttribute("aria-label"),
@@ -211,14 +212,35 @@ async function runCalibration(page: any) {
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
 
   const ui = await describeGeminiUi(page);
-  console.log("GEMINI_UI_CALIBRATION", JSON.stringify(ui));
 
-  // Calibration is deliberately read-only. It must never submit a prompt or
-  // upload an R&D source until the visible Gemini UI has been verified.
+  const pageText = String(ui.bodyText || "").toLowerCase();
+  const hasPromptSurface = Array.isArray(ui.textareas) && ui.textareas.some((x: any) => x.visible);
+  const hasFileInput = Array.isArray(ui.fileInputs) && ui.fileInputs.length > 0;
+  const hasSignInLanguage = /sign in|log in|create account|choose an account/.test(pageText);
+  const authenticatedLikely = hasPromptSurface && !hasSignInLanguage;
+
+  console.log("GEMINI_UI_CALIBRATION", JSON.stringify({
+    ...ui,
+    authenticatedLikely,
+    hasPromptSurface,
+    hasFileInput,
+    hasSignInLanguage,
+  }));
+
+  // Calibration is deliberately read-only. It never submits a prompt or
+  // uploads an R&D source. It only records whether the visible Gemini UI
+  // presents an authenticated prompt surface.
   return {
     mode: "calibrate",
-    readyForSupervisedCalibration: true,
-    ui,
+    readyForSupervisedCalibration: authenticatedLikely,
+    authenticatedLikely,
+    ui: {
+      ...ui,
+      authenticatedLikely,
+      hasPromptSurface,
+      hasFileInput,
+      hasSignInLanguage,
+    },
   };
 }
 
