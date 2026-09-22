@@ -8,7 +8,7 @@ type AgentParams = {
   contextId?: string;
 };
 
-const GEMINI_CONTEXT_ID = "5e5965ad-a02e-48f6-a9f9-a0f48369298e";
+const GEMINI_CONTEXT_ID = "eb366caa-16e6-405b-96af-c368f7b41bdb";
 const SUPERVISED_LOGIN_HOLD_MS = 10 * 60 * 1000;
 
 const agentParamsSchema = z.object({
