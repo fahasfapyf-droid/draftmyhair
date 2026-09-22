@@ -67,6 +67,9 @@ export async function inspectSupervisedGeminiSession(sessionId: string) {
       url: location.href,
       title: document.title,
       bodyText: document.body?.innerText?.slice(0, 3000) || "",
+      authenticatedLikely: location.hostname === "gemini.google.com" &&
+        Array.from(document.querySelectorAll("textarea,[contenteditable=\"true\"]")).length > 0 &&
+        !/sign in|log in/i.test(document.body?.innerText || ""),
       textboxes: Array.from(document.querySelectorAll("textarea,[contenteditable=\"true\"]")).map((el) => ({
         tag: el.tagName,
         ariaLabel: el.getAttribute("aria-label"),
