@@ -46,6 +46,10 @@ export function RndRunBuilder() {
   const [busy, setBusy] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [geminiSessionId, setGeminiSessionId] = useState("");
+  const [geminiLiveUrl, setGeminiLiveUrl] = useState("");
+  const [geminiStatus, setGeminiStatus] = useState("");
+  const [geminiBusy, setGeminiBusy] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [genderPresentation, setGenderPresentation] = useState("");
@@ -137,6 +141,55 @@ export function RndRunBuilder() {
     } catch {
       setNotice("Could not start R&D run.");
     } finally { setBusy(false); }
+  }
+
+  async function startGeminiLogin() {
+    setGeminiBusy(true);
+    setGeminiStatus("Starting a persistent Browserbase Gemini session…");
+    try {
+      const response = await fetch("/api/rnd/browserbase/supervised-login/start", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not start Gemini session."); return; }
+      setGeminiSessionId(body.sessionId ?? "");
+      setGeminiLiveUrl(body.liveViewUrl ?? "");
+      setGeminiStatus("Session ready. Open Live View and complete Google/Gemini login normally. Then click Verify.");
+    } catch {
+      setGeminiStatus("Could not start Gemini session.");
+    } finally { setGeminiBusy(false); }
+  }
+
+  async function verifyGeminiLogin() {
+    if (!geminiSessionId) return;
+    setGeminiBusy(true);
+    setGeminiStatus("Inspecting the live Gemini session…");
+    try {
+      const response = await fetch("/api/rnd/browserbase/supervised-login/status", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: geminiSessionId }),
+      });
+      const body = await response.json();
+      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not inspect Gemini session."); return; }
+      const authenticated = Boolean(body?.ui?.authenticatedLikely);
+      setGeminiStatus(authenticated ? "Gemini appears authenticated and the persistent context is ready." : "Gemini is not yet verified as authenticated. Complete login in Live View and verify again.");
+    } catch {
+      setGeminiStatus("Could not inspect Gemini session.");
+    } finally { setGeminiBusy(false); }
+  }
+
+  async function finishGeminiLogin() {
+    if (!geminiSessionId) return;
+    setGeminiBusy(true);
+    setGeminiStatus("Verifying authentication and releasing the session…");
+    try {
+      const response = await fetch("/api/rnd/browserbase/supervised-login/finish", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: geminiSessionId }),
+      });
+      const body = await response.json();
+      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not finish Gemini login."); return; }
+      setGeminiStatus("Gemini authentication verified and the Browserbase session was released. The context can now be reused by calibration/generation.");
+      setGeminiLiveUrl(""); setGeminiSessionId("");
+    } catch {
+      setGeminiStatus("Could not finish Gemini login.");
+    } finally { setGeminiBusy(false); }
   }
 
   return (
