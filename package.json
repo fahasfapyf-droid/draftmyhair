@@ -7,15 +7,10 @@
     "predev": "npm run compile:prompts",
     "dev": "next dev",
     "prebuild": "npm run compile:prompts",
-    "build": "prisma generate && npm run migrate:deploy && if [ \"$VERCEL_ENV\" = \"preview\" ]; then npm run db:sync-catalog; fi && next build",
+    "build": "prisma generate && (prisma migrate resolve --rolled-back 20260812000000_add_promo_codes || true) && (prisma migrate resolve --rolled-back 20260812140000_add_deleted_email || true) && (prisma migrate resolve --rolled-back 20260817120000_add_admin_content_library || true) && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint .",
-    "postinstall": "prisma generate",
-    "migrate:deploy": "prisma migrate deploy || (sleep 5 && prisma migrate deploy) || (sleep 5 && prisma migrate deploy)",
-    "db:sync-catalog": "tsx prisma/seed.ts"
-  },
-  "prisma": {
-    "schema": "prisma"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -38,9 +33,7 @@
     "resend": "^6.18.0",
     "sharp": "^0.34.5",
     "tailwind-merge": "^2.2.1",
-    "zod": "^4.4.3",
-    "@browserbasehq/sdk": "^2.20.0",
-    "playwright-core": "^1.63.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
@@ -48,7 +41,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.2.4",
+    "autoprefixer": "^10.4.18",
     "eslint": "^9.31.0",
     "eslint-config-next": "^16.2.9",
     "postcss": "^8.4.35",
@@ -64,6 +57,7 @@
     "argon2@0.45.1": true,
     "esbuild@0.28.1": true,
     "protobufjs@7.6.4": true,
+    "unrs-resolver@1.12.2": true,
     "prisma@6.16.3": true
   }
 }
