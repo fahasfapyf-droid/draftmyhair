@@ -185,7 +185,12 @@ export function RndRunBuilder() {
       });
       const body = await response.json();
       if (!response.ok) { setGeminiStatus(body?.error ?? "Could not finish Gemini login."); return; }
-      setGeminiStatus("Gemini authentication verified and the Browserbase session was released. The context can now be reused by calibration/generation.");
+      const calibration = body?.calibration;
+      const ui = calibration?.ui;
+      const authenticated = Boolean(ui?.authenticatedLikely);
+      setGeminiStatus(authenticated
+        ? "Gemini authentication verified by the post-release calibration Function. The persistent Context is ready for R&D generation."
+        : "The Browserbase session was released, but calibration did not confirm an authenticated Gemini UI. Review the calibration result before enabling generation.");
       setGeminiLiveUrl(""); setGeminiSessionId("");
     } catch {
       setGeminiStatus("Could not finish Gemini login.");
