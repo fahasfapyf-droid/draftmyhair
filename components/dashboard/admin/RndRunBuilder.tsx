@@ -199,6 +199,31 @@ export function RndRunBuilder() {
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
+            <h2 className="text-lg font-semibold">Gemini Authentication</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Create a persistent Browserbase session, log in through Live View, verify the authenticated Gemini UI, then release the session so the Context is saved.</p>
+          </div>
+          {!geminiSessionId ? (
+            <button disabled={geminiBusy} onClick={() => void startGeminiLogin()} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {geminiBusy ? "Starting…" : "CONNECT GEMINI"}
+            </button>
+          ) : null}
+        </div>
+        {geminiSessionId ? (
+          <div className="mt-4 space-y-3 rounded-lg border border-border bg-background/40 p-4">
+            <div className="text-xs text-muted-foreground">Session: <span className="font-mono">{geminiSessionId}</span></div>
+            {geminiLiveUrl ? <a href={geminiLiveUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-border px-3 py-2 text-sm font-medium underline">Open Browserbase Live View</a> : null}
+            <div className="flex flex-wrap gap-2">
+              <button disabled={geminiBusy} onClick={() => void verifyGeminiLogin()} className="rounded-md border border-border px-3 py-2 text-sm">Verify login</button>
+              <button disabled={geminiBusy} onClick={() => void finishGeminiLogin()} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Finish & save Context</button>
+            </div>
+          </div>
+        ) : null}
+        {geminiStatus ? <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 text-sm">{geminiStatus}</div> : null}
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <h2 className="text-lg font-semibold">Source Photo Library</h2>
             <p className="mt-1 text-sm text-muted-foreground">Reusable test photos. Cohort labels are curator-provided; the system does not infer them from the image.</p>
           </div>
