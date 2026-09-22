@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
-  inspectSupervisedGeminiSession,
+  getSupervisedGeminiSession,
   releaseSupervisedGeminiSession,
 } from "@/lib/rnd/browserbase-session";
 
@@ -19,19 +19,16 @@ export async function POST(request: Request) {
   if (!sessionId) return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
 
   try {
-    const inspected = await inspectSupervisedGeminiSession(sessionId);
-    if (!inspected.ui.authenticatedLikely) {
-      return NextResponse.json({
-        error: "Gemini authentication is not verified. Complete Google/Gemini login in Live View, then verify again.",
-        ui: inspected.ui,
-      }, { status: 409 });
+    const current = await getSupervisedGeminiSession(sessionId);
+    if (current.status !== "RUNNING" && current.status !== "PENDING") {
+      return NextResponse.json({ error: "Browserbase session is no longer active.", status: current.status }, { status: 409 });
     }
     const released = await releaseSupervisedGeminiSession(sessionId);
     return NextResponse.json({
       ok: true,
       sessionId,
       released: released.status,
-      verifiedBeforeRelease: inspected.ui,
+      message: "Session released. The persistent Browserbase Context now contains the login state, if authentication was completed in Live View.",
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("R&D supervised login finish failed", error);
