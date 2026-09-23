@@ -3,16 +3,15 @@ import { chromium } from "playwright-core";
 import { z } from "zod";
 
 type AgentParams = {
-  mode?: "calibrate" | "generate" | "supervised-login";
+  mode?: "calibrate" | "generate";
   jobId?: string;
   contextId?: string;
 };
 
 const GEMINI_CONTEXT_ID = "eb366caa-16e6-405b-96af-c368f7b41bdb";
-const SUPERVISED_LOGIN_HOLD_MS = 10 * 60 * 1000;
 
 const agentParamsSchema = z.object({
-  mode: z.enum(["calibrate", "generate", "supervised-login"]).optional(),
+  mode: z.enum(["calibrate", "generate"]).optional(),
   jobId: z.string().optional(),
   contextId: z.string().optional(),
 });
@@ -198,12 +197,6 @@ async function captureImageElement(page: any): Promise<Buffer> {
   throw new Error("No generated image was detected in the Gemini UI.");
 }
 
-async function runSupervisedLogin() {
-  throw new Error(
-    "SUPERVISED_LOGIN_REPLACED: Use the R&D dashboard Browserbase Live View session flow. This Function mode no longer holds a browser open for human login."
-  );
-}
-
 async function runCalibration(page: any) {
   await page.goto("https://gemini.google.com/", {
     waitUntil: "domcontentloaded",
@@ -277,15 +270,6 @@ defineFn("draftmyhair-rnd-browser-agent", async (context, params?: AgentParams) 
   const browser = await chromium.connectOverCDP(context.session.connectUrl);
   const browserContext = browser.contexts()[0];
   const page = browserContext.pages()[0] || await browserContext.newPage();
-
-  if (mode === "supervised-login") {
-    try {
-      return await runSupervisedLogin(page, context.session.id);
-    } finally {
-      await page.close().catch(() => {});
-      await browser.close().catch(() => {});
-    }
-  }
 
   if (mode === "calibrate") {
     try {
