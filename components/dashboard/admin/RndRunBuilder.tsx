@@ -171,9 +171,18 @@ export function RndRunBuilder() {
       const calibration = body?.calibration;
       const ui = calibration?.ui;
       const authenticated = Boolean(ui?.authenticatedLikely);
-      setGeminiStatus(authenticated
-        ? "Gemini authentication verified by the post-release calibration Function. The persistent Context is ready for R&D generation."
-        : "The Browserbase session was released, but calibration did not confirm an authenticated Gemini UI. Review the calibration result before enabling generation.");
+      if (authenticated) {
+        setGeminiStatus("Gemini authentication verified by the post-release calibration Function. The persistent Context is ready for R&D generation.");
+      } else {
+        const signIn = ui?.hasSignInLanguage ? "Sign-in language detected." : "No sign-in language detected.";
+        const prompt = ui?.hasPromptSurface ? "Prompt surface detected." : "Prompt surface NOT detected.";
+        const title = typeof ui?.title === "string" ? ui.title : "unknown";
+        setGeminiStatus(
+          "Calibration did not confirm authenticated Gemini. " +
+          signIn + " " + prompt + " Page title: " + title +
+          " Browserbase Function deployment must be verified before retrying."
+        );
+      }
       setGeminiLiveUrl(""); setGeminiSessionId("");
     } catch {
       setGeminiStatus("Could not finish Gemini login.");
