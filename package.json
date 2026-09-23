@@ -7,10 +7,11 @@
     "predev": "npm run compile:prompts",
     "dev": "next dev",
     "prebuild": "npm run compile:prompts",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && npm run migrate:deploy && next build",
     "start": "next start",
     "lint": "eslint .",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "migrate:deploy": "prisma migrate deploy || (sleep 5 && prisma migrate deploy) || (sleep 5 && prisma migrate deploy)"
   },
   "prisma": {
     "schema": "prisma"
