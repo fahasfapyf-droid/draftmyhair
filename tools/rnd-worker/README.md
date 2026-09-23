@@ -1,6 +1,6 @@
 # Draft My Hair R&D Windows Worker
 
-This is the server-backed Gemini Web execution worker for `rnd/prompt-lab-v3`.
+This is the server-backed Gemini Web execution worker for the local R&D pipeline. The worker runs on the Windows PC, launches visible Chrome with the persistent Gemini profile, executes the generation in Gemini Web, and reports the artifact back to the server for automated QA.
 
 ## Locked responsibilities
 
@@ -38,7 +38,7 @@ Override it with `DMH_GEMINI_PROFILE_DIR` if the profile lives elsewhere.
 Set these environment variables in the worker process:
 
 ```text
-RND_API_BASE_URL=https://draftmyhair-git-rnd-prompt-lab-v3-draftmyhair.vercel.app
+RND_API_BASE_URL=https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app
 RND_WORKER_TOKEN=<Preview R&D worker token>
 CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
@@ -56,6 +56,10 @@ Do not commit `.env`, the worker ID file, generated images, or the Chrome profil
 ## Run
 
 ```cmd
+start-rnd-worker.cmd
+
+or directly:
+
 npm start
 ```
 
