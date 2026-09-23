@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-prompt-lab-v3-draftmyhair.vercel.app").replace(/\/$/, "");
+const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
