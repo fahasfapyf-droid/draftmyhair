@@ -114,6 +114,13 @@ async function describeGeminiUi(page: any) {
       placeholder: el.getAttribute("placeholder"),
       visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
     })),
+    textboxes: Array.from(document.querySelectorAll('[role="textbox"], [contenteditable="true"]')).map((el: HTMLElement) => ({
+      role: el.getAttribute("role"),
+      ariaLabel: el.getAttribute("aria-label"),
+      placeholder: el.getAttribute("data-placeholder") || el.getAttribute("placeholder"),
+      contentEditable: el.getAttribute("contenteditable"),
+      visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
+    })),
     fileInputs: Array.from(document.querySelectorAll('input[type="file"]')).map((el: HTMLInputElement) => ({
       accept: el.accept,
       multiple: el.multiple,
@@ -207,7 +214,9 @@ async function runCalibration(page: any) {
   const ui = await describeGeminiUi(page);
 
   const pageText = String(ui.bodyText || "").toLowerCase();
-  const hasPromptSurface = Array.isArray(ui.textareas) && ui.textareas.some((x: any) => x.visible);
+  const hasPromptSurface =
+    (Array.isArray(ui.textareas) && ui.textareas.some((x: any) => x.visible)) ||
+    (Array.isArray(ui.textboxes) && ui.textboxes.some((x: any) => x.visible));
   const hasFileInput = Array.isArray(ui.fileInputs) && ui.fileInputs.length > 0;
   const hasSignInLanguage = /sign in|log in|create account|choose an account/.test(pageText);
   const authenticatedLikely = hasPromptSurface && !hasSignInLanguage;
