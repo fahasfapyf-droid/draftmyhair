@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       if (!invocationId) throw new Error("Browserbase calibration invocation did not return an invocation id.");
       lastInvocationId = invocationId;
 
-      const deadline = Date.now() + 60_000;
+      const deadline = Date.now() + 20_000;
       while (Date.now() < deadline) {
         const result = await getGeminiCalibrationInvocation(invocationId);
 
