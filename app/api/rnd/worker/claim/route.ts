@@ -20,16 +20,29 @@ export async function POST(request: Request) {
     // controlled by the queue, per-job two-attempt ceiling, and worker lease;
     // do not block controlled regression runs with the old global rate guard.
 
-    const candidate = await tx.rnDJob.findFirst({
+    // Always prefer genuinely QUEUED work over an expired PROCESSING lease.
+    // An expired job may have a recently refreshed queuedAt after a retry and
+    // must not preempt a fresh regression job waiting in the queue.
+    const queuedCandidate = await tx.rnDJob.findFirst({
       where: {
-        OR: [
-          { status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] },
-          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
-        ],
+        status: "QUEUED",
+        OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
       orderBy: { queuedAt: "desc" },
-      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true },
+      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true },
     });
+
+    const candidate =
+      queuedCandidate ??
+      (await tx.rnDJob.findFirst({
+        where: {
+          status: "PROCESSING",
+          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
+        },
+        orderBy: { queuedAt: "desc" },
+        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true },
+      }));
+
     if (!candidate) return null;
 
     const updated = await tx.rnDJob.updateMany({
