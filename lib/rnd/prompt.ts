@@ -2,24 +2,25 @@ import { buildPrompt } from "@/lib/engine/services/promptBuilder";
 
 const UNIVERSAL_PROTECTED_PATTERNS = [
   /\bface\b/i,
-  /\bfacial\b/i,
-  /\bskin\b/i,
+  /\bfacial (?:features|identity|proportions|structure)\b/i,
+  /\b(?:eyes?|eyebrows?|brows?|nose|mouth|lips?|cheeks?)\b/i,
+  /\bskin(?: texture| tone| color)?\b/i,
   /\bexpression\b/i,
   /\bears?\b/i,
   /\bneck\b/i,
-  /\bjawline\b/i,
+  /\b(?:jawline|jaw|chin|bone structure)\b/i,
   /\bskull\b/i,
-  /\bhead (position|angle|rotation|tilt)\b/i,
+  /\bhead (?:position|angle|rotation|tilt|geometry)\b/i,
   /\bpose\b/i,
   /\bbody\b/i,
+  /\b(?:clothing|garment|shirt|top)\b/i,
   /\bframing\b/i,
-  /\bcamera\b/i,
-  /\bperspective\b/i,
+  /\b(?:camera|perspective)\b/i,
   /\blighting\b/i,
   /\bexposure\b/i,
   /\bbackground\b/i,
   /\bcolor balance\b/i,
-  /\bphotographic texture\b/i,
+  /\b(?:photographic texture|pores?)\b/i,
 ];
 
 const STYLE_INTRODUCING_PATTERNS = [
@@ -38,6 +39,7 @@ const STYLE_INTRODUCING_PATTERNS = [
   /\bmullet\b/i,
   /\bpixie\b/i,
   /\blob\b/i,
+  /\b(?:french|italian|micro|blunt|box|a-line|inverted) bob\b/i,
   /\bbob\b/i,
   /\bunder(?:cut|shave)\b/i,
   /\b(?:skin )?fade\b/i,
@@ -50,14 +52,56 @@ const STYLE_INTRODUCING_PATTERNS = [
   /\bwaves?\b/i,
 ];
 
-function refinementAllowed(authoritativePrompt: string, refinement: string) {
-  if (UNIVERSAL_PROTECTED_PATTERNS.some((pattern) => pattern.test(refinement))) return false;
+const CHANGE_VERBS = [
+  /\b(?:add|alter|change|modify|move|shift|reshape|regenerate|recreate|replace|remove|delete|crop|zoom|reframe|rotate|tilt|resize|widen|narrow|smooth|lighten|darken|expose|reposition)\b/i,
+];
 
-  for (const pattern of STYLE_INTRODUCING_PATTERNS) {
+const REMOVAL_INTENT = [
+  /\b(?:remove|eliminate|avoid|prevent|undo|without|no|not|do not|don't|never|exclude|suppress|reduce)\b/i,
+];
+
+function protectedModificationDetected(refinement: string) {
+  const normalized = refinement.replace(/\s+/g, " ").trim();
+  if (!CHANGE_VERBS.some((verb) => verb.test(normalized))) return false;
+
+  return UNIVERSAL_PROTECTED_PATTERNS.some((protectedPattern) => {
+    const match = normalized.match(protectedPattern);
+    if (!match || match.index === undefined) return false;
+
+    const windowStart = Math.max(0, match.index - 80);
+    const windowEnd = Math.min(normalized.length, match.index + match[0].length + 80);
+    const context = normalized.slice(windowStart, windowEnd);
+
+    const hasPreservationLanguage =
+      /\b(?:do not|don't|never|keep|preserve|maintain|leave|unchanged|locked|untouched)\b/i.test(context);
+
+    return !hasPreservationLanguage;
+  });
+}
+
+function styleFeatureIntroduced(refinement: string, authoritativePrompt: string) {
+  return STYLE_INTRODUCING_PATTERNS.some((pattern) => {
+    if (!pattern.test(refinement)) return false;
+    if (pattern.test(authoritativePrompt)) return false;
+
+    // A refinement may explicitly remove an unwanted feature that the
+    // generator introduced, even when that feature is not part of the
+    // authoritative hairstyle definition.
     const match = refinement.match(pattern);
-    if (match && !pattern.test(authoritativePrompt)) return false;
-  }
+    if (!match || match.index === undefined) return true;
 
+    const context = refinement.slice(
+      Math.max(0, match.index - 70),
+      Math.min(refinement.length, match.index + match[0].length + 70),
+    );
+
+    return !REMOVAL_INTENT.some((verb) => verb.test(context));
+  });
+}
+
+export function refinementAllowed(authoritativePrompt: string, refinement: string) {
+  if (protectedModificationDetected(refinement)) return false;
+  if (styleFeatureIntroduced(refinement, authoritativePrompt)) return false;
   return true;
 }
 
@@ -82,7 +126,7 @@ export async function buildRndPrompt(input: {
         ...base.diagnostics,
         refinementApplied: false,
         refinementRejected: true,
-        refinementRejectionReason: "Refinement attempted to modify a universal protected region or introduce a hairstyle characteristic not present in the authoritative prompt.",
+        refinementRejectionReason: "Refinement attempted to modify a universal protected region or introduce a hairstyle characteristic not present in the authoritative prompt. Removal of an observed unwanted characteristic is allowed.",
         refinementLength: refinement.length,
         finalPromptLength: base.prompt.length,
       },
@@ -100,6 +144,8 @@ export async function buildRndPrompt(input: {
     "Apply only the single observed defect below.",
     "Preserve every passing requirement from the authoritative prompt.",
     "Do not reinterpret, redesign, replace, or broaden the requested hairstyle.",
+    "Do not introduce any new hairstyle characteristic that is not already required by the authoritative prompt.",
+    "A newly introduced unwanted characteristic may only be referenced when the instruction explicitly removes, suppresses, or prevents it.",
     "Do not modify identity, facial features, skin, expression, ears, head/skull geometry, pose, framing, camera perspective, lighting, background, or any other non-hair region.",
     "",
     refinement,
