@@ -36,7 +36,7 @@ export async function GET() {
         select: {
           targetKey: true,
           status: true,
-          hairstyle: { select: { promptKey: true, name: true } },
+          hairstyleId: true,
           campaign: { select: { name: true } },
         },
       },
