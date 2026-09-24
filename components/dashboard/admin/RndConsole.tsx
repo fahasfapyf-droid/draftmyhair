@@ -24,7 +24,13 @@ type Job = {
     refinementSlot: string | null;
     refinementReason: string | null;
     qaJson: unknown;
+    errorCode: string | null;
+    errorMessage: string | null;
+    generationStartedAt: string | null;
+    generationCompletedAt: string | null;
   }>;
+  failureCode: string | null;
+  failureMessage: string | null;
 };
 
 export function RndConsole() {
@@ -32,6 +38,7 @@ export function RndConsole() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -135,6 +142,43 @@ export function RndConsole() {
                       </td>
                       <td className="px-4 py-3 text-brand-muted">
                         {attempt?.verdict ?? "—"}
+                      </td>
+                    </tr>
+                    <tr key={`${job.id}-details`} className="border-b border-brand-border last:border-0">
+                      <td colSpan={5} className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
+                          className="text-xs font-semibold text-brand-ink underline underline-offset-2"
+                        >
+                          {expandedJobId === job.id ? "Hide diagnostics" : "Show diagnostics"}
+                        </button>
+                        {expandedJobId === job.id ? (
+                          <div className="mt-3 grid gap-3 rounded-lg border border-brand-border p-4 text-xs text-brand-muted md:grid-cols-2">
+                            <div>
+                              <p className="font-semibold text-brand-ink">Job failure</p>
+                              <p>Code: {job.failureCode ?? "—"}</p>
+                              <p>Message: {job.failureMessage ?? "—"}</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-brand-ink">Latest attempt</p>
+                              <p>Attempt: {attempt?.attemptNumber ?? "—"}</p>
+                              <p>Verdict: {attempt?.verdict ?? "—"}</p>
+                              <p>Error code: {attempt?.errorCode ?? "—"}</p>
+                              <p>Error message: {attempt?.errorMessage ?? "—"}</p>
+                              <p>Generation started: {attempt?.generationStartedAt ?? "—"}</p>
+                              <p>Generation completed: {attempt?.generationCompletedAt ?? "—"}</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="font-semibold text-brand-ink">QA / refinement</p>
+                              <p>Refinement slot: {attempt?.refinementSlot ?? "—"}</p>
+                              <p>Refinement: {attempt?.refinementReason ?? "—"}</p>
+                              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-brand-bg p-3">
+                                {attempt?.qaJson ? JSON.stringify(attempt.qaJson, null, 2) : "No QA JSON recorded."}
+                              </pre>
+                            </div>
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   );
