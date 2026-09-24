@@ -252,16 +252,17 @@ export async function largeImages(page: Page): Promise<string[]> {
     .map((item) => item.src));
 }
 
-export async function waitForGeneratedImage(page: Page, before: Set<string>) {
+export async function waitForGeneratedImage(page: Page, before: Set<string>): Promise<string> {
   await pause(3_500, "Gemini is processing the request");
   const deadline = Date.now() + 180_000;
   let lastLog = 0;
 
   while (Date.now() < deadline) {
     const sources = await largeImages(page);
-    if (sources.some((src) => !before.has(src))) {
+    const generatedSource = sources.find((src) => !before.has(src));
+    if (generatedSource) {
       console.log("New generated image detected in Gemini.");
-      return;
+      return generatedSource;
     }
     if (Date.now() - lastLog >= 10_000) {
       console.log("Still waiting for Gemini to finish processing...");
@@ -273,7 +274,7 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>) {
   throw new Error("Timed out waiting for a new generated image from Gemini.");
 }
 
-export async function captureGeneratedImage(page: Page, outputPath: string, before: Set<string>) {
+export async function captureGeneratedImage(page: Page, outputPath: string, source: string) {
   const downloadButtons = [
     page.getByRole("button", { name: /download full size/i }),
     page.getByRole("button", { name: /download/i }),
@@ -298,9 +299,9 @@ export async function captureGeneratedImage(page: Page, outputPath: string, befo
     } catch {}
   }
 
-  const source = (await largeImages(page)).find((src) => !before.has(src));
-  if (!source) throw new Error("Gemini returned no new downloadable image asset.");
-
+  // The generated source was captured at the exact moment Gemini exposed it.
+  // Do not re-query the page here; Gemini may close the Playwright page immediately
+  // after rendering the completed image.
   if (source.startsWith("data:")) {
     const base64 = source.split(",", 2)[1];
     if (!base64) throw new Error("Invalid data URL returned by Gemini.");
