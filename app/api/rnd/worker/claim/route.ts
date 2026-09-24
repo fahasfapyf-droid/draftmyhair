@@ -16,16 +16,9 @@ export async function POST(request: Request) {
   const claimed = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))) SELECT 1 AS locked FROM lock`;
 
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const recent = await tx.rnDAttempt.findMany({
-      where: { submittedAt: { gte: hourAgo } },
-      orderBy: { submittedAt: "desc" },
-      take: 12,
-      select: { submittedAt: true },
-    });
-    if (recent.length >= 12) return null;
-    const lastReservation = recent[0]?.submittedAt;
-    if (lastReservation && now.getTime() - lastReservation.getTime() < 5 * 60 * 1000) return null;
+    // This is the isolated local R&D worker path. Generation throughput is
+    // controlled by the queue, per-job two-attempt ceiling, and worker lease;
+    // do not block controlled regression runs with the old global rate guard.
 
     const candidate = await tx.rnDJob.findFirst({
       where: {
