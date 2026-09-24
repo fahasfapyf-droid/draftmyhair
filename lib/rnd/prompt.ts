@@ -108,12 +108,13 @@ export function refinementAllowed(authoritativePrompt: string, refinement: strin
 export async function buildRndPrompt(input: {
   prompt?: string;
   promptKey?: string;
+  promptVersion?: number;
   refinement?: string | null;
 }) {
   const base = input.prompt
     ? { prompt: input.prompt, diagnostics: { promptSource: "existing-attempt" as const } }
     : input.promptKey
-      ? await buildPrompt({ promptKey: input.promptKey })
+      ? await buildPrompt({ promptKey: input.promptKey, promptVersion: input.promptVersion })
       : (() => { throw new Error("prompt or promptKey is required"); })();
 
   const refinement = input.refinement?.trim();
