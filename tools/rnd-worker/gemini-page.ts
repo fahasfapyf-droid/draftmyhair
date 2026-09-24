@@ -130,52 +130,85 @@ async function clickAddFiles(page: Page) {
 }
 
 export async function uploadReference(page: Page, imagePath: string) {
-  let input = page.locator('input[type="file"]');
-  if (await input.count() > 0) {
-    await input.first().setInputFiles(imagePath);
-    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-    return;
-  }
+  const tryFileInputs = async () => {
+    const inputs = page.locator('input[type="file"]');
+    const count = await inputs.count();
+    for (let i = 0; i < count; i += 1) {
+      try {
+        await inputs.nth(i).setInputFiles(imagePath);
+        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
+        return true;
+      } catch {}
+    }
+    return false;
+  };
+
+  // Gemini can expose the native file input before the upload menu is opened,
+  // after the menu is opened, or only after the menu item is activated.
+  if (await tryFileInputs()) return;
 
   await clickAddFiles(page);
   await pause(900, "Upload menu opened; waiting for the file control");
 
-  const localFileMenuItem = page.locator('[data-test-id="local-images-files-uploader-icon"]')
-    .locator("xpath=ancestor::*[@role='menuitem' or self::button][1]");
+  // Prefer the native file input when Gemini has injected it into the DOM.
+  if (await tryFileInputs()) return;
 
-  const menuItems = [
-    localFileMenuItem,
+  const menuCandidates = [
     page.getByRole("menuitem", { name: /upload files|files|from computer|upload from computer/i }),
-    page.getByText(/upload files|from computer|upload from computer/i).last(),
+    page.getByRole("button", { name: /upload files|files|from computer|upload from computer/i }),
+    page.getByText(/upload files|from computer|upload from computer/i),
+    page.locator('[data-test-id*="local" i][data-test-id*="file" i]'),
+    page.locator('[data-test-id*="upload" i][data-test-id*="file" i]'),
   ];
 
-  for (const locator of menuItems) {
+  for (const locator of menuCandidates) {
     try {
-      const item = await firstVisible([locator]);
-      const chooserPromise = page.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null);
-      await item.click({ timeout: 10_000 });
-      const chooser = await chooserPromise;
-      if (chooser) {
-        await chooser.setFiles(imagePath);
-        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-        return;
-      }
-      input = page.locator('input[type="file"]');
-      if (await input.count() > 0) {
-        await input.first().setInputFiles(imagePath);
-        await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-        return;
+      const count = await locator.count();
+      for (let i = count - 1; i >= 0; i -= 1) {
+        const item = locator.nth(i);
+        if (!(await item.isVisible().catch(() => false))) continue;
+
+        const chooserPromise = page
+          .waitForEvent("filechooser", { timeout: 5_000 })
+          .catch(() => null);
+
+        await item.click({ force: true, timeout: 5_000 }).catch(async () => {
+          await item.click({ timeout: 5_000 });
+        });
+
+        const chooser = await chooserPromise;
+        if (chooser) {
+          await chooser.setFiles(imagePath);
+          await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
+          return;
+        }
+
+        await page.waitForTimeout(700);
+        if (await tryFileInputs()) return;
       }
     } catch {}
   }
 
-  input = page.locator('input[type="file"]');
-  if (await input.count() > 0) {
-    await input.first().setInputFiles(imagePath);
-    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
-    return;
-  }
+  // Last-resort diagnostic: expose the controls Gemini actually rendered.
+  const controls = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("input,button,[role='button'],[role='menuitem']"))
+      .map((el) => ({
+        tag: el.tagName,
+        type: el.getAttribute("type"),
+        role: el.getAttribute("role"),
+        aria: el.getAttribute("aria-label"),
+        text: (el.textContent || "").trim().slice(0, 120),
+        testId: el.getAttribute("data-test-id"),
+      }))
+      .filter((item) =>
+        /upload|attach|file|computer|local/i.test(
+          [item.aria, item.text, item.testId].filter(Boolean).join(" ")
+        )
+      )
+      .slice(0, 30)
+  );
 
+  console.error(`Gemini upload controls detected: ${JSON.stringify(controls)}`);
   throw new Error("Gemini did not expose a usable local-file upload control.");
 }
 
