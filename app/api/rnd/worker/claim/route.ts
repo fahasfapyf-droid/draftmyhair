@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     // controlled by the queue, per-job two-attempt ceiling, and worker lease;
     // do not block controlled regression runs with the old global rate guard.
 
+    // Queue priority fix: queued regression work must win before lease recovery.
     // Always prefer genuinely QUEUED work over an expired PROCESSING lease.
     // An expired job may have a recently refreshed queuedAt after a retry and
     // must not preempt a fresh regression job waiting in the queue.
