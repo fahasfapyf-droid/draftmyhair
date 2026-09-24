@@ -181,8 +181,7 @@ export function RndConsole() {
                           </div>
                         ) : null}
                       </td>
-                    </tr>
-                    <tr key={`${job.id}-details`} className="border-b border-brand-border last:border-0">
+                    </tr>                    <tr key={`${job.id}-details`} className="border-b border-brand-border last:border-0">
                       <td colSpan={5} className="px-4 py-2">
                         <button
                           type="button"
