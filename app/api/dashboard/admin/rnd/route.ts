@@ -32,6 +32,8 @@ export async function GET() {
       promptVersionNumber: true,
       queuedAt: true,
       nextEligibleAt: true,
+      failureCode: true,
+      failureMessage: true,
       target: {
         select: {
           targetKey: true,
@@ -51,6 +53,10 @@ export async function GET() {
           refinementSlot: true,
           refinementReason: true,
           qaJson: true,
+          errorCode: true,
+          errorMessage: true,
+          generationStartedAt: true,
+          generationCompletedAt: true,
         },
       },
     },
