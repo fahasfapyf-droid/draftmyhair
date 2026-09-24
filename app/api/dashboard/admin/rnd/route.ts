@@ -9,6 +9,7 @@ import { buildRndPrompt } from "@/lib/rnd/prompt";
 const SOURCE_URL =
   "https://www.draftmyhair.com/portfolio/bob/french-bob-before.webp";
 const PROMPT_KEY = "italian-bob";
+const RND_PROMPT_VERSION = 1;
 const SOURCE_MAX_BYTES = 15 * 1024 * 1024;
 
 async function requireAdmin() {
@@ -69,7 +70,7 @@ export async function POST() {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const built = await buildRndPrompt({ promptKey: PROMPT_KEY });
+  const built = await buildRndPrompt({ promptKey: PROMPT_KEY, promptVersion: RND_PROMPT_VERSION });
 
   const response = await fetch(SOURCE_URL, {
     cache: "no-store",
@@ -161,7 +162,7 @@ export async function POST() {
       data: {
         targetId: target.id,
         status: "QUEUED",
-        promptVersionNumber: 1,
+        promptVersionNumber: RND_PROMPT_VERSION,
         currentPrompt: built.prompt,
         attemptCount: 0,
         queuedAt: new Date(),
@@ -178,6 +179,7 @@ export async function POST() {
     campaignId: result.campaign.id,
     targetKey,
     promptKey: PROMPT_KEY,
+    promptVersion: RND_PROMPT_VERSION,
     promptDiagnostics: built.diagnostics,
   });
 }
