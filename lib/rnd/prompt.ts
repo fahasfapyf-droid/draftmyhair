@@ -1,3 +1,5 @@
+import { buildPrompt } from "@/lib/engine/services/promptBuilder";
+
 const UNIVERSAL_PROTECTED_PATTERNS = [
   /\bface\b/i,
   /\bfacial\b/i,
