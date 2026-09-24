@@ -152,7 +152,10 @@ export async function POST(request: Request) {
   const refinementBuild = rawRefinement
     ? await buildRndPrompt({ prompt, refinement: rawRefinement })
     : null;
-  const refinement = refinementBuild?.diagnostics.refinementApplied ? rawRefinement : null;
+  const refinementApplied = refinementBuild
+    ? "refinementApplied" in refinementBuild.diagnostics && refinementBuild.diagnostics.refinementApplied
+    : false;
+  const refinement = refinementApplied ? rawRefinement : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
     await tx.rnDAttempt.update({
