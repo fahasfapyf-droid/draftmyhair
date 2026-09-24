@@ -57,7 +57,7 @@ const CHANGE_VERBS = [
 ];
 
 const REMOVAL_INTENT = [
-  /\b(?:remove|eliminate|avoid|prevent|undo|without|no|not|do not|don't|never|exclude|suppress|reduce)\b/i,
+  /\b(?:remove|eliminate|avoid|prevent|undo|without|no|do not|don't|never|exclude|suppress|reduce)\b/i,
 ];
 
 function protectedModificationDetected(refinement: string) {
