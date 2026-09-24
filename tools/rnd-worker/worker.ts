@@ -234,6 +234,17 @@ async function main() {
       acceptDownloads: true,
       viewport: { width: 1440, height: 1000 },
       timeout: 30_000,
+      // Gemini's generated-image renderer is triggering a Chrome process/context
+      // shutdown immediately after generation. Disable GPU compositing and common
+      // background renderer throttling to isolate/avoid the crash path.
+      args: [
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--enable-logging=stderr",
+        "--v=1",
+      ],
     });
   } catch (error) {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
@@ -245,7 +256,10 @@ async function main() {
   console.log(`Chrome context currently has ${context.pages().length} page(s).`);
   context.on("close", () => console.error("DIAGNOSTIC: Playwright BrowserContext emitted close."));
   const browser = context.browser();
-  browser?.on("disconnected", () => console.error("DIAGNOSTIC: Playwright Browser emitted disconnected (browser closed or crashed)."));
+  browser?.on("disconnected", () => {
+    console.error("DIAGNOSTIC: Playwright Browser emitted disconnected (browser closed or crashed).");
+    console.error("DIAGNOSTIC: Chrome was disconnected after Gemini generation; capture could not continue.");
+  });
   context.on("weberror", (error) => console.error(`DIAGNOSTIC: BrowserContext web error: ${error.error().message}`));
   for (const existingPage of context.pages()) {
     existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
