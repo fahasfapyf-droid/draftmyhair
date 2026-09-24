@@ -13,7 +13,7 @@ type Job = {
   target: {
     targetKey: string;
     status: string;
-    hairstyle: { promptKey: string; name: string } | null;
+    hairstyleId: string | null;
     campaign: { name: string };
   };
   attempts: Array<{
@@ -123,7 +123,7 @@ export function RndConsole() {
                       <td className="px-4 py-3">
                         <p className="font-medium text-brand-ink">{job.target.targetKey}</p>
                         <p className="text-xs text-brand-muted">
-                          {job.target.hairstyle?.promptKey ?? "unknown"} · {job.id}
+                          {job.target.hairstyleId ? "italian-bob" : "unknown"} · {job.id}
                         </p>
                       </td>
                       <td className="px-4 py-3 text-brand-ink">{job.status}</td>
