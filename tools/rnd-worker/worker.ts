@@ -244,12 +244,19 @@ async function main() {
   console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
   console.log(`Chrome context currently has ${context.pages().length} page(s).`);
   context.on("close", () => console.error("DIAGNOSTIC: Playwright BrowserContext emitted close."));
+  const browser = context.browser();
+  browser?.on("disconnected", () => console.error("DIAGNOSTIC: Playwright Browser emitted disconnected (browser closed or crashed)."));
+  context.on("weberror", (error) => console.error(`DIAGNOSTIC: BrowserContext web error: ${error.error().message}`));
   for (const existingPage of context.pages()) {
     existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
+    existingPage.on("crash", () => console.error("DIAGNOSTIC: Existing Playwright page crashed."));
+    existingPage.on("pageerror", (error) => console.error(`DIAGNOSTIC: Existing Playwright page error: ${error.message}`));
   }
   console.log("Creating dedicated worker page...");
   let page = await context.newPage({ timeout: 30_000 });
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
+  page.on("crash", () => console.error("DIAGNOSTIC: Worker Playwright page crashed."));
+  page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Worker Playwright page error: ${error.message}`));
   console.log("Worker page ready.");
 
   process.on("SIGINT", async () => {
@@ -270,6 +277,8 @@ async function main() {
       console.error("DIAGNOSTIC: Worker page was already closed; creating replacement page before processing job.");
       page = await context.newPage({ timeout: 30_000 });
       page.on("close", () => console.error("DIAGNOSTIC: Replacement worker Playwright page emitted close."));
+      page.on("crash", () => console.error("DIAGNOSTIC: Replacement worker Playwright page crashed."));
+      page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Replacement worker Playwright page error: ${error.message}`));
     }
     await processJob(page, result.job);
   }
