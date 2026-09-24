@@ -81,7 +81,7 @@ export function RndConsole() {
             <h2 className="font-semibold text-brand-ink">Universal Refinement Regression</h2>
             <p className="mt-1 max-w-2xl text-sm text-brand-muted">
               Creates a clean Italian Bob R&D job using the current v3-single master prompt
-              and current compiled Italian Bob definition. The historical exhausted job is not modified.
+              and Italian Bob database prompt v1. The historical exhausted job is not modified.
             </p>
           </div>
           <button
