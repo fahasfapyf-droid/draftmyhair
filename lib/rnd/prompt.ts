@@ -53,7 +53,7 @@ const STYLE_INTRODUCING_PATTERNS = [
 ];
 
 const CHANGE_VERBS = [
-  /\b(?:add|alter|change|modify|move|shift|reshape|regenerate|recreate|replace|remove|delete|crop|zoom|reframe|rotate|tilt|resize|widen|narrow|smooth|lighten|darken|expose|reposition)\b/i,
+  /\b(?:add|alter|change|modify|improve|enhance|correct|fix|move|shift|reshape|regenerate|recreate|replace|remove|delete|crop|zoom|reframe|rotate|tilt|resize|widen|narrow|smooth|lighten|darken|expose|reposition)\b/i,
 ];
 
 const REMOVAL_INTENT = [
