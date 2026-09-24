@@ -165,7 +165,7 @@ export async function POST(request: Request) {
         publicationTierPassed: hardPass,
         verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "REFINE" : "EXHAUSTED",
         refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "AUTO_1" : null,
-        refinementReason: hardPass ? null : refinement,
+        refinementReason: hardPass ? null : rawRefinement,
         errorCode: null,
         errorMessage: null,
       },
@@ -182,11 +182,8 @@ export async function POST(request: Request) {
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement) {
-      const target = await tx.rnDTarget.findUniqueOrThrow({ where: { id: job.targetId }, select: { hairstyleId: true } });
-      if (!target.hairstyleId) throw new Error("R&D target hairstyle is missing.");
-      const hairstyle = await tx.hairstyle.findUnique({ where: { id: target.hairstyleId }, select: { promptKey: true } });
-      if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
-      const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
+      if (!refinementBuild) throw new Error("R&D refinement build is missing.");
+      const rebuilt = refinementBuild;
       const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
