@@ -27,7 +27,7 @@ export async function POST(request: Request) {
           { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
         ],
       },
-      orderBy: { queuedAt: "asc" },
+      orderBy: { queuedAt: "desc" },
       select: { id: true, targetId: true, attemptCount: true, currentPrompt: true },
     });
     if (!candidate) return null;
