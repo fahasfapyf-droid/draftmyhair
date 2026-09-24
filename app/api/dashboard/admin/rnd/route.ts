@@ -23,14 +23,13 @@ export async function GET() {
   }
 
   const jobs = await prisma.rnDJob.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { queuedAt: "desc" },
     take: 20,
     select: {
       id: true,
       status: true,
       attemptCount: true,
       promptVersionNumber: true,
-      createdAt: true,
       queuedAt: true,
       nextEligibleAt: true,
       target: {
