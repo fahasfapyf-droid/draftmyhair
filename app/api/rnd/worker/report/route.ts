@@ -148,7 +148,11 @@ export async function POST(request: Request) {
     qa.hairOnly === "PASS" &&
     qa.artifacts === "NONE";
 
-  const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+  const rawRefinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+  const refinementBuild = rawRefinement
+    ? await buildRndPrompt({ prompt, refinement: rawRefinement })
+    : null;
+  const refinement = refinementBuild?.diagnostics.refinementApplied ? rawRefinement : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
     await tx.rnDAttempt.update({
@@ -187,7 +191,7 @@ export async function POST(request: Request) {
       const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
