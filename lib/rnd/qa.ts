@@ -20,10 +20,15 @@ const QA_PROMPT = [
   "Identity preservation is a hard gate: face, facial features, skin texture/tone, expression, jawline, ears, neck, head geometry, framing, lighting, exposure, color balance, background and photographic texture must remain unchanged.",
   "Hair-only transformation is a hard gate. Do not treat a good hairstyle match as a pass if any non-hair region changed.",
   "Evaluate the generated image against the requested hairstyle prompt as well as the SOURCE image.",
+  "The REQUESTED STYLE PROMPT is authoritative. Treat it as the complete hairstyle definition for this attempt.",
+  "If the generated image contains a hairstyle characteristic that the authoritative prompt does not require, that characteristic is a defect and may be named only so the refinement can remove or suppress it.",
+  "Never invent a new hairstyle characteristic as a proposed correction. A refinement may correct an existing authoritative requirement, improve execution of that requirement, or remove an observed unwanted characteristic.",
+  "Never use refinement to change identity, facial features, skin, expression, ears, head/skull geometry, pose, framing, camera perspective, lighting, background, or any other non-hair region.",
   "Return one JSON object matching the supplied schema. Do not include markdown.",
   "APPROVE requires overall >= 9.5, identity >= 9.5, styleAccuracy >= 9.5, rootIntegration >= 9.5, lightingConsistency >= 9.5, hairOnly PASS, and artifacts NONE.",
   "If any hard gate fails, verdict must be REGENERATE.",
-  "If regenerating, refinement must describe only the single most important observed defect and preserve all passing requirements.",
+  "If regenerating, refinement must contain exactly one targeted correction: either improve an existing authoritative requirement or explicitly remove/suppress one observed unwanted characteristic.",
+  "If no safe targeted correction can be stated without changing the authoritative hairstyle definition or a universal protected region, return an empty refinement string rather than inventing a correction.",
 ].join("\n");
 
 const QA_SCHEMA = {
