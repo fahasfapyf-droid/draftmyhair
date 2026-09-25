@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
+import { classifyProfileError, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
 const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
@@ -170,7 +170,7 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   return body.asset.id;
 }
 
-async function processJob(page: Page, job: ClaimedJob) {
+async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE"> {
   const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
   const generationStartedAt = new Date().toISOString();
@@ -187,7 +187,8 @@ async function processJob(page: Page, job: ClaimedJob) {
     const before = new Set(await largeImages(page));
     if (!job.currentPrompt) throw new Error("Claimed job has no current prompt.");
 
-    console.log(`Job ${job.id}: submitting attempt ${attemptNumber}.`);
+    console.log(`Job ${job.id}: submitting attempt ${attemptNumber} using Gemini profile ${profile.id}.`);
+    await markGenerationStarted(profile.id);
     await submitPrompt(page, job.currentPrompt);
     const generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
@@ -211,34 +212,36 @@ async function processJob(page: Page, job: ClaimedJob) {
       errorCode: "WORKER_EXECUTION_ERROR",
       errorMessage: message.slice(0, 2000),
     });
+    const profileError = classifyProfileError(message);
+    if (profileError === "EXHAUSTED") {
+      await markProfileExhausted(profile.id, message);
+      console.error(`Gemini profile ${profile.id} marked EXHAUSTED; worker will rotate to another eligible profile.`);
+      return "ROTATE";
+    }
+    if (profileError === "RESTRICTED") {
+      await markProfileRestricted(profile.id, message);
+      console.error(`Gemini profile ${profile.id} marked RESTRICTED; worker will stop using it and rotate only to another eligible authorized profile.`);
+      return "ROTATE";
+    }
   } finally {
     clearInterval(heartbeatTimer);
   }
+  return "CONTINUE";
 }
 
-async function main() {
-  await mkdir(OUTPUT_DIR, { recursive: true });
-  console.log(`DMH R&D worker ${await workerId()} starting.`);
-  console.log(`API: ${API_BASE}`);
-  await assertServer();
-
-  const geminiProfile = await selectGeminiProfile();
-  console.log(`Selected Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
-  console.log(`Launching Chrome with persistent Gemini profile: ${geminiProfile.directory}`);
+async function launchGeminiSession(profile: GeminiProfile) {
+  console.log(`Launching Chrome with persistent Gemini profile: ${profile.directory}`);
   console.log(`Chrome executable: ${CHROME_PATH}`);
   console.log("Starting Playwright persistent-context launch (30s diagnostic timeout)...");
   const launchStartedAt = Date.now();
   let context: BrowserContext;
   try {
-    context = await chromium.launchPersistentContext(geminiProfile.directory, {
+    context = await chromium.launchPersistentContext(profile.directory, {
       executablePath: CHROME_PATH,
       headless: false,
       acceptDownloads: true,
       viewport: { width: 1440, height: 1000 },
       timeout: 30_000,
-      // Gemini's generated-image renderer is triggering a Chrome process/context
-      // shutdown immediately after generation. Disable GPU compositing and common
-      // background renderer throttling to isolate/avoid the crash path.
       args: [
         "--disable-gpu",
         "--disable-gpu-compositing",
@@ -269,11 +272,23 @@ async function main() {
     existingPage.on("pageerror", (error) => console.error(`DIAGNOSTIC: Existing Playwright page error: ${error.message}`));
   }
   console.log("Creating dedicated worker page...");
-  let page = await context.newPage({ timeout: 30_000 });
+  const page = await context.newPage({ timeout: 30_000 });
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
   page.on("crash", () => console.error("DIAGNOSTIC: Worker Playwright page crashed."));
   page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Worker Playwright page error: ${error.message}`));
-  console.log("Worker page ready.");
+  console.log(`Worker page ready on Gemini profile ${profile.id}.`);
+  return { context, page };
+}
+
+async function main() {
+  await mkdir(OUTPUT_DIR, { recursive: true });
+  console.log(`DMH R&D worker ${await workerId()} starting.`);
+  console.log(`API: ${API_BASE}`);
+  await assertServer();
+
+  let geminiProfile = await selectGeminiProfile();
+  console.log(`Selected Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
+  let { context, page } = await launchGeminiSession(geminiProfile);
 
   process.on("SIGINT", async () => {
     console.log("Stopping worker; closing Chrome.");
@@ -290,13 +305,24 @@ async function main() {
     }
     console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
     if (page.isClosed()) {
-      console.error("DIAGNOSTIC: Worker page was already closed; creating replacement page before processing job.");
-      page = await context.newPage({ timeout: 30_000 });
-      page.on("close", () => console.error("DIAGNOSTIC: Replacement worker Playwright page emitted close."));
-      page.on("crash", () => console.error("DIAGNOSTIC: Replacement worker Playwright page crashed."));
-      page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Replacement worker Playwright page error: ${error.message}`));
+      await context.close().catch(() => undefined);
+      ({ context, page } = await launchGeminiSession(geminiProfile));
     }
-    await processJob(page, result.job);
+    const action = await processJob(page, result.job, geminiProfile);
+    if (action === "ROTATE") {
+      await context.close().catch(() => undefined);
+      while (true) {
+        try {
+          geminiProfile = await selectGeminiProfile();
+          console.log(`Rotating to eligible Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
+          ({ context, page } = await launchGeminiSession(geminiProfile));
+          break;
+        } catch (error) {
+          console.error(`No alternate Gemini profile is currently eligible: ${error instanceof Error ? error.message : String(error)}`);
+          await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+        }
+      }
+    }
   }
 }
 
