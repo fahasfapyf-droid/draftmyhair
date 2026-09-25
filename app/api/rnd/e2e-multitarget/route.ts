@@ -57,15 +57,15 @@ export async function GET() {
   const missingPrompt = styles.find((style) => !STYLE_PROMPTS[style.promptKey]?.prompt);
   if (missingPrompt) return json({ error: "Authoritative production prompt is missing for " + missingPrompt.promptKey }, 500);
 
-  const built = styles.map((style) => ({
-    style,
-    prompt: generateAutonomousPrompt(
-      "Validate the authoritative production definition for " + style.name + ". This is a controlled multi-target R&D smoke test; preserve subject identity and the original photograph.",
-      STYLE_PROMPTS[style.promptKey].prompt,
-    ),
-  }));
-
-  const resolved = await Promise.all(built);
+  const resolved = await Promise.all(
+    styles.map(async (style) => ({
+      style,
+      prompt: await generateAutonomousPrompt(
+        "Validate the authoritative production definition for " + style.name + ". This is a controlled multi-target R&D smoke test; preserve subject identity and the original photograph.",
+        STYLE_PROMPTS[style.promptKey].prompt,
+      ),
+    })),
+  );
 
   const result = await prisma.$transaction(async (tx) => {
     const campaign = await tx.rnDCampaign.create({
