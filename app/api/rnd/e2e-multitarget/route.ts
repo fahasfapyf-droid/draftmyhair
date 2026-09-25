@@ -34,7 +34,7 @@ export async function GET(request: Request) {
             targetKey: true,
             status: true,
             currentJobId: true,
-            hairstyle: { select: { name: true, promptKey: true } },
+            hairstyleId: true,
             job: {
               select: {
                 id: true,
