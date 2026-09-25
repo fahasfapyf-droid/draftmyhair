@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndProducer } from "@/lib/rnd/producer-auth";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 
 export const runtime = "nodejs";
@@ -29,20 +30,26 @@ export async function POST(request: Request) {
   const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
   const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
 
+  const existingHairstyle = await prisma.hairstyle.findFirst({
+    where: { promptKey: targetKey, isActive: true },
+    select: { id: true, promptKey: true },
+  });
+  if (!existingHairstyle) return NextResponse.json({ error: "An active hairstyle is required for targetKey." }, { status: 400 });
+
+  const authoritativeStylePrompt = STYLE_PROMPTS[existingHairstyle.promptKey]?.prompt;
+  if (!authoritativeStylePrompt) {
+    return NextResponse.json({ error: "Production style prompt is missing for " + existingHairstyle.promptKey }, { status: 500 });
+  }
+
   let built;
   try {
-    built = await generateAutonomousPrompt(instruction);
+    built = await generateAutonomousPrompt(instruction, authoritativeStylePrompt);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Autonomous prompt generation failed." }, { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Prompt compilation failed." }, { status: 503 });
   }
 
   const createdByUserId = process.env.RND_PRODUCER_USER_ID?.trim();
   if (!createdByUserId) return NextResponse.json({ error: "R&D producer identity is not configured." }, { status: 503 });
-
-  const existingHairstyle = await prisma.hairstyle.findFirst({
-    where: { promptKey: targetKey, isActive: true },
-    select: { id: true },
-  });
 
   const result = await prisma.$transaction(async (tx) => {
     const campaign = await tx.rnDCampaign.create({
@@ -61,7 +68,7 @@ export async function POST(request: Request) {
         campaignId: campaign.id,
         targetType: "SINGLE",
         targetKey,
-        hairstyleId: existingHairstyle?.id ?? null,
+        hairstyleId: existingHairstyle.id,
         hardCoreInstruction: instruction,
         sourceAssetId: source.id,
         status: "QUEUED",
