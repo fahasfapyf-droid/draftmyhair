@@ -208,9 +208,8 @@ export async function POST(request: Request) {
         data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
         select: { id: true, status: true, attemptCount: true },
       });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
-      const campaignStatus = await reconcileRndCampaignLifecycle(tx, job.target.campaignId);
-      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus };
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
+      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus: null };
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
