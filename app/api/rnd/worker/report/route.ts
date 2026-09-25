@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
-import { buildRndPrompt } from "@/lib/rnd/prompt";
+import { optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
 export const runtime = "nodejs";
@@ -166,24 +166,16 @@ export async function POST(request: Request) {
           throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
         }
 
-        const rebuilt = await buildRndPrompt({
-          promptKey: hairstyle.promptKey,
-          refinement,
+        const rebuilt = await optimizeAutonomousPrompt({
+          instruction: job.target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
+          currentPrompt: prompt,
+          defect: refinement,
+          attemptNumber,
+          authoritativeStylePrompt,
         });
 
-        // The authoritative style source is the contract. buildRndPrompt appends
-        // only the observed QA defect; it must never be replaced by an autonomous
-        // reinterpretation of the named hairstyle.
-        if (!rebuilt.prompt.includes(authoritativeStylePrompt.trim())) {
-          throw new Error("R&D refinement lost the authoritative hairstyle definition.");
-        }
-
         nextPrompt = rebuilt.prompt;
-        nextPromptDiagnostics = {
-          ...rebuilt.diagnostics,
-          source: "authoritative-style-source-refinement",
-          authoritativeStylePromptLength: authoritativeStylePrompt.trim().length,
-        };
+        nextPromptDiagnostics = rebuilt.diagnostics;
       }
     } catch (error) {
       return NextResponse.json(
