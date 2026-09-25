@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
-import { optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
@@ -154,24 +154,36 @@ export async function POST(request: Request) {
   let nextPromptDiagnostics: unknown = null;
   if (refinement) {
     try {
-      if (job.target.hardCoreInstruction?.trim()) {
-        const optimized = await optimizeAutonomousPrompt({
-          instruction: job.target.hardCoreInstruction,
-          currentPrompt: prompt,
-          defect: refinement,
-          attemptNumber,
-        });
-        nextPrompt = optimized.prompt;
-        nextPromptDiagnostics = optimized.diagnostics;
-      } else if (job.target.hairstyleId) {
+      if (job.target.hairstyleId) {
         const hairstyle = await prisma.hairstyle.findUnique({
           where: { id: job.target.hairstyleId },
           select: { promptKey: true },
         });
         if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
-        const rebuilt = await buildRndPrompt({ promptKey: hairstyle.promptKey, refinement });
+
+        const authoritativeStylePrompt = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
+        if (!authoritativeStylePrompt) {
+          throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
+        }
+
+        const rebuilt = await buildRndPrompt({
+          promptKey: hairstyle.promptKey,
+          refinement,
+        });
+
+        // The authoritative style source is the contract. buildRndPrompt appends
+        // only the observed QA defect; it must never be replaced by an autonomous
+        // reinterpretation of the named hairstyle.
+        if (!rebuilt.prompt.includes(authoritativeStylePrompt.trim())) {
+          throw new Error("R&D refinement lost the authoritative hairstyle definition.");
+        }
+
         nextPrompt = rebuilt.prompt;
-        nextPromptDiagnostics = rebuilt.diagnostics;
+        nextPromptDiagnostics = {
+          ...rebuilt.diagnostics,
+          source: "authoritative-style-source-refinement",
+          authoritativeStylePromptLength: authoritativeStylePrompt.trim().length,
+        };
       }
     } catch (error) {
       return NextResponse.json(
