@@ -4,6 +4,7 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
 import { optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
+import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
 export const runtime = "nodejs";
 const MAX_AUTONOMOUS_ATTEMPTS = Math.max(2, Number(process.env.RND_MAX_AUTONOMOUS_ATTEMPTS ?? 8));
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
       leaseOwner: true,
       leaseExpiresAt: true,
       currentPrompt: true,
-      target: { select: { hairstyleId: true, hardCoreInstruction: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+      target: { select: { hairstyleId: true, hardCoreInstruction: true, campaignId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -207,8 +208,9 @@ export async function POST(request: Request) {
         data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
         select: { id: true, status: true, attemptCount: true },
       });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
-      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null };
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
+      const campaignStatus = await reconcileRndCampaignLifecycle(tx, job.target.campaignId);
+      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus };
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
@@ -241,7 +243,7 @@ export async function POST(request: Request) {
     return { job: updatedJob, action: "EXHAUSTED" as const, promptDiagnostics: null };
   });
 
-  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa, promptDiagnostics: finalResult.promptDiagnostics });
+  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, campaignStatus: finalResult.campaignStatus ?? null, qa, promptDiagnostics: finalResult.promptDiagnostics });
 }
 
 
