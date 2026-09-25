@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { runTransformationGate, type TransformationGateResult } from "@/lib/rnd/transformation-gate";
+// R&D QA refinement hardening: verifier evidence is authoritative for targeted retries.
 
 export type RndQaCategory =
   | "HAIRSTYLE"
