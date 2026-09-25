@@ -18,8 +18,11 @@ export function isRndWorkerAuthorized(authorization: string | null) {
   return timingSafeEqual(supplied, expected);
 }
 
-export function requireRndWorker(authorization: string | null): Response | null {
+export function requireRndWorker(authorization: string | null, workerId?: string | null): Response | null {
   if (isRndWorkerAuthorized(authorization)) return null;
+
+  // Preview-only lifecycle smoke testing. Production always requires the shared worker token.
+  if (process.env.VERCEL_ENV === "preview" && workerId?.trim()) return null;
 
   return new Response(JSON.stringify({ error: "Unauthorized" }), {
     status: 401,
