@@ -191,7 +191,7 @@ async function processJob(page: Page, job: ClaimedJob) {
     await submitPrompt(page, job.currentPrompt);
     const generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
-    await captureGeneratedImage(page, outputPath, generatedSource);
+    await captureGeneratedImage(page, outputPath, generatedSource, before);
     const artifactId = await uploadArtifact(job, attemptNumber, outputPath);
 
     await report(job, attemptNumber, {
