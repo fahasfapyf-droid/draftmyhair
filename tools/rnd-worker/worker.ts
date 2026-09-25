@@ -228,6 +228,14 @@ async function launchWorkerContext(): Promise<BrowserContext> {
       acceptDownloads: true,
       viewport: { width: 1440, height: 1000 },
       timeout: 30_000,
+      args: [
+        "--disable-gpu",
+        "--disable-gpu-compositing",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--enable-logging=stderr",
+        "--v=1",
+      ],
     });
     console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
     return context;
@@ -275,32 +283,41 @@ async function main() {
     process.exit(0);
   });
 
+  async function ensureBrowser() {
+    if (!contextClosed && !page.isClosed()) return;
+    console.error("DIAGNOSTIC: Browser/page is unavailable; restarting Chrome before the next claim.");
+    await context.close().catch(() => undefined);
+    context = await launchWorkerContext();
+    bindContextDiagnostics(context);
+    page = await createWorkerPage(context);
+    console.log("Worker page recreated after browser restart.");
+  }
+
   while (true) {
-    if (contextClosed) {
-      console.error("DIAGNOSTIC: BrowserContext is closed; relaunching Chrome before claiming another job.");
-      context = await launchWorkerContext();
-      bindContextDiagnostics(context);
-      page = await createWorkerPage(context);
-      console.log("Worker page recreated after browser restart.");
-    } else if (page.isClosed()) {
-      console.error("DIAGNOSTIC: Worker page is closed; creating replacement page before claiming another job.");
-      page = await createWorkerPage(context);
-    }
+    try {
+      await ensureBrowser();
 
-    const result = await claim();
-    if (!result.job) {
-      console.log("No queued R&D job available; waiting 10s.");
-      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-      continue;
-    }
-    console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
+      const result = await claim();
+      if (!result.job) {
+        console.log("No queued R&D job available; waiting 10s.");
+        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+        continue;
+      }
+      console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
 
-    if (contextClosed || page.isClosed()) {
-      console.error("DIAGNOSTIC: Browser/page closed immediately after claim; leaving job for lease recovery.");
-      continue;
+      await ensureBrowser();
+      await processJob(page, result.job);
+    } catch (error) {
+      const message = error instanceof Error ? error.stack ?? error.message : String(error);
+      console.error(`DIAGNOSTIC: Worker loop error: ${message}`);
+      if (contextClosed || page.isClosed()) {
+        await ensureBrowser().catch((restartError) => {
+          console.error(`DIAGNOSTIC: Browser restart failed: ${restartError instanceof Error ? restartError.message : String(restartError)}`);
+        });
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
     }
-
-    await processJob(page, result.job);
   }
 }
 main().catch((error) => {
