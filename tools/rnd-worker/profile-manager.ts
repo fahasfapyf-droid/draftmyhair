@@ -97,6 +97,47 @@ export async function loadGeminiProfiles(): Promise<GeminiProfile[]> {
   }
 }
 
+export interface GeminiProfileStatusSnapshot {
+  id: string;
+  label: string;
+  configuredStatus: GeminiProfileStatus;
+  effectiveStatus: GeminiProfileStatus | "COOLDOWN";
+  generationCount: number;
+  hourlyLimit: number;
+  lastUsedAt: string | null;
+  cooldownUntil: string | null;
+  lastError: string | null;
+}
+
+export async function getGeminiProfileStatusSnapshot(): Promise<GeminiProfileStatusSnapshot[]> {
+  const profiles = await loadGeminiProfiles();
+  const state = await readState();
+  const now = Date.now();
+
+  return profiles.map((profile) => {
+    const current = stateFor(state, profile.id);
+    current.generationTimestamps = prune(current.generationTimestamps, now);
+    const cooldownUntil = current.cooldownUntil ?? null;
+    const cooldownActive = Boolean(cooldownUntil && Date.parse(cooldownUntil) > now);
+    let effectiveStatus: GeminiProfileStatus | "COOLDOWN" = profile.status;
+    if (current.restricted) effectiveStatus = "RESTRICTED";
+    else if (cooldownActive) effectiveStatus = "COOLDOWN";
+    else if (profile.status === "ACTIVE" && current.generationTimestamps.length >= (profile.hourlyLimit ?? DEFAULT_HOURLY_LIMIT)) effectiveStatus = "EXHAUSTED";
+
+    return {
+      id: profile.id,
+      label: profile.label,
+      configuredStatus: profile.status,
+      effectiveStatus,
+      generationCount: current.generationTimestamps.length,
+      hourlyLimit: profile.hourlyLimit ?? DEFAULT_HOURLY_LIMIT,
+      lastUsedAt: current.lastUsedAt ?? null,
+      cooldownUntil,
+      lastError: current.lastError ?? null,
+    };
+  });
+}
+
 export async function selectGeminiProfile(): Promise<GeminiProfile> {
   const profiles = await loadGeminiProfiles();
   const state = await readState();
