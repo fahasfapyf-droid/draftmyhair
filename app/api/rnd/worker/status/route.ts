@@ -14,7 +14,7 @@ type StatusBody = {
 
 function stringOrNull(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function dateOrNull(value: unknown) { if (typeof value !== "string") return null; const date = new Date(value); return Number.isNaN(date.getTime()) ? null : date; }
-function jsonOrNull(value: unknown): Prisma.InputJsonValue | Prisma.JsonNullValueInput { if (value === null || value === undefined) return Prisma.JsonNull; try { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; } catch { return Prisma.JsonNull; } }
+function jsonOrNull(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull { if (value === null || value === undefined) return Prisma.JsonNull; try { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; } catch { return Prisma.JsonNull; } }
 
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
