@@ -276,11 +276,16 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>): Pr
   throw new Error("Timed out waiting for a new generated image from Gemini.");
 }
 
-export async function captureGeneratedImage(page: Page, outputPath: string, source: string | { src?: string }) {
+export async function captureGeneratedImage(page: Page, outputPath: string, source: string | { src?: string } | undefined, before: Set<string> = new Set()) {
   // Normalize the detected asset so older/newer Gemini DOM return shapes cannot
   // break the worker at the capture boundary.
-  const resolvedSource = typeof source === "string" ? source : source?.src ?? "";
-  if (!resolvedSource) throw new Error("Gemini generated image source was empty.");
+  let resolvedSource = typeof source === "string" ? source : source?.src ?? "";
+  if (!resolvedSource) {
+    console.log(`Gemini capture source was empty (type=${typeof source}); re-resolving from current generated images.`);
+    const currentSources = await largeImages(page);
+    resolvedSource = currentSources.find((candidate) => candidate && !before.has(candidate)) ?? "";
+  }
+  if (!resolvedSource) throw new Error("Gemini generated image source was empty after re-resolution.");
   source = resolvedSource;
   // Capture only the exact generated asset detected after submission.
   // Never click Gemini download controls: they can select/navigate to a stale
