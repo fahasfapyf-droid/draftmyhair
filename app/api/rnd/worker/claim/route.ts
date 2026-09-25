@@ -29,17 +29,35 @@ export async function POST(request: Request) {
     const lastReservation = recent[0]?.submittedAt;
     if (lastReservation && now.getTime() - lastReservation.getTime() < 5 * 60 * 1000) return null;
 
-    const candidate = await tx.rnDJob.findFirst({
+    const baseWhere = {
+      ...(requestedJobId ? { id: requestedJobId } : {}),
+    };
+
+    // Prefer fresh queued jobs over retry/lease-recovery work so a new R&D
+    // batch is not starved by an older refinement job.
+    let candidate = await tx.rnDJob.findFirst({
       where: {
-        ...(requestedJobId ? { id: requestedJobId } : {}),
-        OR: [
-          { status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] },
-          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
-        ],
+        ...baseWhere,
+        status: "QUEUED",
+        OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
-      orderBy: { queuedAt: "asc" },
+      orderBy: [{ attemptCount: "asc" }, { queuedAt: "desc" }],
       select: { id: true, targetId: true, attemptCount: true, currentPrompt: true },
     });
+
+    // Only fall back to expired leases when no eligible queued job exists.
+    if (!candidate) {
+      candidate = await tx.rnDJob.findFirst({
+        where: {
+          ...baseWhere,
+          status: "PROCESSING",
+          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
+        },
+        orderBy: [{ attemptCount: "asc" }, { queuedAt: "desc" }],
+        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true },
+      });
+    }
+
     if (!candidate) return null;
 
     const updated = await tx.rnDJob.updateMany({
