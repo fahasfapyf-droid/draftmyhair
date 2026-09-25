@@ -37,7 +37,7 @@ export async function GET(request: Request) {
             hairstyleId: true,
             jobs: {
               take: 1,
-              orderBy: { createdAt: "desc" },
+              orderBy: { queuedAt: "desc" },
               select: {
                 id: true,
                 status: true,
