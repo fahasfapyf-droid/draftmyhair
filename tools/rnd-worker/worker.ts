@@ -216,49 +216,77 @@ async function processJob(page: Page, job: ClaimedJob) {
   }
 }
 
-async function main() {
-  await mkdir(OUTPUT_DIR, { recursive: true });
-  console.log(`DMH R&D worker ${await workerId()} starting.`);
-  console.log(`API: ${API_BASE}`);
-  await assertServer();
-
+async function launchWorkerContext(): Promise<BrowserContext> {
   console.log(`Launching Chrome with persistent Gemini profile: ${PROFILE_DIR}`);
   console.log(`Chrome executable: ${CHROME_PATH}`);
   console.log("Starting Playwright persistent-context launch (30s diagnostic timeout)...");
   const launchStartedAt = Date.now();
-  let context: BrowserContext;
   try {
-    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+    const context = await chromium.launchPersistentContext(PROFILE_DIR, {
       executablePath: CHROME_PATH,
       headless: false,
       acceptDownloads: true,
       viewport: { width: 1440, height: 1000 },
       timeout: 30_000,
     });
+    console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
+    return context;
   } catch (error) {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
     console.error(`Chrome persistent-context launch failed after ${Date.now() - launchStartedAt}ms:`);
     console.error(message);
     throw error;
   }
-  console.log(`Chrome persistent context launched in ${Date.now() - launchStartedAt}ms.`);
-  console.log(`Chrome context currently has ${context.pages().length} page(s).`);
-  context.on("close", () => console.error("DIAGNOSTIC: Playwright BrowserContext emitted close."));
-  for (const existingPage of context.pages()) {
-    existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
-  }
-  console.log("Creating dedicated worker page...");
-  let page = await context.newPage({ timeout: 30_000 });
+}
+
+async function createWorkerPage(context: BrowserContext): Promise<import("playwright").Page> {
+  const page = await context.newPage({ timeout: 30_000 });
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
+  return page;
+}
+
+async function main() {
+  await mkdir(OUTPUT_DIR, { recursive: true });
+  console.log(`DMH R&D worker ${await workerId()} starting.`);
+  console.log(`API: ${API_BASE}`);
+  await assertServer();
+
+  let context = await launchWorkerContext();
+  let contextClosed = false;
+  const bindContextDiagnostics = (ctx: BrowserContext) => {
+    contextClosed = false;
+    ctx.on("close", () => {
+      contextClosed = true;
+      console.error("DIAGNOSTIC: Playwright BrowserContext emitted close.");
+    });
+    for (const existingPage of ctx.pages()) {
+      existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
+    }
+  };
+  bindContextDiagnostics(context);
+  console.log(`Chrome context currently has ${context.pages().length} page(s).`);
+  console.log("Creating dedicated worker page...");
+  let page = await createWorkerPage(context);
   console.log("Worker page ready.");
 
   process.on("SIGINT", async () => {
     console.log("Stopping worker; closing Chrome.");
-    await context.close();
+    await context.close().catch(() => undefined);
     process.exit(0);
   });
 
   while (true) {
+    if (contextClosed) {
+      console.error("DIAGNOSTIC: BrowserContext is closed; relaunching Chrome before claiming another job.");
+      context = await launchWorkerContext();
+      bindContextDiagnostics(context);
+      page = await createWorkerPage(context);
+      console.log("Worker page recreated after browser restart.");
+    } else if (page.isClosed()) {
+      console.error("DIAGNOSTIC: Worker page is closed; creating replacement page before claiming another job.");
+      page = await createWorkerPage(context);
+    }
+
     const result = await claim();
     if (!result.job) {
       console.log("No queued R&D job available; waiting 10s.");
@@ -266,15 +294,15 @@ async function main() {
       continue;
     }
     console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
-    if (page.isClosed()) {
-      console.error("DIAGNOSTIC: Worker page was already closed; creating replacement page before processing job.");
-      page = await context.newPage({ timeout: 30_000 });
-      page.on("close", () => console.error("DIAGNOSTIC: Replacement worker Playwright page emitted close."));
+
+    if (contextClosed || page.isClosed()) {
+      console.error("DIAGNOSTIC: Browser/page closed immediately after claim; leaving job for lease recovery.");
+      continue;
     }
+
     await processJob(page, result.job);
   }
 }
-
 main().catch((error) => {
   console.error(error instanceof Error ? error.stack ?? error.message : String(error));
   process.exitCode = 1;
