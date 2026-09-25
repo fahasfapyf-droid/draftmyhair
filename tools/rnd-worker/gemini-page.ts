@@ -275,37 +275,14 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>): Pr
 }
 
 export async function captureGeneratedImage(page: Page, outputPath: string, source: string) {
-  const downloadButtons = [
-    page.getByRole("button", { name: /download full size/i }),
-    page.getByRole("button", { name: /download/i }),
-    page.locator('button[aria-label*="Download" i]'),
-    page.locator('[title*="Download" i]'),
-  ];
-
-  for (const candidate of downloadButtons) {
-    try {
-      for (let i = await candidate.count() - 1; i >= 0; i -= 1) {
-        const button = candidate.nth(i);
-        if (!(await button.isVisible())) continue;
-        const downloadPromise = page.waitForEvent("download", { timeout: 20_000 }).catch(() => null);
-        await button.click({ timeout: 10_000 });
-        const download = await downloadPromise;
-        if (download) {
-          await download.saveAs(outputPath);
-          console.log("Generated image captured through Gemini download control.");
-          return;
-        }
-      }
-    } catch {}
-  }
-
-  // The generated source was captured at the exact moment Gemini exposed it.
-  // Do not re-query the page here; Gemini may close the Playwright page immediately
-  // after rendering the completed image.
+  // Capture only the exact generated asset detected after submission.
+  // Never click Gemini download controls: they can select/navigate to a stale
+  // or unrelated image in the persistent Gemini UI.
   if (source.startsWith("data:")) {
     const base64 = source.split(",", 2)[1];
     if (!base64) throw new Error("Invalid data URL returned by Gemini.");
     await writeFile(outputPath, Buffer.from(base64, "base64"));
+    console.log("Generated image captured from exact data URL.");
     return;
   }
 
@@ -329,9 +306,10 @@ export async function captureGeneratedImage(page: Page, outputPath: string, sour
         });
       }, source);
       await writeFile(outputPath, Buffer.from(base64, "base64"));
+      console.log("Generated image captured from exact blob asset.");
       return;
     } catch {
-      console.log("Direct blob fetch failed; capturing generated image element instead.");
+      console.log("Direct blob fetch failed; capturing exact generated image element instead.");
     }
   }
 
@@ -339,20 +317,22 @@ export async function captureGeneratedImage(page: Page, outputPath: string, sour
     const response = await page.request.get(source);
     if (response.ok()) {
       await writeFile(outputPath, await response.body());
+      console.log("Generated image captured from exact generated HTTP asset.");
       return;
     }
   }
 
+  // Final fallback still targets the exact source URL captured at detection time.
   const index = await page.locator("img").evaluateAll((images, target) =>
     images.findIndex((image) => {
       const element = image as HTMLImageElement;
       return (element.currentSrc || element.src) === target;
     }), source);
 
-  if (index < 0) throw new Error("Generated image element not found.");
+  if (index < 0) throw new Error("Exact generated image element not found.");
 
   const image = page.locator("img").nth(index);
   await image.scrollIntoViewIfNeeded();
   await image.screenshot({ path: outputPath });
-  console.log("Generated image captured from the rendered Gemini image element.");
+  console.log("Generated image captured from the exact rendered Gemini image element.");
 }
