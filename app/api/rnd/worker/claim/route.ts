@@ -6,6 +6,8 @@ import { generateAutonomousPrompt, optimizeAutonomousPrompt } from "@/lib/rnd/au
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
+const RND_HOURLY_GENERATION_LIMIT = 60;
+const RND_MIN_GENERATION_INTERVAL_MS = 60 * 1000;
 
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
@@ -24,19 +26,17 @@ export async function POST(request: Request) {
     const recent = await tx.rnDAttempt.findMany({
       where: { submittedAt: { gte: hourAgo } },
       orderBy: { submittedAt: "desc" },
-      take: 12,
+      take: RND_HOURLY_GENERATION_LIMIT,
       select: { submittedAt: true },
     });
-    if (recent.length >= 12) return null;
+    if (recent.length >= RND_HOURLY_GENERATION_LIMIT) return null;
     const lastReservation = recent[0]?.submittedAt;
-    if (lastReservation && now.getTime() - lastReservation.getTime() < 60 * 1000) return null;
+    if (lastReservation && now.getTime() - lastReservation.getTime() < RND_MIN_GENERATION_INTERVAL_MS) return null;
 
     const baseWhere = {
       ...(requestedJobId ? { id: requestedJobId } : {}),
     };
 
-    // Prefer fresh queued jobs over retry/lease-recovery work so a new R&D
-    // batch is not starved by an older refinement job.
     let candidate = await tx.rnDJob.findFirst({
       where: {
         ...baseWhere,
@@ -47,7 +47,6 @@ export async function POST(request: Request) {
       select: { id: true, targetId: true, attemptCount: true, currentPrompt: true },
     });
 
-    // Only fall back to expired leases when no eligible queued job exists.
     if (!candidate) {
       candidate = await tx.rnDJob.findFirst({
         where: {
@@ -62,9 +61,6 @@ export async function POST(request: Request) {
 
     if (!candidate) return null;
 
-    // Rebuild the prompt from the authoritative production style source at claim
-    // time. This also repairs queued jobs created before the authoritative-source
-    // fix landed, while preserving the latest QA defect as a targeted refinement.
     const target = await tx.rnDTarget.findUnique({
       where: { id: candidate.targetId },
       select: { hairstyleId: true, hardCoreInstruction: true },
@@ -91,9 +87,6 @@ export async function POST(request: Request) {
     let authoritativePrompt: string;
     const hasAuthoritativeRefinementMarker = candidate.currentPrompt.includes("# TARGETED REFINEMENT");
 
-    // Pre-fix queued prompts may contain an invalid autonomous reinterpretation of
-    // the hairstyle. Reset those to the authoritative source and discard their
-    // historical refinement text. New refinements carry the explicit marker above.
     if (hasAuthoritativeRefinementMarker && latestAttempt?.refinementReason?.trim()) {
       const rebuilt = await optimizeAutonomousPrompt({
         instruction: target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
