@@ -302,15 +302,29 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
     result.rootIntegration,
   );
 
-  // The numeric scores and concrete gates are authoritative. Model-declared
-  // verdict fields are diagnostic only; a judge must not veto a numerically
-  // passing result merely by returning REGENERATE after describing a passing
-  // transformation. This prevents internally contradictory false negatives.
+  // Numeric judge scores and deterministic gates are authoritative.
+  // A fail-only verifier is allowed to veto a result only when at least one
+  // judge has already found a sub-threshold transformation problem. This
+  // prevents a verifier-only hallucination from overturning two independent
+  // 9.5+ judge passes while retaining verifier protection on disputed/failing
+  // outputs.
+  const primaryPass =
+    primary.overall >= 9.5 &&
+    primary.rootIntegration >= 9.5 &&
+    primary.transformationOnly === "PASS" &&
+    primary.artifacts === "NONE";
+  const challengerPass =
+    challenger.overall >= 9.5 &&
+    challenger.rootIntegration >= 9.5 &&
+    challenger.transformationOnly === "PASS" &&
+    challenger.artifacts === "NONE";
+  const verifierMayVeto = verifier.blockingDefect && !(primaryPass && challengerPass);
+
   const hardPass =
     result.overall >= 9.5 &&
     result.transformationOnly === "PASS" &&
     result.artifacts === "NONE" &&
-    !verifier.blockingDefect &&
+    !verifierMayVeto &&
     transformationGate.passed;
 
   result.verdict = hardPass ? "APPROVE" : "REGENERATE";
