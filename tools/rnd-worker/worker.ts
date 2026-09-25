@@ -4,13 +4,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
 const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
-const PROFILE_DIR = path.resolve(REPO_ROOT, "tools", "gemini-web-agent", "chrome-profile");
 const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR
   ? (path.isAbsolute(process.env.DMH_RND_OUTPUT_DIR) ? process.env.DMH_RND_OUTPUT_DIR : path.resolve(REPO_ROOT, process.env.DMH_RND_OUTPUT_DIR))
   : path.resolve(WORKER_DIR, "output");
@@ -222,13 +222,15 @@ async function main() {
   console.log(`API: ${API_BASE}`);
   await assertServer();
 
-  console.log(`Launching Chrome with persistent Gemini profile: ${PROFILE_DIR}`);
+  const geminiProfile = await selectGeminiProfile();
+  console.log(`Selected Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
+  console.log(`Launching Chrome with persistent Gemini profile: ${geminiProfile.directory}`);
   console.log(`Chrome executable: ${CHROME_PATH}`);
   console.log("Starting Playwright persistent-context launch (30s diagnostic timeout)...");
   const launchStartedAt = Date.now();
   let context: BrowserContext;
   try {
-    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+    context = await chromium.launchPersistentContext(geminiProfile.directory, {
       executablePath: CHROME_PATH,
       headless: false,
       acceptDownloads: true,
