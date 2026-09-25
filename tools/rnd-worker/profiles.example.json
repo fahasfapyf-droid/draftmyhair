@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {
+      "id": "gemini-1",
+      "label": "Gemini Profile 1",
+      "directory": "tools/gemini-web-agent/chrome-profile",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "gemini-2",
+      "label": "Gemini Profile 2",
+      "directory": "tools/gemini-web-agent/chrome-profile-2",
+      "status": "PAUSED"
+    }
+  ]
+}
