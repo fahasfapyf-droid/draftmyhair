@@ -114,10 +114,21 @@ async function clickAddFiles(page: Page) {
   for (const locator of controls) {
     try {
       const button = await firstVisible([locator]);
-      await button.click();
+      await button.click({ force: true, timeout: 5_000 });
+      await page.waitForTimeout(500);
       return;
     } catch {}
   }
+
+  // Current Gemini UI commonly exposes this exact accessible control even when
+  // the generic upload selectors above do not match it reliably.
+  try {
+    const uploadAndTools = page.getByRole("button", { name: /^Upload and tools$/i });
+    const button = await firstVisible([uploadAndTools]);
+    await button.click({ force: true, timeout: 5_000 });
+    await page.waitForTimeout(700);
+    return;
+  } catch {}
 
   const iconButton = page.locator('mat-icon[data-mat-icon-name="add_2"], mat-icon[fonticon="add"]');
   try {
@@ -146,7 +157,13 @@ export async function uploadReference(page: Page, imagePath: string) {
   if (await uploadDirectInput()) return;
 
   await clickAddFiles(page);
-  await pause(900, "Upload menu opened; waiting for the file control");
+  await pause(1_500, "Upload menu opened; waiting for Gemini to expose file upload");
+
+  // Gemini's upload UI changes frequently. Some current builds expose only the
+  // "Upload and tools" composer button first, then inject the real file input
+  // asynchronously. Give that input a dedicated second-chance window before
+  // searching menu labels.
+  if (await uploadDirectInput()) return;
 
   // Gemini's upload UI changes frequently. Prefer explicit semantic controls,
   // then fall back to stable accessibility/data-test attributes.
