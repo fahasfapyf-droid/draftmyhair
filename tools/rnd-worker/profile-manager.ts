@@ -154,8 +154,14 @@ export async function markProfileRestricted(profileId: string, error: string) {
 
 export function classifyProfileError(message: string): "EXHAUSTED" | "RESTRICTED" | null {
   const value = message.toLowerCase();
-  if (/(account|access|suspend|suspension|restricted|disabled|blocked|policy|violat)/i.test(value)) return "RESTRICTED";
-  if (/(quota|rate.?limit|too many requests|resource exhausted|usage limit|limit reached|429)/i.test(value)) return "EXHAUSTED";
+  // Quota/rate-limit exhaustion must take precedence over generic mentions of "account".
+  // A normal usage-limit message is not an account restriction.
+  if (/(quota|rate.?limit|too many requests|resource exhausted|usage limit|limit reached|429)/i.test(value)) {
+    return "EXHAUSTED";
+  }
+  if (/(suspend|suspension|restricted|disabled|blocked|policy|violat|access denied|account terminated)/i.test(value)) {
+    return "RESTRICTED";
+  }
   return null;
 }
 
