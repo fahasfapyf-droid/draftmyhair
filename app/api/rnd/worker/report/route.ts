@@ -104,6 +104,53 @@ export async function POST(request: Request) {
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
 
   if (!succeeded) {
+    // Infrastructure/browser failures must not consume a hairstyle refinement
+    // attempt. Requeue the same attempt so a transient Gemini UI failure can be
+    // retried after the generation interval. Actual QA failures still consume
+    // autonomous attempts and follow the normal refinement/exhaustion path.
+    if (errorCode === "WORKER_EXECUTION_ERROR") {
+      const retryAt = new Date(Date.now() + 60 * 1000);
+      const result = await prisma.$transaction(async (tx) => {
+        const attempt = await tx.rnDAttempt.update({
+          where: { jobId_attemptNumber: { jobId, attemptNumber } },
+          data: {
+            prompt,
+            promptRevision: revision,
+            generationStartedAt,
+            generationCompletedAt,
+            artifactId: null,
+            verdict: "REFINE",
+            errorCode,
+            errorMessage,
+          },
+        });
+        await tx.rnDJob.update({
+          where: { id: jobId },
+          data: {
+            status: "QUEUED",
+            attemptCount: attemptNumber - 1,
+            nextEligibleAt: retryAt,
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            heartbeatAt: now,
+            completedAt: null,
+            failureCode: errorCode,
+            failureMessage: errorMessage,
+          },
+        });
+        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+        return attempt;
+      });
+      return NextResponse.json({
+        ok: true,
+        jobId,
+        attemptId: result.id,
+        status: "QUEUED",
+        retryAt: retryAt.toISOString(),
+        infrastructureRetry: true,
+      });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const attempt = await tx.rnDAttempt.update({
         where: { jobId_attemptNumber: { jobId, attemptNumber } },
