@@ -27,13 +27,11 @@ npm install
 npx playwright install chromium
 ```
 
-The worker uses the existing signed-in Gemini Chrome profile by default:
+The worker uses a local Gemini profile registry. On first startup, `start-rnd-worker.cmd` creates `profiles.json` from `profiles.example.json`; review that file before unattended operation. Each profile points to its own persistent Chrome user-data directory and is selected only when its configured status is ACTIVE and its local usage window permits another generation.
 
-```text
-tools\gemini-web-agent\chrome-profile
-```
+Profile state is stored locally in `profile-state.json` and is not committed. The worker uses a default limit of 30 generations/hour and a 2-minute minimum interval per profile. These can be overridden per profile or with `RND_PROFILE_HOURLY_LIMIT`, `RND_PROFILE_MIN_INTERVAL_MS`, and `RND_PROFILE_COOLDOWN_MS`.
 
-Override it with `DMH_GEMINI_PROFILE_DIR` if the profile lives elsewhere.
+A quota/rate-limit error marks the current profile EXHAUSTED for the cooldown period and the worker may rotate to another eligible ACTIVE profile. An account restriction/policy/access error marks the profile RESTRICTED and stops the worker; it does not automatically bypass the restriction.
 
 Set these environment variables in the worker process:
 
@@ -51,7 +49,7 @@ DMH_RND_OUTPUT_DIR=C:\path\to\rnd-worker-output
 RND_WORKER_ID_FILE=C:\path\to\.rnd-worker-id
 ```
 
-Do not commit `.env`, the worker ID file, generated images, or the Chrome profile.
+Do not commit `.env`, the worker ID file, `profiles.json`, `profile-state.json`, generated images, or any Chrome profile.
 
 ## Run
 
