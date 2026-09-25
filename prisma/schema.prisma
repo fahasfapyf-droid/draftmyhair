@@ -631,6 +631,28 @@ enum RnDAttemptVerdict {
   FAILED
 }
 
+model RnDWorkerStatus {
+  id                  String   @id @default(cuid())
+  workerId            String   @unique
+  workerVersion       String?
+  protocolVersion     String?
+  workerState         String   @default("ONLINE")
+  activeProfileId     String?
+  activeProfileLabel  String?
+  currentJobId        String?
+  captureStatus       String   @default("UNKNOWN")
+  captureLastSuccessAt DateTime?
+  captureLastError    String?  @db.Text
+  profileSnapshot     Json?
+  lastHeartbeatAt     DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([workerState])
+  @@index([lastHeartbeatAt])
+  @@index([activeProfileId])
+}
+
 model RnDCampaign {
   id                  String            @id @default(cuid())
   name                String
