@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
+import { generateAutonomousPrompt, optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
@@ -60,6 +62,50 @@ export async function POST(request: Request) {
 
     if (!candidate) return null;
 
+    // Rebuild the prompt from the authoritative production style source at claim
+    // time. This also repairs queued jobs created before the authoritative-source
+    // fix landed, while preserving the latest QA defect as a targeted refinement.
+    const target = await tx.rnDTarget.findUnique({
+      where: { id: candidate.targetId },
+      select: { hairstyleId: true, hardCoreInstruction: true },
+    });
+    if (!target?.hairstyleId) throw new Error("R&D target hairstyle is missing.");
+
+    const hairstyle = await tx.hairstyle.findUnique({
+      where: { id: target.hairstyleId },
+      select: { promptKey: true },
+    });
+    if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
+
+    const authoritativeStylePrompt = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
+    if (!authoritativeStylePrompt) {
+      throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
+    }
+
+    const latestAttempt = await tx.rnDAttempt.findFirst({
+      where: { jobId: candidate.id },
+      orderBy: { attemptNumber: "desc" },
+      select: { refinementReason: true },
+    });
+
+    let authoritativePrompt: string;
+    if (latestAttempt?.refinementReason?.trim()) {
+      const rebuilt = await optimizeAutonomousPrompt({
+        instruction: target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
+        currentPrompt: candidate.currentPrompt,
+        defect: latestAttempt.refinementReason,
+        attemptNumber: candidate.attemptCount,
+        authoritativeStylePrompt,
+      });
+      authoritativePrompt = rebuilt.prompt;
+    } else {
+      const rebuilt = await generateAutonomousPrompt(
+        target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
+        authoritativeStylePrompt,
+      );
+      authoritativePrompt = rebuilt.prompt;
+    }
+
     const updated = await tx.rnDJob.updateMany({
       where: {
         id: candidate.id,
@@ -72,6 +118,11 @@ export async function POST(request: Request) {
     });
     if (updated.count !== 1) return null;
 
+    await tx.rnDJob.update({
+      where: { id: candidate.id },
+      data: { currentPrompt: authoritativePrompt },
+    });
+
     const attemptNumber = candidate.attemptCount + 1;
     let reservation = await tx.rnDAttempt.findUnique({
       where: { jobId_attemptNumber: { jobId: candidate.id, attemptNumber } },
@@ -82,7 +133,7 @@ export async function POST(request: Request) {
         data: {
           jobId: candidate.id,
           attemptNumber,
-          prompt: candidate.currentPrompt,
+          prompt: authoritativePrompt,
           promptRevision: "reserved",
           submittedAt: now,
           verdict: "REFINE",
