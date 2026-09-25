@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     });
     if (recent.length >= 12) return null;
     const lastReservation = recent[0]?.submittedAt;
-    if (lastReservation && now.getTime() - lastReservation.getTime() < 5 * 60 * 1000) return null;
+    if (lastReservation && now.getTime() - lastReservation.getTime() < 60 * 1000) return null;
 
     const baseWhere = {
       ...(requestedJobId ? { id: requestedJobId } : {}),
