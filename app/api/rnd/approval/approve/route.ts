@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
         id: true,
         targetId: true,
         status: true,
-        target: { select: { hairstyleId: true, targetKey: true } },
+        target: { select: { hairstyleId: true, targetKey: true, campaignId: true } },
         attempts: {
           where: { verdict: "HUMAN_APPROVAL" },
           orderBy: { attemptNumber: "desc" },
@@ -69,10 +70,11 @@ export async function POST(request: Request) {
     await tx.rnDJob.update({ where: { id: jobId }, data: { status: "COMPLETED", completedAt: new Date() } });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
     await tx.rnDAttempt.updateMany({ where: { jobId, verdict: "HUMAN_APPROVAL" }, data: { verdict: "APPROVED" } });
-    return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt) };
+    const campaignStatus = await reconcileRndCampaignLifecycle(tx, job.target.campaignId);
+    return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt), campaignStatus };
   });
 
   if (result.kind === "missing") return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (result.kind === "state") return NextResponse.json({ error: "Job is not awaiting human approval", status: result.status }, { status: 409 });
-  return NextResponse.json({ ok: true, promptImported: result.importedPrompt });
+  return NextResponse.json({ ok: true, promptImported: result.importedPrompt, campaignStatus: result.campaignStatus });
 }
