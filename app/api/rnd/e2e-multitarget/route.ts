@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
+import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 
 export const runtime = "nodejs";
@@ -29,32 +30,20 @@ export async function GET() {
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
   });
-  if (!sourceResponse.ok) {
-    return json({ error: `Source fetch failed: HTTP ${sourceResponse.status}` }, 502);
-  }
+  if (!sourceResponse.ok) return json({ error: `Source fetch failed: HTTP ${sourceResponse.status}` }, 502);
 
   const mimeType = sourceResponse.headers.get("content-type")?.split(";")[0]?.trim() || "image/webp";
   const buffer = Buffer.from(await sourceResponse.arrayBuffer());
-  if (!mimeType.startsWith("image/") || !buffer.length) {
-    return json({ error: "Invalid source image" }, 502);
-  }
+  if (!mimeType.startsWith("image/") || !buffer.length) return json({ error: "Invalid source image" }, 502);
 
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp";
   const storageKey = "rnd/smoke-sources/" + checksum + "." + extension;
 
-  const existing = await prisma.rnDAsset.findUnique({
-    where: { storageKey },
-    select: { id: true, blobUrl: true },
-  });
-
+  const existing = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
   const blob = existing?.blobUrl
     ? null
-    : await put(storageKey, buffer, {
-        access: "private",
-        addRandomSuffix: false,
-        contentType: mimeType,
-      });
+    : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType });
 
   const styles = await prisma.hairstyle.findMany({
     where: { isActive: true, promptKey: { in: STYLE_KEYS } },
@@ -62,35 +51,25 @@ export async function GET() {
   });
 
   if (styles.length !== STYLE_KEYS.length) {
-    return json(
-      {
-        error: "Required smoke-test styles are missing",
-        requested: STYLE_KEYS,
-        found: styles.map((style) => style.promptKey),
-      },
-      503,
-    );
+    return json({ error: "Required smoke-test styles are missing", requested: STYLE_KEYS, found: styles.map((style) => style.promptKey) }, 503);
   }
 
-  const built = await Promise.all(
-    styles.map(async (style) => ({
-      style,
-      prompt: await generateAutonomousPrompt(
-        "Develop a production-quality " +
-          style.name +
-          " hairstyle transformation. This is a controlled multi-target R&D smoke test; transform only the requested hairstyle while preserving subject identity and the original photograph.",
-      ),
-    })),
-  );
+  const missingPrompt = styles.find((style) => !STYLE_PROMPTS[style.promptKey]?.prompt);
+  if (missingPrompt) return json({ error: "Authoritative production prompt is missing for " + missingPrompt.promptKey }, 500);
+
+  const built = styles.map((style) => ({
+    style,
+    prompt: generateAutonomousPrompt(
+      "Validate the authoritative production definition for " + style.name + ". This is a controlled multi-target R&D smoke test; preserve subject identity and the original photograph.",
+      STYLE_PROMPTS[style.promptKey].prompt,
+    ),
+  }));
+
+  const resolved = await Promise.all(built);
 
   const result = await prisma.$transaction(async (tx) => {
     const campaign = await tx.rnDCampaign.create({
-      data: {
-        name: "R&D MULTI-TARGET LIFECYCLE SMOKE",
-        status: "RUNNING",
-        autoAdvanceEnabled: true,
-        createdByUserId: admin.id,
-      },
+      data: { name: "R&D MULTI-TARGET LIFECYCLE SMOKE", status: "RUNNING", autoAdvanceEnabled: true, createdByUserId: admin.id },
     });
 
     const source = await tx.rnDAsset.upsert({
@@ -109,10 +88,8 @@ export async function GET() {
     });
 
     const targets = [];
-
-    for (let index = 0; index < built.length; index += 1) {
-      const item = built[index];
-
+    for (let index = 0; index < resolved.length; index += 1) {
+      const item = resolved[index];
       const target = await tx.rnDTarget.create({
         data: {
           campaignId: campaign.id,
@@ -126,33 +103,14 @@ export async function GET() {
       });
 
       const job = await tx.rnDJob.create({
-        data: {
-          targetId: target.id,
-          status: "QUEUED",
-          promptVersionNumber: 1,
-          currentPrompt: item.prompt.prompt,
-          queuedAt: new Date(),
-        },
+        data: { targetId: target.id, status: "QUEUED", promptVersionNumber: 1, currentPrompt: item.prompt.prompt, queuedAt: new Date() },
       });
 
-      targets.push({
-        targetId: target.id,
-        jobId: job.id,
-        style: item.style.promptKey,
-      });
+      targets.push({ targetId: target.id, jobId: job.id, style: item.style.promptKey });
     }
 
-    return {
-      campaignId: campaign.id,
-      sourceAssetId: source.id,
-      targets,
-    };
+    return { campaignId: campaign.id, sourceAssetId: source.id, targets };
   });
 
-  return json({
-    ok: true,
-    mode: "QUEUE_ONLY",
-    message: "Three real R&D jobs queued for the local Gemini worker.",
-    ...result,
-  });
+  return json({ ok: true, mode: "QUEUE_ONLY", message: "Three real R&D jobs queued for the local Gemini worker.", ...result });
 }
