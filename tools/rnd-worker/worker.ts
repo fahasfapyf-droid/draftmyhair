@@ -170,7 +170,7 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   return body.asset.id;
 }
 
-async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE"> {
+async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE" | "STOP"> {
   const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
   const generationStartedAt = new Date().toISOString();
@@ -220,8 +220,8 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     }
     if (profileError === "RESTRICTED") {
       await markProfileRestricted(profile.id, message);
-      console.error(`Gemini profile ${profile.id} marked RESTRICTED; worker will stop using it and rotate only to another eligible authorized profile.`);
-      return "ROTATE";
+      console.error(`Gemini profile ${profile.id} marked RESTRICTED; worker will stop. Explicit operator review is required before another profile is selected.`);
+      return "STOP";
     }
   } finally {
     clearInterval(heartbeatTimer);
@@ -309,6 +309,11 @@ async function main() {
       ({ context, page } = await launchGeminiSession(geminiProfile));
     }
     const action = await processJob(page, result.job, geminiProfile);
+    if (action === "STOP") {
+      await context.close().catch(() => undefined);
+      console.error("R&D worker stopped because the active Gemini profile was classified as RESTRICTED. No automatic bypass was attempted.");
+      return;
+    }
     if (action === "ROTATE") {
       await context.close().catch(() => undefined);
       while (true) {
