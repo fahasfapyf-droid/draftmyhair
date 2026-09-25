@@ -31,6 +31,12 @@ if not exist ".env" (
   exit /b 1
 )
 
+if not exist "profiles.json" (
+  echo Creating local Gemini profile registry from profiles.example.json...
+  copy /Y "profiles.example.json" "profiles.json" >nul
+  echo Review tools\rnd-worker\profiles.json before running unattended R&D.
+)
+
 if not exist "node_modules\.bin\playwright.cmd" (
   echo Installing Playwright Chromium...
   call npx playwright install chromium
