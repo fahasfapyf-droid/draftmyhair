@@ -101,6 +101,18 @@ export async function openImageGenerationMode(page: Page) {
 }
 
 async function clickAddFiles(page: Page) {
+  // Current Gemini explicitly documents this control as the entry point for
+  // local uploads ("Upload and tools" -> "Upload files"). Prefer the exact
+  // accessible control before broad Upload/Attach selectors, which can match
+  // unrelated controls in the task UI.
+  try {
+    const exact = page.getByRole("button", { name: /^Upload and tools$/i });
+    const button = await firstVisible([exact]);
+    await button.evaluate((element) => (element as HTMLElement).click());
+    await page.waitForTimeout(1_000);
+    return;
+  } catch {}
+
   const controls = [
     page.getByRole("button", { name: /open upload file menu|add files|attach files|upload files/i }),
     page.locator('button[aria-label="Open upload file menu"]'),
