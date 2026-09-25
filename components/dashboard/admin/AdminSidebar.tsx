@@ -16,6 +16,7 @@ const navigation = [
   { href: "/dashboard/admin/payments", label: "Payments" },
   { href: "/dashboard/admin/generations", label: "AI Generations" },
   { href: "/dashboard/admin/rnd", label: "R&D Run Builder" },
+  { href: "/dashboard/admin/rnd/worker", label: "R&D Worker" },
   { href: "/dashboard/admin/rnd/approval", label: "R&D Approval" },
   { href: "/dashboard/admin/rnd/calibration", label: "R&D Blind QA" },
   { href: "/dashboard/admin/promo-codes", label: "Promo Codes" },
