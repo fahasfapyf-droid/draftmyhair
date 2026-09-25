@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 export type GeminiProfileStatus = "ACTIVE" | "PAUSED" | "EXHAUSTED" | "RESTRICTED";
 
@@ -26,7 +27,7 @@ interface ProfileStateFile {
   profiles: Record<string, ProfileState>;
 }
 
-const WORKER_DIR = path.dirname(new URL(import.meta.url).pathname);
+const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
 const CONFIG_PATH = process.env.RND_GEMINI_PROFILES_FILE
   ? path.resolve(REPO_ROOT, process.env.RND_GEMINI_PROFILES_FILE)
