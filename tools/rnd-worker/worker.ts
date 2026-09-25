@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { classifyProfileError, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
+import { classifyProfileError, getGeminiProfileStatusSnapshot, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
 const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
@@ -18,6 +18,8 @@ const CHROME_PATH = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrom
 const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
 const GENERATION_TIMEOUT_MS = 180_000;
+const STATUS_HEARTBEAT_MS = 15_000;
+const WORKER_VERSION = process.env.RND_WORKER_VERSION ?? "local-gemini-worker-v1";
 
 if (!WORKER_TOKEN) throw new Error("RND_WORKER_TOKEN is required.");
 
@@ -56,6 +58,37 @@ interface ClaimedJob {
 
 interface ClaimResponse { ok: boolean; workerId?: string; leaseExpiresAt?: string | null; job: ClaimedJob | null; }
 interface HelloResponse { ok: boolean; protocolVersion: string; serverTime: string; }
+let captureStatus: "UNKNOWN" | "PASS" | "FAIL" = "UNKNOWN";
+let captureLastSuccessAt: string | null = null;
+let captureLastError: string | null = null;
+let currentJobId: string | null = null;
+
+async function reportWorkerStatus(workerState: "ONLINE" | "STOPPED" = "ONLINE") {
+  try {
+    const profiles = await getGeminiProfileStatusSnapshot();
+    const response = await api("/api/rnd/worker/status", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workerVersion: WORKER_VERSION,
+        protocolVersion: "1",
+        workerState,
+        activeProfileId: geminiProfileForStatus?.id ?? null,
+        activeProfileLabel: geminiProfileForStatus?.label ?? null,
+        currentJobId,
+        captureStatus,
+        captureLastSuccessAt,
+        captureLastError,
+        profileSnapshot: profiles,
+      }),
+    });
+    if (!response.ok) console.error(`Worker status update failed: HTTP ${response.status} ${await response.text()}`);
+  } catch (error) {
+    console.error(`Worker status update error: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+let geminiProfileForStatus: GeminiProfile | null = null;
 
 async function api(pathname: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -171,6 +204,8 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
 }
 
 async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE" | "STOP"> {
+  currentJobId = job.id;
+  captureStatus = "UNKNOWN";
   const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
   const generationStartedAt = new Date().toISOString();
@@ -193,6 +228,9 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     const generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
     await captureGeneratedImage(page, outputPath, generatedSource, before);
+    captureStatus = "PASS";
+    captureLastSuccessAt = new Date().toISOString();
+    captureLastError = null;
     const artifactId = await uploadArtifact(job, attemptNumber, outputPath);
 
     await report(job, attemptNumber, {
@@ -204,6 +242,8 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     console.log(`Job ${job.id}: attempt ${attemptNumber} uploaded and reported for QA.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    captureStatus = "FAIL";
+    captureLastError = message.slice(0, 2000);
     console.error(`Job ${job.id}: ${message}`);
     await report(job, attemptNumber, {
       submittedAt: generationStartedAt,
@@ -225,6 +265,8 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     }
   } finally {
     clearInterval(heartbeatTimer);
+    currentJobId = null;
+    await reportWorkerStatus().catch(() => undefined);
   }
   return "CONTINUE";
 }
@@ -287,10 +329,15 @@ async function main() {
   await assertServer();
 
   let geminiProfile = await selectGeminiProfile();
+  geminiProfileForStatus = geminiProfile;
   console.log(`Selected Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
+  await reportWorkerStatus();
+  const statusTimer = setInterval(() => void reportWorkerStatus(), STATUS_HEARTBEAT_MS);
   let { context, page } = await launchGeminiSession(geminiProfile);
 
   process.on("SIGINT", async () => {
+    clearInterval(statusTimer);
+    await reportWorkerStatus("STOPPED");
     console.log("Stopping worker; closing Chrome.");
     await context.close();
     process.exit(0);
@@ -319,7 +366,9 @@ async function main() {
       while (true) {
         try {
           geminiProfile = await selectGeminiProfile();
+          geminiProfileForStatus = geminiProfile;
           console.log(`Rotating to eligible Gemini profile: ${geminiProfile.id} (${geminiProfile.label})`);
+          await reportWorkerStatus();
           ({ context, page } = await launchGeminiSession(geminiProfile));
           break;
         } catch (error) {
