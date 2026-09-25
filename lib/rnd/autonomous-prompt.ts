@@ -34,7 +34,17 @@ function compile(stylePrompt: string) {
   return prompt;
 }
 
-function appendRefinement(prompt: string, refinement: string) {
+function appendRefinement(prompt: string, refinement: string, attemptNumber: number) {
+  const escalation =
+    attemptNumber >= 2
+      ? [
+          "This is a repeated defect from an earlier generation.",
+          "Do not merely restate or subtly imply the requested correction.",
+          "Make the diagnosed characteristic visually explicit and materially stronger in the generated hairstyle.",
+          "Increase only the strength, clarity, or precision of that existing characteristic; do not change the haircut category, length, silhouette, or any other passing requirement.",
+        ]
+      : [];
+
   return [
     prompt,
     "",
@@ -46,6 +56,7 @@ function appendRefinement(prompt: string, refinement: string) {
     "Preserve every passing requirement from the authoritative hairstyle definition.",
     "Do not reinterpret, redesign, replace, or broaden the requested hairstyle.",
     "Do not introduce any hairstyle characteristic that is not already supported by the authoritative definition.",
+    ...escalation,
     "",
     refinement.trim(),
   ].join("\n").trim();
@@ -92,6 +103,7 @@ export async function optimizeAutonomousPrompt(input: {
   const prompt = appendRefinement(
     compile(input.authoritativeStylePrompt),
     refinement,
+    input.attemptNumber,
   );
 
   return {
