@@ -19,6 +19,7 @@ interface ProfileState {
   cooldownUntil?: string;
   lastUsedAt?: string;
   lastError?: string;
+  restricted?: boolean;
 }
 
 interface ProfileStateFile {
@@ -103,6 +104,7 @@ export async function selectGeminiProfile(): Promise<GeminiProfile> {
   for (const profile of profiles) {
     if (profile.status !== "ACTIVE") continue;
     const current = stateFor(state, profile.id);
+    if (current.restricted) continue;
     current.generationTimestamps = prune(current.generationTimestamps, now);
     const cooldown = current.cooldownUntil ? Date.parse(current.cooldownUntil) : 0;
     if (cooldown > now) continue;
@@ -145,6 +147,7 @@ export async function markProfileRestricted(profileId: string, error: string) {
   const current = stateFor(state, profileId);
   current.lastError = error.slice(0, 1000);
   current.cooldownUntil = undefined;
+  current.restricted = true;
   await writeState(state);
 }
 
