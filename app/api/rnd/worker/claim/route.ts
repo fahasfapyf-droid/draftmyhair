@@ -89,7 +89,12 @@ export async function POST(request: Request) {
     });
 
     let authoritativePrompt: string;
-    if (latestAttempt?.refinementReason?.trim()) {
+    const hasAuthoritativeRefinementMarker = candidate.currentPrompt.includes("# TARGETED REFINEMENT");
+
+    // Pre-fix queued prompts may contain an invalid autonomous reinterpretation of
+    // the hairstyle. Reset those to the authoritative source and discard their
+    // historical refinement text. New refinements carry the explicit marker above.
+    if (hasAuthoritativeRefinementMarker && latestAttempt?.refinementReason?.trim()) {
       const rebuilt = await optimizeAutonomousPrompt({
         instruction: target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
         currentPrompt: candidate.currentPrompt,
