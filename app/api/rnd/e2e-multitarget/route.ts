@@ -35,7 +35,9 @@ export async function GET(request: Request) {
             status: true,
             currentJobId: true,
             hairstyleId: true,
-            job: {
+            jobs: {
+              take: 1,
+              orderBy: { createdAt: "desc" },
               select: {
                 id: true,
                 status: true,
