@@ -101,6 +101,7 @@ const BASE_RULES = [
   "APPROVE means the observed transformation is production-ready under this rubric; the application, not the model, enforces the numeric approval threshold.",
   "If any applicable hard gate fails, verdict must be REGENERATE.",
   "If regenerating, refinement must identify ONLY the single most important transformation defect and preserve all passing requirements.",
+  "Before returning refinement, cross-check it against your own reason and the visible verifier evidence. Never return a refinement that contradicts the diagnosed defect. If diagnostic statements conflict, resolve the conflict by using only the concrete visible defect supported by the fail-only verifier and do not mention the conflicting interpretation.",
 ].join("\n");
 
 const VERIFIER_SCHEMA = {
@@ -334,7 +335,18 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
       challenger.reason +
       " Verifier: " +
       verifier.reason;
-    result.refinement = candidates[0]?.text ?? "Correct the most important visible transformation defect.";
+
+    // Refinement must never inherit a contradictory judge interpretation.
+    // When the fail-only verifier has a concrete blocking defect, it is the
+    // authoritative defect source for the next attempt.
+    if (verifier.blockingDefect && verifier.reason.trim()) {
+      result.refinement =
+        "Correct only this verified transformation defect: " +
+        verifier.reason.trim() +
+        " Preserve every other passing requirement from the authoritative hairstyle definition.";
+    } else {
+      result.refinement = candidates[0]?.text ?? "Correct the most important visible transformation defect.";
+    }
   }
 
   return result;
