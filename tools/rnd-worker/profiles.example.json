@@ -4,13 +4,17 @@
       "id": "gemini-1",
       "label": "Gemini Profile 1",
       "directory": "tools/gemini-web-agent/chrome-profile",
-      "status": "ACTIVE"
+      "status": "ACTIVE",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
     },
     {
       "id": "gemini-2",
       "label": "Gemini Profile 2",
       "directory": "tools/gemini-web-agent/chrome-profile-2",
-      "status": "PAUSED"
+      "status": "PAUSED",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
     }
   ]
 }
