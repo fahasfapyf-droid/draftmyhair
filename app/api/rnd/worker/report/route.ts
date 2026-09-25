@@ -8,7 +8,7 @@ import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
 export const runtime = "nodejs";
 const MAX_AUTONOMOUS_ATTEMPTS = Math.max(2, Number(process.env.RND_MAX_AUTONOMOUS_ATTEMPTS ?? 8));
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const ONE_MINUTE_MS = 60 * 1000;
 const QA_TIMEOUT_MS = 120_000;
 
 type ReportBody = {
@@ -217,7 +217,7 @@ export async function POST(request: Request) {
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
-      const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
+      const nextEligibleAt = new Date(Date.now() + ONE_MINUTE_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
         data: {
