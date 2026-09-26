@@ -12,7 +12,10 @@ export async function GET() {
   const [prompts, styles] = await Promise.all([
     prisma.promptVersion.findMany({
       orderBy: [{ hairstyle: { name: "asc" } }, { version: "desc" }],
-      include: { hairstyle: { select: { id: true, name: true, promptKey: true } } },
+      include: {
+        hairstyle: { select: { id: true, name: true, promptKey: true } },
+        sourceRnDAttempt: { select: { id: true, attemptNumber: true, overallScore: true, artifactId: true } },
+      },
     }),
     prisma.hairstyle.findMany({
       select: { id: true, name: true, promptKey: true, promptVersions: { where: { status: PromptStatus.ACTIVE }, select: { id: true } } },

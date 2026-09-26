@@ -76,7 +76,19 @@ export async function loginUser(
     return { status: "ACCOUNT_DISABLED" };
   }
 
-  if (!user.emailVerified) {
+  // R&D preview uses an explicit, Vercel-scoped admin identity override.
+  // This is intentionally NOT based on the user's database role: preview databases
+  // can be seeded independently from production. The override only applies to the
+  // exact configured admin email and only when Vercel identifies this deployment as
+  // a Preview deployment. Production authentication remains unchanged.
+  const configuredPreviewAdminEmail =
+    process.env.RND_PREVIEW_ADMIN_EMAIL?.trim().toLowerCase() ?? "";
+  const isConfiguredPreviewAdmin =
+    process.env.VERCEL_ENV === "preview" &&
+    configuredPreviewAdminEmail.length > 0 &&
+    user.email?.trim().toLowerCase() === configuredPreviewAdminEmail;
+
+  if (!user.emailVerified && !isConfiguredPreviewAdmin) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -103,7 +115,7 @@ export async function loginUser(
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: isConfiguredPreviewAdmin ? "ADMIN" : user.role,
       sessionVersion: user.sessionVersion,
     },
   };
