@@ -15,6 +15,8 @@ export type RndQaVerifierResult = {
 
 export type RndQaResult = {
   overall: number;
+  identity: number;
+  hairOnly: "PASS" | "FAIL";
   hairstyleAccuracy: number;
   beardAccuracy: number;
   colorAccuracy: number;
@@ -34,11 +36,14 @@ const QA_SCHEMA = {
   type: "OBJECT",
   properties: {
     overall: { type: "NUMBER", minimum: 0, maximum: 10 },
+    identity: { type: "NUMBER", minimum: 0, maximum: 10 },
+    hairOnly: { type: "STRING", enum: ["PASS", "FAIL"] },
     hairstyleAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
     beardAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
     colorAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
     buzzBaldAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
     rootIntegration: { type: "NUMBER", minimum: 0, maximum: 10 },
+    lightingConsistency: { type: "NUMBER", minimum: 0, maximum: 10 },
     transformationOnly: { type: "STRING", enum: ["PASS", "FAIL"] },
     artifacts: { type: "STRING", enum: ["NONE", "FOUND"] },
     applicableCategories: {
@@ -51,11 +56,14 @@ const QA_SCHEMA = {
   },
   required: [
     "overall",
+    "identity",
+    "hairOnly",
     "hairstyleAccuracy",
     "beardAccuracy",
     "colorAccuracy",
     "buzzBaldAccuracy",
     "rootIntegration",
+    "lightingConsistency",
     "transformationOnly",
     "artifacts",
     "applicableCategories",
@@ -65,6 +73,8 @@ const QA_SCHEMA = {
   ],
   propertyOrdering: [
     "overall",
+    "identity",
+    "hairOnly",
     "hairstyleAccuracy",
     "beardAccuracy",
     "colorAccuracy",
@@ -155,6 +165,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   const value = JSON.parse(text) as RndQaResult;
   for (const key of [
     "overall",
+    "identity",
     "hairstyleAccuracy",
     "beardAccuracy",
     "colorAccuracy",
@@ -176,7 +187,8 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
     throw new Error("QA returned no applicable transformation category.");
   }
 
-  if (!["PASS", "FAIL"].includes(value.transformationOnly) ||
+  if (!["PASS", "FAIL"].includes(value.hairOnly) ||
+      !["PASS", "FAIL"].includes(value.transformationOnly) ||
       !["NONE", "FOUND"].includes(value.artifacts) ||
       !["APPROVE", "REGENERATE"].includes(value.verdict) ||
       typeof value.reason !== "string" ||
@@ -189,7 +201,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   if (value.applicableCategories.includes("BEARD")) applicableScores.push(value.beardAccuracy);
   if (value.applicableCategories.includes("COLOR")) applicableScores.push(value.colorAccuracy);
   if (value.applicableCategories.includes("BUZZ_BALD")) applicableScores.push(value.buzzBaldAccuracy);
-  applicableScores.push(value.rootIntegration);
+  applicableScores.push(value.rootIntegration, value.lightingConsistency, value.identity);
 
   const expectedOverall = Math.min(...applicableScores);
   if (Math.abs(value.overall - expectedOverall) > 0.01) {
@@ -197,7 +209,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   }
 
   if (value.verdict === "APPROVE" &&
-      (expectedOverall < 9.5 || value.transformationOnly !== "PASS" || value.artifacts !== "NONE")) {
+      (expectedOverall < 9.5 || value.hairOnly !== "PASS" || value.transformationOnly !== "PASS" || value.artifacts !== "NONE")) {
     throw new Error("QA returned an inconsistent APPROVE verdict.");
   }
 
@@ -282,11 +294,14 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
 
   const result: RndQaResult = {
     overall: 10,
+    identity: Math.min(primary.identity, challenger.identity),
+    hairOnly: primary.hairOnly === "PASS" && challenger.hairOnly === "PASS" ? "PASS" : "FAIL",
     hairstyleAccuracy: Math.min(primary.hairstyleAccuracy, challenger.hairstyleAccuracy),
     beardAccuracy: Math.min(primary.beardAccuracy, challenger.beardAccuracy),
     colorAccuracy: Math.min(primary.colorAccuracy, challenger.colorAccuracy),
     buzzBaldAccuracy: Math.min(primary.buzzBaldAccuracy, challenger.buzzBaldAccuracy),
     rootIntegration: Math.min(primary.rootIntegration, challenger.rootIntegration),
+    lightingConsistency: Math.min(primary.lightingConsistency, challenger.lightingConsistency),
     transformationOnly: primary.transformationOnly === "PASS" && challenger.transformationOnly === "PASS" ? "PASS" : "FAIL",
     artifacts: primary.artifacts === "NONE" && challenger.artifacts === "NONE" ? "NONE" : "FOUND",
     applicableCategories,
@@ -300,6 +315,8 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   result.overall = Math.min(
     ...applicableCategories.map(scoreFor),
     result.rootIntegration,
+    result.lightingConsistency,
+    result.identity,
   );
 
   // Numeric judge scores and deterministic gates are authoritative.
@@ -310,18 +327,27 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   // outputs.
   const primaryPass =
     primary.overall >= 9.5 &&
+    primary.identity >= 9.5 &&
+    primary.hairOnly === "PASS" &&
     primary.rootIntegration >= 9.5 &&
+    primary.lightingConsistency >= 9.5 &&
     primary.transformationOnly === "PASS" &&
     primary.artifacts === "NONE";
   const challengerPass =
     challenger.overall >= 9.5 &&
+    challenger.identity >= 9.5 &&
+    challenger.hairOnly === "PASS" &&
     challenger.rootIntegration >= 9.5 &&
+    challenger.lightingConsistency >= 9.5 &&
     challenger.transformationOnly === "PASS" &&
     challenger.artifacts === "NONE";
   const verifierMayVeto = verifier.blockingDefect && !(primaryPass && challengerPass);
 
   const hardPass =
     result.overall >= 9.5 &&
+    result.identity >= 9.5 &&
+    result.hairOnly === "PASS" &&
+    result.lightingConsistency >= 9.5 &&
     result.transformationOnly === "PASS" &&
     result.artifacts === "NONE" &&
     !verifierMayVeto &&
