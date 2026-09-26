@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo.
-echo === Draft My Hair R&D Local Gemini Worker ===
+echo === Draft My Hair R^&D Local Gemini Worker ===
 echo Directory: %CD%
 echo.
 
@@ -44,12 +44,12 @@ if not exist "node_modules\.bin\playwright.cmd" (
 )
 
 echo Starting local Gemini automation worker...
-echo Keep this CMD window open while R&D is running.
+echo Keep this CMD window open while R^&D is running.
 echo.
 call npm start
 set EXIT_CODE=%ERRORLEVEL%
 
 echo.
-echo R&D worker stopped with exit code %EXIT_CODE%.
+echo R^&D worker stopped with exit code %EXIT_CODE%.
 pause
 exit /b %EXIT_CODE%
