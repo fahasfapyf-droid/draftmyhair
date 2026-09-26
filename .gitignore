@@ -8,3 +8,9 @@ node_modules
 .env.production
 
 /generated/prisma
+# Local R&D worker state and authenticated browser profiles
+tools/rnd-worker/profiles.json
+tools/rnd-worker/profile-state.json
+tools/rnd-worker/.rnd-worker-id
+tools/rnd-worker/output/
+tools/rnd-worker/chrome-profile*/
