@@ -147,7 +147,19 @@ export async function uploadReference(page: Page, imagePath: string) {
   // after the menu is opened, or only after the menu item is activated.
   if (await tryFileInputs()) return;
 
+  // Some current Gemini builds open the native OS file chooser directly from
+  // the "Upload and tools" button. The previous implementation clicked the button
+  // first and only listened for a chooser after it had already fired, which made a
+  // valid upload path look like "no usable local-file upload control".
+  const directChooser = page.waitForEvent("filechooser", { timeout: 10_000 }).catch(() => null);
   await clickAddFiles(page);
+  const chooser = await directChooser;
+  if (chooser) {
+    await chooser.setFiles(imagePath);
+    await pause(2_500, "Reference image uploaded; waiting for Gemini to register it");
+    return;
+  }
+
   await pause(900, "Upload menu opened; waiting for the file control");
 
   // Prefer the native file input when Gemini has injected it into the DOM.
