@@ -64,6 +64,7 @@ const QA_SCHEMA = {
     "buzzBaldAccuracy",
     "rootIntegration",
     "lightingConsistency",
+    "lightingConsistency",
     "transformationOnly",
     "artifacts",
     "applicableCategories",
@@ -196,7 +197,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
     throw new Error("QA returned an invalid verdict.");
   }
 
-  const applicableScores: number[] = [];
+  const applicableScores: number[] = [value.identity, value.lightingConsistency];
   if (value.applicableCategories.includes("HAIRSTYLE")) applicableScores.push(value.hairstyleAccuracy);
   if (value.applicableCategories.includes("BEARD")) applicableScores.push(value.beardAccuracy);
   if (value.applicableCategories.includes("COLOR")) applicableScores.push(value.colorAccuracy);
