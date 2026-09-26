@@ -40,9 +40,14 @@ const DEFAULT_HOURLY_LIMIT = Number(process.env.RND_PROFILE_HOURLY_LIMIT ?? 30);
 const DEFAULT_MIN_INTERVAL_MS = Number(process.env.RND_PROFILE_MIN_INTERVAL_MS ?? 120_000);
 const DEFAULT_COOLDOWN_MS = Number(process.env.RND_PROFILE_COOLDOWN_MS ?? 60 * 60 * 1000);
 
+function expandWindowsEnv(value: string): string {
+  return value.replace(/%([^%]+)%/g, (match, name: string) => process.env[name] ?? match);
+}
+
 function normalizeProfile(profile: GeminiProfile): GeminiProfile {
   return {
     ...profile,
+    directory: expandWindowsEnv(profile.directory),
     hourlyLimit: Number.isFinite(profile.hourlyLimit) && profile.hourlyLimit! > 0
       ? profile.hourlyLimit
       : DEFAULT_HOURLY_LIMIT,
