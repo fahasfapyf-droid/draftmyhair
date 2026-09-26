@@ -30,15 +30,35 @@ if (!Array.isArray(config.profiles) || config.profiles.length === 0) {
   throw new Error("profiles.json contains no profiles.");
 }
 
+const requestedIds = process.argv
+  .slice(2)
+  .filter((value) => value && value !== "--")
+  .flatMap((value) => value.split(","))
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const profiles = requestedIds.length > 0
+  ? requestedIds.map((id) => {
+      const profile = config.profiles.find((candidate) => candidate.id === id);
+      if (!profile) throw new Error(`Unknown Gemini profile id: ${id}`);
+      return profile;
+    })
+  : config.profiles;
+
 const rl = readline.createInterface({ input, output });
 
 console.log("\n=== Draft My Hair - Gemini Profile Linker ===\n");
 console.log("Each logical profile gets its own persistent Chrome user-data directory.");
 console.log("Authenticate the intended Google/Gemini account in each opened window.");
-console.log("Passwords and session data remain local; nothing is written to GitHub.\n");
+console.log("Passwords and session data remain local; nothing is written to GitHub.");
+if (requestedIds.length > 0) {
+  console.log(`Selected profiles: ${profiles.map((profile) => profile.id).join(", ")}\n`);
+} else {
+  console.log("Selected profiles: all configured profiles\n");
+}
 
 try {
-  for (const profile of config.profiles) {
+  for (const profile of profiles) {
     const directory = path.isAbsolute(expandWindowsEnv(profile.directory))
       ? expandWindowsEnv(profile.directory)
       : path.resolve(repoRoot, expandWindowsEnv(profile.directory));
