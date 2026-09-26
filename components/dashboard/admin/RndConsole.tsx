@@ -128,7 +128,7 @@ export function RndConsole() {
       <section className="rounded-editorial border border-brand-border bg-brand-surface p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-semibold text-brand-ink">Universal Refinement Regression</h2>
+            <h2 className="font-semibold text-brand-ink">End-to-End R&D Test</h2>
             <p className="mt-1 max-w-2xl text-sm text-brand-muted">
               Queues a fresh Italian Bob regression job for the local Gemini worker. The full
               path is queue → claim → Gemini generation → artifact capture → automated QA →
