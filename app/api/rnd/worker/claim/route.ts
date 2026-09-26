@@ -8,6 +8,7 @@ import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-aut
 export const runtime = "nodejs";
 const RND_HOURLY_GENERATION_LIMIT = 60;
 const RND_MIN_GENERATION_INTERVAL_MS = 60 * 1000;
+const MAX_AUTONOMOUS_ATTEMPTS = Math.max(2, Number(process.env.RND_MAX_AUTONOMOUS_ATTEMPTS ?? 8));
 
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       where: {
         ...baseWhere,
         status: "QUEUED",
+        attemptCount: { lt: MAX_AUTONOMOUS_ATTEMPTS },
         OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
       orderBy: [{ attemptCount: "asc" }, { queuedAt: "desc" }],
