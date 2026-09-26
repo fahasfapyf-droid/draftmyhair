@@ -15,6 +15,38 @@
       "status": "PAUSED",
       "hourlyLimit": 30,
       "minIntervalMs": 120000
+    },
+    {
+      "id": "gemini-3",
+      "label": "Gemini Profile 3",
+      "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-3",
+      "status": "PAUSED",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
+    },
+    {
+      "id": "gemini-4",
+      "label": "Gemini Profile 4",
+      "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-4",
+      "status": "PAUSED",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
+    },
+    {
+      "id": "gemini-5",
+      "label": "Gemini Profile 5",
+      "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-5",
+      "status": "PAUSED",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
+    },
+    {
+      "id": "gemini-6",
+      "label": "Gemini Profile 6",
+      "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-6",
+      "status": "PAUSED",
+      "hourlyLimit": 30,
+      "minIntervalMs": 120000
     }
   ]
 }
