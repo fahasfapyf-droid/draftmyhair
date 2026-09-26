@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, mkdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -9,10 +10,11 @@ type Profile = { id: string; label: string; directory: string; status: string };
 type Config = { profiles: Profile[] };
 
 const GEMINI_URL = "https://gemini.google.com/app";
-const repoRoot = path.resolve(import.meta.dirname, "../..");
+const workerDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(workerDir, "../..");
 const configPath = process.env.RND_GEMINI_PROFILES_FILE
   ? path.resolve(repoRoot, process.env.RND_GEMINI_PROFILES_FILE)
-  : path.resolve(import.meta.dirname, "profiles.json");
+  : path.resolve(workerDir, "profiles.json");
 const chromePath = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
 function expandWindowsEnv(value: string) {
