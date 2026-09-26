@@ -22,6 +22,7 @@ export type RndQaResult = {
   colorAccuracy: number;
   buzzBaldAccuracy: number;
   rootIntegration: number;
+  lightingConsistency: number;
   transformationOnly: "PASS" | "FAIL";
   artifacts: "NONE" | "FOUND";
   applicableCategories: RndQaCategory[];
@@ -64,7 +65,6 @@ const QA_SCHEMA = {
     "buzzBaldAccuracy",
     "rootIntegration",
     "lightingConsistency",
-    "lightingConsistency",
     "transformationOnly",
     "artifacts",
     "applicableCategories",
@@ -81,6 +81,7 @@ const QA_SCHEMA = {
     "colorAccuracy",
     "buzzBaldAccuracy",
     "rootIntegration",
+    "lightingConsistency",
     "transformationOnly",
     "artifacts",
     "applicableCategories",
