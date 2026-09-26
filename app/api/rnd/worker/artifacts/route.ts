@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
   const storageKey = `rnd/attempts/${jobId}/${attemptNumber}-${checksum}.${extension}`;
-  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: file.type });
+  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: file.type });
 
   const asset = await prisma.rnDAsset.upsert({
     where: { storageKey },

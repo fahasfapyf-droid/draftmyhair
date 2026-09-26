@@ -40,9 +40,14 @@ const DEFAULT_HOURLY_LIMIT = Number(process.env.RND_PROFILE_HOURLY_LIMIT ?? 30);
 const DEFAULT_MIN_INTERVAL_MS = Number(process.env.RND_PROFILE_MIN_INTERVAL_MS ?? 120_000);
 const DEFAULT_COOLDOWN_MS = Number(process.env.RND_PROFILE_COOLDOWN_MS ?? 60 * 60 * 1000);
 
+function expandWindowsEnv(value: string): string {
+  return value.replace(/%([^%]+)%/g, (match, name: string) => process.env[name] ?? match);
+}
+
 function normalizeProfile(profile: GeminiProfile): GeminiProfile {
   return {
     ...profile,
+    directory: expandWindowsEnv(profile.directory),
     hourlyLimit: Number.isFinite(profile.hourlyLimit) && profile.hourlyLimit! > 0
       ? profile.hourlyLimit
       : DEFAULT_HOURLY_LIMIT,
@@ -95,6 +100,47 @@ export async function loadGeminiProfiles(): Promise<GeminiProfile[]> {
     }
     throw new Error(`Unable to load Gemini profile configuration: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+export interface GeminiProfileStatusSnapshot {
+  id: string;
+  label: string;
+  configuredStatus: GeminiProfileStatus;
+  effectiveStatus: GeminiProfileStatus | "COOLDOWN";
+  generationCount: number;
+  hourlyLimit: number;
+  lastUsedAt: string | null;
+  cooldownUntil: string | null;
+  lastError: string | null;
+}
+
+export async function getGeminiProfileStatusSnapshot(): Promise<GeminiProfileStatusSnapshot[]> {
+  const profiles = await loadGeminiProfiles();
+  const state = await readState();
+  const now = Date.now();
+
+  return profiles.map((profile) => {
+    const current = stateFor(state, profile.id);
+    current.generationTimestamps = prune(current.generationTimestamps, now);
+    const cooldownUntil = current.cooldownUntil ?? null;
+    const cooldownActive = Boolean(cooldownUntil && Date.parse(cooldownUntil) > now);
+    let effectiveStatus: GeminiProfileStatus | "COOLDOWN" = profile.status;
+    if (current.restricted) effectiveStatus = "RESTRICTED";
+    else if (cooldownActive) effectiveStatus = "COOLDOWN";
+    else if (profile.status === "ACTIVE" && current.generationTimestamps.length >= (profile.hourlyLimit ?? DEFAULT_HOURLY_LIMIT)) effectiveStatus = "EXHAUSTED";
+
+    return {
+      id: profile.id,
+      label: profile.label,
+      configuredStatus: profile.status,
+      effectiveStatus,
+      generationCount: current.generationTimestamps.length,
+      hourlyLimit: profile.hourlyLimit ?? DEFAULT_HOURLY_LIMIT,
+      lastUsedAt: current.lastUsedAt ?? null,
+      cooldownUntil,
+      lastError: current.lastError ?? null,
+    };
+  });
 }
 
 export async function selectGeminiProfile(): Promise<GeminiProfile> {
