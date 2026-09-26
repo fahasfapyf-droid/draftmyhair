@@ -260,7 +260,8 @@ export async function POST(request: Request) {
         select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
-      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus: null };
+      const campaignStatus = await reconcileRndCampaignLifecycle(tx, job.target.campaignId);
+      return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus };
     }
 
     if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
@@ -290,7 +291,8 @@ export async function POST(request: Request) {
       select: { id: true, status: true, attemptCount: true },
     });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
-    return { job: updatedJob, action: "EXHAUSTED" as const, promptDiagnostics: null };
+    const campaignStatus = await reconcileRndCampaignLifecycle(tx, job.target.campaignId);
+    return { job: updatedJob, action: "EXHAUSTED" as const, promptDiagnostics: null, campaignStatus };
   });
 
   return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, campaignStatus: finalResult.campaignStatus ?? null, qa, promptDiagnostics: finalResult.promptDiagnostics });
