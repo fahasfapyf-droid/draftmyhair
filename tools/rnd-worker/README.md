@@ -27,7 +27,7 @@ npm install
 npx playwright install chromium
 ```
 
-The worker uses a local Gemini profile registry. On first startup, `start-rnd-worker.cmd` creates `profiles.json` from `profiles.example.json`; review that file before unattended operation. Each profile points to its own persistent Chrome user-data directory and is selected only when its configured status is ACTIVE and its local usage window permits another generation.
+The worker uses a local Gemini profile registry. The registry maps each logical worker profile to a separate Chrome `--user-data-dir`; that directory is the actual authenticated Gemini session. Run `setup-gemini-profiles.cmd` once on the Windows worker PC to create the isolated directories and authenticate each intended Google/Gemini account interactively. The worker never stores Google passwords or session tokens in the repository. On first startup, `start-rnd-worker.cmd` creates `profiles.json` from `profiles.example.json`; review that file before unattended operation. Each profile points to its own persistent Chrome user-data directory and is selected only when its configured status is ACTIVE and its local usage window permits another generation.
 
 Profile state is stored locally in `profile-state.json` and is not committed. The worker uses a default limit of 30 generations/hour and a 2-minute minimum interval per profile. These can be overridden per profile or with `RND_PROFILE_HOURLY_LIMIT`, `RND_PROFILE_MIN_INTERVAL_MS`, and `RND_PROFILE_COOLDOWN_MS`.
 
