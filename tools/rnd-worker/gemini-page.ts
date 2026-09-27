@@ -303,7 +303,7 @@ async function modelResponseImages(page: Page): Promise<string[] | null> {
     }
   }
 
-  return [];
+  return null;
 }
 
 export async function waitForGeneratedImage(page: Page, before: Set<string>) {
