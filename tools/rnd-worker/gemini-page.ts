@@ -275,7 +275,7 @@ export async function largeImages(page: Page): Promise<string[]> {
     .map((item) => item.src));
 }
 
-async function modelResponseImages(page: Page): Promise<string[]> {
+async function modelResponseImages(page: Page): Promise<string[] | null> {
   const responseSelectors = [
     '[data-test-id="model-response"]',
     '.model-response',
@@ -313,16 +313,18 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>) {
 
   while (Date.now() < deadline) {
     const responseSources = await modelResponseImages(page);
-    const generatedResponseSource = responseSources.find((src) => !before.has(src));
-    if (generatedResponseSource) {
-      console.log("New generated image detected in the latest Gemini model response.");
-      return generatedResponseSource;
-    }
-
-    const newSources = (await largeImages(page)).filter((src) => !before.has(src));
-    if (newSources.length === 1) {
-      console.log("New generated image detected via compatibility fallback.");
-      return newSources[0];
+    if (responseSources) {
+      const generatedResponseSource = responseSources.find((src) => !before.has(src));
+      if (generatedResponseSource) {
+        console.log("New generated image detected in the latest Gemini model response.");
+        return generatedResponseSource;
+      }
+    } else {
+      const newSources = (await largeImages(page)).filter((src) => !before.has(src));
+      if (newSources.length === 1) {
+        console.log("New generated image detected via compatibility fallback.");
+        return newSources[0];
+      }
     }
 
     if (Date.now() - lastLog >= 10_000) {
