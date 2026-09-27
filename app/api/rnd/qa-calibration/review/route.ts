@@ -25,7 +25,10 @@ export async function GET(request: Request) {
   const reviewerKey = new URL(request.url).searchParams.get("reviewerKey")?.trim() ?? "";
   if (!reviewerKey) return json({ error: "reviewerKey is required." }, 400);
 
-  const attempt = await prisma.rnDAttempt.findFirst({
+  // Calibration must only expose approvals produced by the current hard-gate
+  // contract. Older HUMAN_APPROVAL attempts may predate the transformation gate
+  // and can contain source-like artifacts that were incorrectly approved.
+  const candidates = await prisma.rnDAttempt.findMany({
     where: {
       verdict: "HUMAN_APPROVAL",
       artifactId: { not: null },
@@ -39,10 +42,12 @@ export async function GET(request: Request) {
       },
     },
     orderBy: { submittedAt: "asc" },
+    take: 50,
     select: {
       id: true,
       attemptNumber: true,
       artifactId: true,
+      qaJson: true,
       job: {
         select: {
           target: {
@@ -53,6 +58,18 @@ export async function GET(request: Request) {
         },
       },
     },
+  });
+
+  const attempt = candidates.find((candidate) => {
+    const qa = candidate.qaJson;
+    if (!qa || typeof qa !== "object" || Array.isArray(qa)) return false;
+    const gate = (qa as { transformationGate?: unknown }).transformationGate;
+    return Boolean(
+      gate &&
+      typeof gate === "object" &&
+      !Array.isArray(gate) &&
+      (gate as { passed?: unknown }).passed === true,
+    );
   });
 
   if (!attempt?.artifactId) return json({ available: false });
