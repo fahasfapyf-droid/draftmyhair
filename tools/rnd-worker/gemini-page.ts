@@ -296,6 +296,7 @@ async function modelResponseImages(page: Page): Promise<string[] | null> {
         'single-image[data-image-attachment-index] img',
         'img.image[data-gwr-response-id]',
         'img[alt*="AI generated" i]',
+        'img[alt*="Generated image" i]',
       ];
 
       for (const imageSelector of generatedSelectors) {
