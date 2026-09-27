@@ -275,17 +275,56 @@ export async function largeImages(page: Page): Promise<string[]> {
     .map((item) => item.src));
 }
 
+async function modelResponseImages(page: Page): Promise<string[]> {
+  const responseSelectors = [
+    '[data-test-id="model-response"]',
+    '.model-response',
+    '.gemini-response',
+  ];
+
+  for (const selector of responseSelectors) {
+    const responses = page.locator(selector);
+    const count = await responses.count();
+    if (!count) continue;
+
+    for (let i = count - 1; i >= 0; i -= 1) {
+      const response = responses.nth(i);
+      const sources = await response.locator("img").evaluateAll((images) =>
+        images
+          .map((img) => ({
+            src: (img as HTMLImageElement).currentSrc || (img as HTMLImageElement).src,
+            area: (img as HTMLImageElement).naturalWidth * (img as HTMLImageElement).naturalHeight,
+          }))
+          .filter((item) => item.src && item.area >= 512 * 512)
+          .sort((a, b) => b.area - a.area)
+          .map((item) => item.src),
+      );
+      if (sources.length) return sources;
+    }
+  }
+
+  return [];
+}
+
 export async function waitForGeneratedImage(page: Page, before: Set<string>) {
   await pause(3_500, "Gemini is processing the request");
   const deadline = Date.now() + 180_000;
   let lastLog = 0;
 
   while (Date.now() < deadline) {
-    const sources = await largeImages(page);
-    if (sources.some((src) => !before.has(src))) {
-      console.log("New generated image detected in Gemini.");
-      return;
+    const responseSources = await modelResponseImages(page);
+    const generatedResponseSource = responseSources.find((src) => !before.has(src));
+    if (generatedResponseSource) {
+      console.log("New generated image detected in the latest Gemini model response.");
+      return generatedResponseSource;
     }
+
+    const newSources = (await largeImages(page)).filter((src) => !before.has(src));
+    if (newSources.length === 1) {
+      console.log("New generated image detected via compatibility fallback.");
+      return newSources[0];
+    }
+
     if (Date.now() - lastLog >= 10_000) {
       console.log("Still waiting for Gemini to finish processing...");
       lastLog = Date.now();
@@ -296,13 +335,12 @@ export async function waitForGeneratedImage(page: Page, before: Set<string>) {
   throw new Error("Timed out waiting for a new generated image from Gemini.");
 }
 
-export async function captureGeneratedImage(page: Page, outputPath: string, before: Set<string>) {
+export async function captureGeneratedImage(page: Page, outputPath: string, source: string) {
   // Do not click Gemini download controls here. In the persistent Gemini
   // profile those controls can close/navigate the worker page while the
-  // generated asset is still available in the DOM. Capture the generated
-  // asset directly instead.
-  const source = (await largeImages(page)).find((src) => !before.has(src));
-  if (!source) throw new Error("Gemini returned no new downloadable image asset.");
+  // generated asset is still available in the DOM. Capture the exact source
+  // selected by waitForGeneratedImage instead of rescanning the whole page.
+  if (!source) throw new Error("Gemini returned no generated image asset.");
 
   if (source.startsWith("data:")) {
     const base64 = source.split(",", 2)[1];
