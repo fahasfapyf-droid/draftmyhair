@@ -277,6 +277,7 @@ export async function largeImages(page: Page): Promise<string[]> {
 
 async function modelResponseImages(page: Page): Promise<string[] | null> {
   const responseSelectors = [
+    'model-response',
     '[data-test-id="model-response"]',
     '.model-response',
     '.gemini-response',
@@ -289,6 +290,31 @@ async function modelResponseImages(page: Page): Promise<string[] | null> {
 
     for (let i = count - 1; i >= 0; i -= 1) {
       const response = responses.nth(i);
+      const generatedSelectors = [
+        'generated-image img',
+        'single-image.generated-image img',
+        'single-image[data-image-attachment-index] img',
+        'img.image[data-gwr-response-id]',
+        'img[alt*="AI generated" i]',
+      ];
+
+      for (const imageSelector of generatedSelectors) {
+        const generated = response.locator(imageSelector);
+        if (await generated.count()) {
+          const sources = await generated.evaluateAll((images) =>
+            images
+              .map((img) => ({
+                src: (img as HTMLImageElement).currentSrc || (img as HTMLImageElement).src,
+                area: (img as HTMLImageElement).naturalWidth * (img as HTMLImageElement).naturalHeight,
+              }))
+              .filter((item) => item.src && item.area >= 512 * 512)
+              .sort((a, b) => b.area - a.area)
+              .map((item) => item.src),
+          );
+          if (sources.length) return sources;
+        }
+      }
+
       const sources = await response.locator("img").evaluateAll((images) =>
         images
           .map((img) => ({
