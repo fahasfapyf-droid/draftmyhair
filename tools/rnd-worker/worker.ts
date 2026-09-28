@@ -248,7 +248,7 @@ async function launchWorkerContext(): Promise<BrowserContext> {
 }
 
 async function createWorkerPage(context: BrowserContext): Promise<import("playwright").Page> {
-  const page = await context.newPage({ timeout: 30_000 });
+  const page = await context.newPage();
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
   return page;
 }
