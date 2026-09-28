@@ -55,9 +55,10 @@ export async function freshChat(page: Page) {
 }
 
 export async function selectGemini31Pro(page: Page) {
-  // Gemini currently exposes the model family through a mode picker.
-  // Prefer the stable picker aria-label over the displayed current mode name,
-  // because the label changes from Flash-Lite/Pro/etc. after selection.
+  // Gemini currently exposes model selection through a mode picker.
+  // The picker uses custom GEM-MENU/GEM-MENU-ITEM elements and does not
+  // reliably expose aria-selected/aria-checked, so verification must use
+  // the picker button's post-selection current-mode state.
   const modelPicker = await firstVisible([
     page.getByRole("button", { name: /open mode picker/i }),
     page.locator('button[aria-label^="Open mode picker" i]'),
@@ -70,68 +71,35 @@ export async function selectGemini31Pro(page: Page) {
   await modelPicker.click({ timeout: 10_000 });
   await page.waitForTimeout(500);
 
+  // The mode option IDs are dynamic. Match the stable semantic role/text
+  // instead of a volatile data-test-id suffix.
   const target = await firstVisible([
-    page.getByText("3.1 Pro", { exact: true }),
+    page.locator('gem-menu-item[role="menuitem"]').filter({ hasText: /3\.1 Pro/i }),
     page.getByRole("menuitem", { name: /3\.1 Pro/i }),
-    page.getByRole("option", { name: /3\.1 Pro/i }),
-    page.locator('[role="menuitemradio"]').filter({ hasText: "3.1 Pro" }),
+    page.getByText("3.1 Pro", { exact: true }),
   ]);
 
-  const targetContainer = target.locator(
-    "xpath=ancestor::*[@role='menuitemradio' or @role='menuitem' or @role='option'][1]"
-  );
-
-  const selectedBefore = await targetContainer.count() > 0
-    ? await targetContainer.getAttribute("aria-checked").catch(() => null) === "true" ||
-      await targetContainer.getAttribute("aria-selected").catch(() => null) === "true"
-    : false;
-
-  if (!selectedBefore) {
-    await target.click({ timeout: 10_000 });
-    await page.waitForTimeout(700);
+  const targetText = (await target.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+  if (!/3\.1 Pro/i.test(targetText)) {
+    throw new Error("Gemini 3.1 Pro mode option was not identified.");
   }
 
-  // Re-open the picker using the stable aria-label prefix; the current-mode
-  // text in the accessible name may have changed after selecting 3.1 Pro.
+  await target.click({ timeout: 10_000 });
+  await page.waitForTimeout(1_000);
+
+  // Gemini's current picker exposes the selected mode through the button's
+  // accessible name, e.g. "Open mode picker, currently Pro".
   const verifiedPicker = await firstVisible([
     page.getByRole("button", { name: /open mode picker/i }),
     page.locator('button[aria-label^="Open mode picker" i]'),
     page.locator('[role="button"][aria-label^="Open mode picker" i]'),
   ]);
-  await verifiedPicker.click({ timeout: 10_000 });
-  await page.waitForTimeout(400);
+  const ariaLabel = await verifiedPicker.getAttribute("aria-label").catch(() => null);
 
-  const selectedRows = page.locator(
-    '[role="menuitemradio"][aria-checked="true"], ' +
-    '[role="menuitemradio"][aria-selected="true"], ' +
-    '[role="option"][aria-selected="true"], ' +
-    '[role="menuitem"][aria-checked="true"], ' +
-    '[role="menuitem"][aria-selected="true"]'
-  );
-
-  let verified = false;
-  for (let i = 0; i < await selectedRows.count(); i += 1) {
-    const row = selectedRows.nth(i);
-    const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
-    if (/^3\.1 Pro(?:\s|$)/i.test(text) || /3\.1 Pro/i.test(text)) {
-      verified = true;
-      break;
-    }
-  }
-
-  if (!verified) {
-    // Some Gemini builds expose the checkmark visually without aria-selected.
-    // Inspect the 3.1 Pro row itself for an explicit checked/selected state.
-    const targetRow = page.getByText("3.1 Pro", { exact: true }).locator(
-      "xpath=ancestor::*[@role='menuitemradio' or @role='menuitem' or @role='option'][1]"
+  if (!ariaLabel || !/currently\s+Pro$/i.test(ariaLabel.trim())) {
+    throw new Error(
+      `Gemini model selection verification failed: expected current mode Pro, got ${ariaLabel ?? "no picker aria-label"}.`,
     );
-    const checked = await targetRow.getAttribute("aria-checked").catch(() => null);
-    const selected = await targetRow.getAttribute("aria-selected").catch(() => null);
-    verified = checked === "true" || selected === "true";
-  }
-
-  if (!verified) {
-    throw new Error("Gemini model selection verification failed: 3.1 Pro is not confirmed selected.");
   }
 
   await page.keyboard.press("Escape").catch(() => undefined);
