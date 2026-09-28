@@ -40,8 +40,9 @@ function appendRefinement(prompt: string, refinement: string, attemptNumber: num
       ? [
           "This is a repeated defect from an earlier generation.",
           "Do not merely restate or subtly imply the requested correction.",
-          "Make the diagnosed characteristic visually explicit and materially stronger in the generated hairstyle.",
-          "Increase only the strength, clarity, or precision of that existing characteristic; do not change the haircut category, length, silhouette, or any other passing requirement.",
+          "Make the diagnosed defect visually explicit and materially stronger in the next generation.",
+          "The diagnosed defect is the only property that may be materially changed.",
+          "All properties not identified as defective remain locked to the authoritative definition and all previously passing requirements.",
         ]
       : [];
 
@@ -53,9 +54,12 @@ function appendRefinement(prompt: string, refinement: string, attemptNumber: num
     "# TARGETED REFINEMENT",
     "",
     "Change only the observed defect described below.",
-    "Preserve every passing requirement from the authoritative hairstyle definition.",
-    "Do not reinterpret, redesign, replace, or broaden the requested hairstyle.",
-    "Do not introduce any hairstyle characteristic that is not already supported by the authoritative definition.",
+    "The diagnosed defect is an explicit authorization to modify the affected property as necessary to correct it.",
+    "This rule is transformation-type agnostic and applies equally to haircut/hairstyle shape, length, silhouette, texture, density, volume, styling, hair color or dye, beard design, facial-hair density, buzz-cut geometry, bald/shaved treatment, or any other property explicitly identified by QA.",
+    "Preserve every requirement that QA did not identify as defective.",
+    "Do not reinterpret, redesign, replace, or broaden the requested transformation.",
+    "Do not introduce a new characteristic that is not supported by the authoritative definition.",
+    "If correcting the diagnosed defect necessarily requires changing a dependent visual property, make only the minimum dependent change required for the correction while preserving all unrelated passing properties.",
     ...escalation,
     "",
     refinement.trim(),
