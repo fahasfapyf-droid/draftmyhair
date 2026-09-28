@@ -1,5 +1,5 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
+import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, selectGemini31Pro, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -182,6 +182,7 @@ async function processJob(page: Page, job: ClaimedJob) {
     await openGemini(page);
     await assertReady(page);
     await freshChat(page);
+    await selectGemini31Pro(page);
     await openImageGenerationMode(page);
     await uploadReference(page, sourcePath);
     const before = new Set(await largeImages(page));
