@@ -55,10 +55,13 @@ export async function freshChat(page: Page) {
 }
 
 export async function selectGemini31Pro(page: Page) {
-  // Gemini's current model picker exposes the active family as a compact
-  // "Pro" control and the concrete models inside its popup. Do not rely on
-  // the browser profile remembering the last selected model.
+  // Gemini currently exposes the model family through a mode picker.
+  // Prefer the stable picker aria-label over the displayed current mode name,
+  // because the label changes from Flash-Lite/Pro/etc. after selection.
   const modelPicker = await firstVisible([
+    page.getByRole("button", { name: /open mode picker/i }),
+    page.locator('button[aria-label^="Open mode picker" i]'),
+    page.locator('[role="button"][aria-label^="Open mode picker" i]'),
     page.getByRole("button", { name: /^Pro$/i }),
     page.locator('button[aria-label*="model" i]'),
     page.locator('[role="button"][aria-label*="model" i]'),
@@ -88,8 +91,14 @@ export async function selectGemini31Pro(page: Page) {
     await page.waitForTimeout(700);
   }
 
-  // Re-open the picker and verify that Gemini reports 3.1 Pro as selected.
-  await modelPicker.click({ timeout: 10_000 });
+  // Re-open the picker using the stable aria-label prefix; the current-mode
+  // text in the accessible name may have changed after selecting 3.1 Pro.
+  const verifiedPicker = await firstVisible([
+    page.getByRole("button", { name: /open mode picker/i }),
+    page.locator('button[aria-label^="Open mode picker" i]'),
+    page.locator('[role="button"][aria-label^="Open mode picker" i]'),
+  ]);
+  await verifiedPicker.click({ timeout: 10_000 });
   await page.waitForTimeout(400);
 
   const selectedRows = page.locator(
@@ -103,8 +112,8 @@ export async function selectGemini31Pro(page: Page) {
   let verified = false;
   for (let i = 0; i < await selectedRows.count(); i += 1) {
     const row = selectedRows.nth(i);
-    const text = (await row.innerText().catch(() => "")).replace(/\\s+/g, " ").trim();
-    if (/^3\.1 Pro(?:\\s|$)/i.test(text) || /3\.1 Pro/i.test(text)) {
+    const text = (await row.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    if (/^3\.1 Pro(?:\s|$)/i.test(text) || /3\.1 Pro/i.test(text)) {
       verified = true;
       break;
     }
@@ -125,7 +134,6 @@ export async function selectGemini31Pro(page: Page) {
     throw new Error("Gemini model selection verification failed: 3.1 Pro is not confirmed selected.");
   }
 
-  // Close the picker without changing the verified selection.
   await page.keyboard.press("Escape").catch(() => undefined);
   console.log("Gemini model verified: 3.1 Pro.");
 }
@@ -299,7 +307,7 @@ export async function uploadReference(page: Page, imagePath: string) {
     })
     .map((element) => ({
       tag: element.tagName,
-      text: (element.textContent ?? "").trim().replace(/\\s+/g, " ").slice(0, 120),
+      text: (element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 120),
       aria: element.getAttribute("aria-label"),
       testId: element.getAttribute("data-test-id"),
     }))
