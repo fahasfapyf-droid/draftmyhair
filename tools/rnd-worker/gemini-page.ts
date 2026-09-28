@@ -54,6 +54,82 @@ export async function freshChat(page: Page) {
   } catch {}
 }
 
+export async function selectGemini31Pro(page: Page) {
+  // Gemini's current model picker exposes the active family as a compact
+  // "Pro" control and the concrete models inside its popup. Do not rely on
+  // the browser profile remembering the last selected model.
+  const modelPicker = await firstVisible([
+    page.getByRole("button", { name: /^Pro$/i }),
+    page.locator('button[aria-label*="model" i]'),
+    page.locator('[role="button"][aria-label*="model" i]'),
+  ]);
+
+  await modelPicker.click({ timeout: 10_000 });
+  await page.waitForTimeout(500);
+
+  const target = await firstVisible([
+    page.getByText("3.1 Pro", { exact: true }),
+    page.getByRole("menuitem", { name: /3\.1 Pro/i }),
+    page.getByRole("option", { name: /3\.1 Pro/i }),
+    page.locator('[role="menuitemradio"]').filter({ hasText: "3.1 Pro" }),
+  ]);
+
+  const targetContainer = target.locator(
+    "xpath=ancestor::*[@role='menuitemradio' or @role='menuitem' or @role='option'][1]"
+  );
+
+  const selectedBefore = await targetContainer.count() > 0
+    ? await targetContainer.getAttribute("aria-checked").catch(() => null) === "true" ||
+      await targetContainer.getAttribute("aria-selected").catch(() => null) === "true"
+    : false;
+
+  if (!selectedBefore) {
+    await target.click({ timeout: 10_000 });
+    await page.waitForTimeout(700);
+  }
+
+  // Re-open the picker and verify that Gemini reports 3.1 Pro as selected.
+  await modelPicker.click({ timeout: 10_000 });
+  await page.waitForTimeout(400);
+
+  const selectedRows = page.locator(
+    '[role="menuitemradio"][aria-checked="true"], ' +
+    '[role="menuitemradio"][aria-selected="true"], ' +
+    '[role="option"][aria-selected="true"], ' +
+    '[role="menuitem"][aria-checked="true"], ' +
+    '[role="menuitem"][aria-selected="true"]'
+  );
+
+  let verified = false;
+  for (let i = 0; i < await selectedRows.count(); i += 1) {
+    const row = selectedRows.nth(i);
+    const text = (await row.innerText().catch(() => "")).replace(/\\s+/g, " ").trim();
+    if (/^3\.1 Pro(?:\\s|$)/i.test(text) || /3\.1 Pro/i.test(text)) {
+      verified = true;
+      break;
+    }
+  }
+
+  if (!verified) {
+    // Some Gemini builds expose the checkmark visually without aria-selected.
+    // Inspect the 3.1 Pro row itself for an explicit checked/selected state.
+    const targetRow = page.getByText("3.1 Pro", { exact: true }).locator(
+      "xpath=ancestor::*[@role='menuitemradio' or @role='menuitem' or @role='option'][1]"
+    );
+    const checked = await targetRow.getAttribute("aria-checked").catch(() => null);
+    const selected = await targetRow.getAttribute("aria-selected").catch(() => null);
+    verified = checked === "true" || selected === "true";
+  }
+
+  if (!verified) {
+    throw new Error("Gemini model selection verification failed: 3.1 Pro is not confirmed selected.");
+  }
+
+  // Close the picker without changing the verified selection.
+  await page.keyboard.press("Escape").catch(() => undefined);
+  console.log("Gemini model verified: 3.1 Pro.");
+}
+
 export async function openImageGenerationMode(page: Page) {
   const existingComposer = page.locator('textarea, [contenteditable="true"]');
   if (await existingComposer.count() > 0 && await existingComposer.first().isVisible().catch(() => false)) {
