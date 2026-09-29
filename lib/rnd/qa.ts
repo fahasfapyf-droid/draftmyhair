@@ -320,8 +320,6 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   result.overall = Math.min(
     ...applicableCategories.map(scoreFor),
     result.rootIntegration,
-    result.lightingConsistency,
-    result.identity,
   );
 
   // Numeric judge scores and deterministic gates are authoritative.
