@@ -13,8 +13,8 @@ export default async function RndApprovalPage() {
 
   return (
     <DashboardLayout
-      title="R&D Approval Queue"
-      description="Approve or reject automated hairstyle transformations that have passed the R&D QA gate."
+      title="R&D Approval & History"
+      description="Review automated R&D transformations that passed QA and inspect the complete approved-generation record."
       sidebar={<AdminSidebar />}
     >
       <RndApprovalQueue />
