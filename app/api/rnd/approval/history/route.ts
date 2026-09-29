@@ -11,15 +11,12 @@ export async function GET() {
   }
 
   const attempts = await prisma.rnDAttempt.findMany({
-    where: {
-      verdict: "APPROVED",
-    },
-    orderBy: {
-      generationCompletedAt: "desc",
-    },
+    where: { verdict: "APPROVED" },
+    orderBy: { generationCompletedAt: "desc" },
     select: {
       id: true,
       attemptNumber: true,
+      prompt: true,
       promptRevision: true,
       overallScore: true,
       verdict: true,
@@ -27,6 +24,7 @@ export async function GET() {
       generationStartedAt: true,
       generationCompletedAt: true,
       artifactId: true,
+      qaJson: true,
       job: {
         select: {
           id: true,
@@ -43,22 +41,30 @@ export async function GET() {
     },
   });
 
-  const history = attempts.map((attempt) => ({
-    id: attempt.id,
-    jobId: attempt.job.id,
-    attemptNumber: attempt.attemptNumber,
-    promptRevision: attempt.promptRevision,
-    overallScore: attempt.overallScore,
-    submittedAt: attempt.submittedAt,
-    generationStartedAt: attempt.generationStartedAt,
-    generationCompletedAt: attempt.generationCompletedAt,
-    approvalCompletedAt: attempt.job.completedAt,
-    artifactId: attempt.artifactId,
-    artifactViewPath: attempt.artifactId
-      ? `/api/rnd/approval/artifact?artifactId=${encodeURIComponent(attempt.artifactId)}`
-      : null,
-    target: attempt.job.target,
-  }));
+  const history = attempts.map((attempt) => {
+    const qa = attempt.qaJson && typeof attempt.qaJson === "object"
+      ? attempt.qaJson as Record<string, unknown>
+      : null;
+
+    return {
+      id: attempt.id,
+      jobId: attempt.job.id,
+      attemptNumber: attempt.attemptNumber,
+      prompt: attempt.prompt,
+      promptRevision: attempt.promptRevision,
+      overallScore: attempt.overallScore,
+      submittedAt: attempt.submittedAt,
+      generationStartedAt: attempt.generationStartedAt,
+      generationCompletedAt: attempt.generationCompletedAt,
+      approvalCompletedAt: attempt.job.completedAt,
+      artifactId: attempt.artifactId,
+      artifactViewPath: attempt.artifactId
+        ? `/api/rnd/approval/artifact?artifactId=${encodeURIComponent(attempt.artifactId)}`
+        : null,
+      qaReason: typeof qa?.reason === "string" ? qa.reason : "",
+      target: attempt.job.target,
+    };
+  });
 
   return NextResponse.json(
     { history },
