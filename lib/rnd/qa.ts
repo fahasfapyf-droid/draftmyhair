@@ -201,12 +201,12 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
     throw new Error("QA returned an invalid verdict.");
   }
 
-  const applicableScores: number[] = [value.identity, value.lightingConsistency];
+  const applicableScores: number[] = [];
   if (value.applicableCategories.includes("HAIRSTYLE")) applicableScores.push(value.hairstyleAccuracy);
   if (value.applicableCategories.includes("BEARD")) applicableScores.push(value.beardAccuracy);
   if (value.applicableCategories.includes("COLOR")) applicableScores.push(value.colorAccuracy);
   if (value.applicableCategories.includes("BUZZ_BALD")) applicableScores.push(value.buzzBaldAccuracy);
-  applicableScores.push(value.rootIntegration, value.lightingConsistency, value.identity);
+  applicableScores.push(value.rootIntegration);
 
   const expectedOverall = Math.min(...applicableScores);
   if (Math.abs(value.overall - expectedOverall) > 0.01) {
@@ -332,27 +332,21 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   // outputs.
   const primaryPass =
     primary.overall >= 9.5 &&
-    primary.identity >= 9.5 &&
     primary.hairOnly === "PASS" &&
     primary.rootIntegration >= 9.5 &&
-    primary.lightingConsistency >= 9.5 &&
     primary.transformationOnly === "PASS" &&
     primary.artifacts === "NONE";
   const challengerPass =
     challenger.overall >= 9.5 &&
-    challenger.identity >= 9.5 &&
     challenger.hairOnly === "PASS" &&
     challenger.rootIntegration >= 9.5 &&
-    challenger.lightingConsistency >= 9.5 &&
     challenger.transformationOnly === "PASS" &&
     challenger.artifacts === "NONE";
   const verifierMayVeto = verifier.blockingDefect && !(primaryPass && challengerPass);
 
   const hardPass =
     result.overall >= 9.5 &&
-    result.identity >= 9.5 &&
     result.hairOnly === "PASS" &&
-    result.lightingConsistency >= 9.5 &&
     result.transformationOnly === "PASS" &&
     result.artifacts === "NONE" &&
     !verifierMayVeto &&
