@@ -75,10 +75,24 @@ export async function POST(request: Request) {
     });
     if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
 
-    const authoritativeStylePrompt = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
+    // The active Content Library PromptVersion is the authoritative R&D style source.
+    // Fall back to the compiled source prompt only when no active database version exists.
+    const databaseStyle = await tx.promptVersion.findFirst({
+      where: {
+        status: "ACTIVE",
+        hairstyleId: target.hairstyleId,
+      },
+      orderBy: { version: "desc" },
+      select: { prompt: true, version: true },
+    });
+    const compiledStyle = STYLE_PROMPTS[hairstyle.promptKey];
+    const authoritativeStylePrompt = databaseStyle?.prompt ?? compiledStyle?.prompt;
     if (!authoritativeStylePrompt) {
       throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
     }
+    const authoritativeStyleSource = databaseStyle
+      ? `database-v${databaseStyle.version}`
+      : "compiled";
 
     const latestAttempt = await tx.rnDAttempt.findFirst({
       where: { jobId: candidate.id },
@@ -134,7 +148,7 @@ export async function POST(request: Request) {
           jobId: candidate.id,
           attemptNumber,
           prompt: authoritativePrompt,
-          promptRevision: "reserved",
+          promptRevision: authoritativeStyleSource,
           submittedAt: now,
           verdict: "REFINE",
         },
