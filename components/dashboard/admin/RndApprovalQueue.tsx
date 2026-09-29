@@ -13,6 +13,7 @@ type Attempt = {
   overallScore: number | string | null;
   verdict: string;
   submittedAt: string | null;
+  generationCompletedAt: string | null;
 };
 
 type Job = {
@@ -89,6 +90,7 @@ export function RndApprovalQueue() {
   const [notice, setNotice] = useState("");
   const [expandedPromptJobId, setExpandedPromptJobId] = useState<string | null>(null);
   const [expandedHistoryPromptId, setExpandedHistoryPromptId] = useState<string | null>(null);
+  const [queueAgeFilter, setQueueAgeFilter] = useState<"ALL" | "TODAY" | "1D" | "3D" | "7D" | "30D" | "OLDER">("ALL");
 
   const load = useCallback(async () => {
     const [queueResult, historyResult] = await Promise.allSettled([
@@ -178,6 +180,29 @@ export function RndApprovalQueue() {
     }
   }
 
+  const filteredJobs = jobs.filter((job) => {
+    if (queueAgeFilter === "ALL") return true;
+    const attempt = job.attempts[0];
+    const rawDate = attempt?.generationCompletedAt ?? attempt?.submittedAt ?? job.updatedAt;
+    const generatedAt = new Date(rawDate).getTime();
+    if (!Number.isFinite(generatedAt)) return false;
+
+    const now = new Date();
+    const generatedDate = new Date(generatedAt);
+    if (queueAgeFilter === "TODAY") {
+      return generatedDate.getFullYear() === now.getFullYear()
+        && generatedDate.getMonth() === now.getMonth()
+        && generatedDate.getDate() === now.getDate();
+    }
+
+    const ageDays = (Date.now() - generatedAt) / 86_400_000;
+    if (queueAgeFilter === "1D") return ageDays <= 1;
+    if (queueAgeFilter === "3D") return ageDays <= 3;
+    if (queueAgeFilter === "7D") return ageDays <= 7;
+    if (queueAgeFilter === "30D") return ageDays <= 30;
+    return ageDays > 30;
+  });
+
   if (loading) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -193,23 +218,45 @@ export function RndApprovalQueue() {
       ) : null}
 
       <section className="space-y-5">
-        <div>
-          <h2 className="text-xl font-semibold">Awaiting human approval</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Only automated R&D results that passed the production QA gate appear here.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Awaiting human approval</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Only automated R&D results that passed the production QA gate appear here.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Generated</span>
+            <select
+              value={queueAgeFilter}
+              onChange={(event) => setQueueAgeFilter(event.target.value as typeof queueAgeFilter)}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium"
+            >
+              <option value="ALL">All pending</option>
+              <option value="TODAY">Today</option>
+              <option value="1D">Last 1 day</option>
+              <option value="3D">Last 3 days</option>
+              <option value="7D">Last 7 days</option>
+              <option value="30D">Last 30 days</option>
+              <option value="OLDER">Older than 30 days</option>
+            </select>
+          </label>
         </div>
 
-        {jobs.length === 0 ? (
+        {filteredJobs.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-8 text-center">
-            <h3 className="text-lg font-semibold">No results awaiting approval</h3>
+            <h3 className="text-lg font-semibold">
+              {jobs.length === 0 ? "No results awaiting approval" : "No results match this age filter"}
+            </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              When automated QA passes a result at the production gate, it will appear here.
+              {jobs.length === 0
+                ? "When automated QA passes a result at the production gate, it will appear here."
+                : "Choose another generation-age filter to view the remaining pending results."}
             </p>
           </div>
         ) : (
           <div className="space-y-8">
-            {jobs.map((job) => {
+            {filteredJobs.map((job) => {
               const attempt = job.attempts[0];
               const disabled = busyJobId === job.id;
 
