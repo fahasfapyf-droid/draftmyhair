@@ -122,3 +122,32 @@ test("beardAccuracy and colorAccuracy regressions are protected", () => {
     assert.ok(result.evidence.regressedDimensions.includes(dimension));
   }
 });
+
+test("combined jaw-level silhouette and density diagnosis selects silhouette correction", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "Lack of a distinct rounded/compact silhouette, insufficient substantial jaw-level volume, and insufficient side density; strengthen the inward contour.",
+    qa: qa({ hairstyleAccuracy: 4 }),
+    history: [],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+
+  assert.equal(result.category, "SILHOUETTE");
+  assert.equal(result.strategy, "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR");
+  assert.match(result.instruction ?? "", /rounded, compact jaw-level silhouette/);
+  assert.match(result.instruction ?? "", /inward side contour/);
+  assert.match(result.instruction ?? "", /Preserve the current hair length/);
+});
+
+test("volume-only diagnosis keeps localized volume strategy", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "Insufficient substantial jaw-level volume and side density.",
+    qa: qa({ hairstyleAccuracy: 4 }),
+    history: [],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+
+  assert.equal(result.category, "VOLUME");
+  assert.equal(result.strategy, "VOLUME_INCREASE_LOCALIZED");
+});
