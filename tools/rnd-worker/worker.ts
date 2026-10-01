@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 
 const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-canonical-rnd-system-v1-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
+const VERCEL_PROTECTION_BYPASS_SECRET =
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim() ||
+  process.env.VERCEL_PROTECTION_BYPASS_SECRET?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
@@ -69,6 +72,9 @@ async function api(pathname: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${WORKER_TOKEN}`);
   headers.set("X-RND-Worker-Id", await workerId());
+  if (VERCEL_PROTECTION_BYPASS_SECRET) {
+    headers.set("x-vercel-protection-bypass", VERCEL_PROTECTION_BYPASS_SECRET);
+  }
   const response = await fetch(`${API_BASE}${pathname}`, { ...init, headers });
   return response;
 }
