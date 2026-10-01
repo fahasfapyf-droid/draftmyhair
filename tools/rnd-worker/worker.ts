@@ -10,7 +10,11 @@ const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
-const PROFILE_DIR = path.resolve(REPO_ROOT, "tools", "gemini-web-agent", "chrome-profile");
+const PROFILE_DIR = process.env.DMH_GEMINI_PROFILE_DIR
+  ? (path.isAbsolute(process.env.DMH_GEMINI_PROFILE_DIR)
+      ? process.env.DMH_GEMINI_PROFILE_DIR
+      : path.resolve(REPO_ROOT, process.env.DMH_GEMINI_PROFILE_DIR))
+  : path.resolve(REPO_ROOT, "tools", "gemini-web-agent", "chrome-profile");
 const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR
   ? (path.isAbsolute(process.env.DMH_RND_OUTPUT_DIR) ? process.env.DMH_RND_OUTPUT_DIR : path.resolve(REPO_ROOT, process.env.DMH_RND_OUTPUT_DIR))
   : path.resolve(WORKER_DIR, "output");

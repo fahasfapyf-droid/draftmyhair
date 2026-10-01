@@ -1,8 +1,8 @@
 export type AdaptiveAction = "REFINE" | "HUMAN_REVIEW" | "EXHAUSTED";
 export type DefectCategory = "VOLUME" | "SILHOUETTE" | "LENGTH" | "TEXTURE" | "ROOT" | "COLOR" | "BEARD" | "ARTIFACT" | "UNKNOWN";
 export type AdaptiveStrategy =
-  | "VOLUME_INCREASE_LOCALIZED" | "VOLUME_REDUCE_EXCESS"
-  | "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR" | "SILHOUETTE_REDUCE_EXCESS_ROUNDING"
+  | "VOLUME_INCREASE_LOCALIZED" | "VOLUME_DENSITY_REINFORCE" | "VOLUME_REDUCE_EXCESS" | "VOLUME_COMPACT_REDUCE"
+  | "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR" | "SILHOUETTE_TIGHTEN_JAW_CONTOUR" | "SILHOUETTE_REDUCE_EXCESS_ROUNDING"
   | "LENGTH_CORRECT" | "TEXTURE_CORRECT" | "ROOT_INTEGRATION_CORRECT"
   | "COLOR_CORRECT" | "BEARD_CORRECT" | "ARTIFACT_REMOVE";
 
@@ -42,16 +42,16 @@ function classifyDefect(defect: string): { category: DefectCategory; property: s
   return { category: "UNKNOWN", property: "unknown property", direction: "correct" };
 }
 
-function strategyFor(category: DefectCategory, direction: ReturnType<typeof classifyDefect>["direction"]): AdaptiveStrategy | null {
-  if (category === "VOLUME") return direction === "reduce" ? "VOLUME_REDUCE_EXCESS" : "VOLUME_INCREASE_LOCALIZED";
-  if (category === "SILHOUETTE") return direction === "reduce" ? "SILHOUETTE_REDUCE_EXCESS_ROUNDING" : "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR";
-  if (category === "LENGTH") return "LENGTH_CORRECT";
-  if (category === "TEXTURE") return "TEXTURE_CORRECT";
-  if (category === "ROOT") return "ROOT_INTEGRATION_CORRECT";
-  if (category === "COLOR") return "COLOR_CORRECT";
-  if (category === "BEARD") return "BEARD_CORRECT";
-  if (category === "ARTIFACT") return "ARTIFACT_REMOVE";
-  return null;
+function strategiesFor(category: DefectCategory, direction: ReturnType<typeof classifyDefect>["direction"]): AdaptiveStrategy[] {
+  if (category === "VOLUME") return direction === "reduce" ? ["VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE"] : ["VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE"];
+  if (category === "SILHOUETTE") return direction === "reduce" ? ["SILHOUETTE_REDUCE_EXCESS_ROUNDING"] : ["SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR"];
+  if (category === "LENGTH") return ["LENGTH_CORRECT"];
+  if (category === "TEXTURE") return ["TEXTURE_CORRECT"];
+  if (category === "ROOT") return ["ROOT_INTEGRATION_CORRECT"];
+  if (category === "COLOR") return ["COLOR_CORRECT"];
+  if (category === "BEARD") return ["BEARD_CORRECT"];
+  if (category === "ARTIFACT") return ["ARTIFACT_REMOVE"];
+  return [];
 }
 function parseStrategy(reason: string | null): AdaptiveStrategy | null {
   if (!reason) return null;
@@ -96,8 +96,11 @@ function makeInstruction(strategy: AdaptiveStrategy, defect: string) {
   const base = "Apply exactly one targeted correction to the diagnosed property. Preserve identity, face, ears, skull geometry, lighting, framing, background, color balance, and every previously passing property.";
   const map: Record<AdaptiveStrategy, string> = {
     VOLUME_INCREASE_LOCALIZED: "Increase only the missing local hair volume/weight where QA identified insufficiency; do not enlarge unrelated areas.",
+    VOLUME_DENSITY_REINFORCE: "Reinforce only the diagnosed local density and internal weight at the deficient jaw-level region; do not increase the global silhouette.",
     VOLUME_REDUCE_EXCESS: "Reduce only the excessive hair volume/weight identified by QA; do not flatten unrelated areas.",
+    VOLUME_COMPACT_REDUCE: "Compact only the diagnosed excessive volume while preserving the authoritative perimeter and local density elsewhere.",
     SILHOUETTE_STRENGTHEN_INWARD_CONTOUR: "Strengthen only the diagnosed silhouette/contour correction, especially the required inward curve, without changing length or unrelated volume.",
+    SILHOUETTE_TIGHTEN_JAW_CONTOUR: "Tighten only the jaw-level contour so the required compact inward curve reads clearly; do not alter length, texture, or global density.",
     SILHOUETTE_REDUCE_EXCESS_ROUNDING: "Reduce only the excessive rounding or width in the diagnosed contour while preserving the authoritative shape and length.",
     LENGTH_CORRECT: "Correct only the diagnosed hair length to the authoritative hairstyle definition; preserve silhouette, texture, and styling.",
     TEXTURE_CORRECT: "Correct only the diagnosed hair texture/styling characteristic; preserve geometry, length, and density.",
@@ -128,10 +131,15 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
     return { action: "EXHAUSTED", category: classified.category, property: classified.property, strategy: null, instruction: null,
       reason: "Autonomous attempt ceiling reached.", regression, plateau, priorStrategies };
   }
-  const strategy = strategyFor(classified.category, classified.direction);
-  if (!strategy || (priorStrategies.includes(strategy) && plateau)) {
+  const compatibleStrategies = strategiesFor(classified.category, classified.direction);
+  const progress = currentScore != null && bestPrior != null && currentScore - bestPrior >= 0.5;
+  const lastStrategy = priorStrategies[priorStrategies.length - 1] ?? null;
+  const strategy = progress && lastStrategy && compatibleStrategies.includes(lastStrategy)
+    ? lastStrategy
+    : compatibleStrategies.find((candidate) => !priorStrategies.includes(candidate)) ?? null;
+  if (!strategy) {
     return { action: "HUMAN_REVIEW", category: classified.category, property: classified.property, strategy: null, instruction: null,
-      reason: "No untried bounded strategy remains for a repeated defect.", regression, plateau, priorStrategies };
+      reason: "No untried bounded strategy remains for this repeated defect.", regression, plateau, priorStrategies };
   }
   const reason = JSON.stringify({ category: classified.category, property: classified.property, strategy, regression, plateau });
   return { action: "REFINE", category: classified.category, property: classified.property, strategy,
