@@ -215,7 +215,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
 
   if (value.verdict === "APPROVE" &&
       (expectedOverall < 9.5 || value.hairOnly !== "PASS" || value.transformationOnly !== "PASS" || value.artifacts !== "NONE")) {
-    throw new Error("QA returned an inconsistent APPROVE verdict.");
+    value.verdict = "REGENERATE";
   }
 
   return value;
