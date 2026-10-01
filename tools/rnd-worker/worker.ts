@@ -1,7 +1,8 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
+import sharp from "sharp";
 import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, selectGemini31Pro, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -195,6 +196,24 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   return body.asset.id;
 }
 
+async function validateCapturedArtifact(outputPath: string, sourcePath: string) {
+  const [outputMeta, sourceMeta] = await Promise.all([sharp(outputPath).metadata(), sharp(sourcePath).metadata()]);
+  const width = outputMeta.width ?? 0;
+  const height = outputMeta.height ?? 0;
+  const sourceWidth = sourceMeta.width ?? 0;
+  const sourceHeight = sourceMeta.height ?? 0;
+  if (width < 512 || height < 512 || !sourceWidth || !sourceHeight) {
+    return { ok: false, reason: `captured artifact is too small or source dimensions are unavailable (${width}x${height}; source ${sourceWidth}x${sourceHeight})` };
+  }
+  const outputAspect = width / height;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const aspectDelta = Math.abs(outputAspect - sourceAspect);
+  if (aspectDelta > 0.08) {
+    return { ok: false, reason: `captured artifact aspect ratio mismatch (${width}x${height}; source ${sourceWidth}x${sourceHeight}; delta ${aspectDelta.toFixed(4)})` };
+  }
+  return { ok: true as const, width, height };
+}
+
 async function processJob(page: Page, job: ClaimedJob) {
   const attemptNumber = job.attemptNumber;
   const sourcePath = await downloadSource(job.sourceAsset, job.id);
@@ -215,9 +234,23 @@ async function processJob(page: Page, job: ClaimedJob) {
 
     console.log(`Job ${job.id}: submitting attempt ${attemptNumber}.`);
     await submitPrompt(page, job.currentPrompt);
-    const generatedSource = await waitForGeneratedImage(page, before);
+    let generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
-    await captureGeneratedImage(page, outputPath, generatedSource);
+    let captureAccepted = false;
+    for (let captureTry = 0; captureTry < 3; captureTry += 1) {
+      await captureGeneratedImage(page, outputPath, generatedSource);
+      const validation = await validateCapturedArtifact(outputPath, sourcePath);
+      if (validation.ok) {
+        console.log(`Captured generated artifact validated at ${validation.width}x${validation.height}.`);
+        captureAccepted = true;
+        break;
+      }
+      console.warn(`Rejected Gemini capture candidate: ${validation.reason}`);
+      await unlink(outputPath).catch(() => undefined);
+      before.add(generatedSource);
+      generatedSource = await waitForGeneratedImage(page, before);
+    }
+    if (!captureAccepted) throw new Error("Gemini capture validation failed after 3 candidates.");
     const artifactId = await uploadArtifact(job, attemptNumber, outputPath);
 
     await report(job, attemptNumber, {
