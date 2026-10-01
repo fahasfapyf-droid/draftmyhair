@@ -44,6 +44,7 @@ export async function assertReady(page: Page) {
 
 export async function freshChat(page: Page) {
   await openGemini(page);
+  let newChatCreated = false;
   try {
     const button = await firstVisible([
       page.getByRole("button", { name: /new chat|new conversation/i }),
@@ -51,7 +52,17 @@ export async function freshChat(page: Page) {
     ]);
     await button.click();
     await page.waitForTimeout(1_200);
+    newChatCreated = true;
   } catch {}
+
+  const priorImages = await modelResponseImages(page);
+  if (priorImages?.length) {
+    throw new Error(
+      newChatCreated
+        ? "Gemini New Chat did not clear the prior generated image; refusing to risk capturing a stale result."
+        : "Could not create a new Gemini chat and a prior generated image is still present; refusing to risk capturing a stale result.",
+    );
+  }
 }
 
 export async function selectGemini31Pro(page: Page) {
