@@ -60,6 +60,10 @@ interface ClaimedJob {
 
 interface ClaimResponse { ok: boolean; workerId?: string; leaseExpiresAt?: string | null; job: ClaimedJob | null; }
 interface HelloResponse { ok: boolean; protocolVersion: string; serverTime: string; }
+interface DbIdentityResponse {
+  ok: boolean;
+  database?: { database: string; schema: string; neonBranchId: string | null; neonProjectId: string | null } | null;
+}
 
 async function api(pathname: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -88,6 +92,17 @@ async function assertServer() {
   const body = await response.json() as HelloResponse;
   if (!body.ok || body.protocolVersion !== "1") throw new Error(`Unsupported worker protocol: ${JSON.stringify(body)}`);
   console.log(`Connected to R&D worker API ${API_BASE}; protocol ${body.protocolVersion}.`);
+}
+
+async function assertDatabaseBoundary() {
+  const response = await api("/api/rnd/worker/db-identity");
+  const body = await response.json() as DbIdentityResponse;
+  if (!response.ok || !body.ok) {
+    throw new Error(`R&D database safety gate failed: HTTP ${response.status} ${JSON.stringify(body)}`);
+  }
+  console.log(
+    `R&D database safety gate passed: ${body.database?.neonProjectId}/${body.database?.neonBranchId}.`,
+  );
 }
 
 async function claim(): Promise<ClaimResponse> {
@@ -263,6 +278,7 @@ async function main() {
   console.log(`DMH R&D worker ${await workerId()} starting.`);
   console.log(`API: ${API_BASE}`);
   await assertServer();
+  await assertDatabaseBoundary();
 
   let context = await launchWorkerContext();
   let contextClosed = false;
