@@ -27,19 +27,37 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
   });
   const compiledStyle = STYLE_PROMPTS[request.promptKey];
   const stylePrompt = databaseStyle?.prompt ?? compiledStyle?.prompt;
-  if (!stylePrompt) throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
+
+  // Internal optimizer override: when present, the candidate style block
+  // REPLACES the promptKey-resolved style for the provider call only. No
+  // prompt version is created or modified, and public promptKey behavior is
+  // unchanged.
+  const usingOverride =
+    typeof request.promptOverride === "string" &&
+    request.promptOverride.trim().length > 0;
+  const effectiveStylePrompt = usingOverride
+    ? request.promptOverride!.trim()
+    : stylePrompt;
+
+  if (!effectiveStylePrompt) {
+    throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
+  }
 
   const masterPrompt = getMasterPrompt();
-  const stylePromptSource = databaseStyle
-    ? `database-v${databaseStyle.version}`
-    : "compiled";
-  const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
+  const stylePromptSource = usingOverride
+    ? "override"
+    : databaseStyle
+      ? `database-v${databaseStyle.version}`
+      : "compiled";
+  const prompt =
+    `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${effectiveStylePrompt}`.trim();
 
   const diagnostics = {
     promptKey: request.promptKey,
     masterPromptVersion: ACTIVE_PROMPT_VERSION,
     stylePromptSource,
-    stylePromptLength: stylePrompt.length,
+    promptOverride: usingOverride,
+    stylePromptLength: effectiveStylePrompt.length,
     finalPromptLength: prompt.length,
   };
 
