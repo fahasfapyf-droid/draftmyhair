@@ -206,7 +206,18 @@ export async function POST(request: Request) {
     const history = await prisma.rnDAttempt.findMany({
       where: { jobId },
       orderBy: { attemptNumber: "asc" },
-      select: { attemptNumber: true, overallScore: true, aiGatePassed: true, verdict: true, refinementReason: true, qaJson: true },
+      select: {
+        attemptNumber: true,
+        overallScore: true,
+        aiGatePassed: true,
+        verdict: true,
+        refinementReason: true,
+        qaJson: true,
+        prompt: true,
+        promptRevision: true,
+        artifactId: true,
+        adaptiveDecision: true,
+      },
     });
     adaptiveDecision = decideAdaptiveRefinement({
       defect: refinement,
@@ -218,9 +229,17 @@ export async function POST(request: Request) {
         verdict: item.verdict,
         refinementReason: item.refinementReason,
         qaJson: item.qaJson,
+        prompt: item.prompt,
+        promptRevision: item.promptRevision,
+        artifactId: item.artifactId,
+        adaptiveDecision: item.adaptiveDecision,
       })),
       attemptNumber,
       maxAttempts: MAX_AUTONOMOUS_ATTEMPTS,
+      currentPrompt: prompt,
+      currentPromptRevision: revision,
+      currentArtifactId: artifactId,
+      currentAiGatePassed: hardPass,
     });
 
     if (adaptiveDecision.action === "REFINE" && adaptiveDecision.instruction && job.target.hairstyleId) {

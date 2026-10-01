@@ -1,0 +1,124 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { decideAdaptiveRefinement, type AdaptiveAttempt } from "../../lib/rnd/adaptive-decision";
+
+function qa(overrides: Record<string, unknown> = {}) {
+  return {
+    overall: 6,
+    identity: 9.8,
+    hairstyleAccuracy: 6,
+    beardAccuracy: 10,
+    colorAccuracy: 10,
+    buzzBaldAccuracy: 10,
+    rootIntegration: 9,
+    lightingConsistency: 9.8,
+    hairOnly: "PASS",
+    transformationOnly: "PASS",
+    artifacts: "NONE",
+    verdict: "REGENERATE",
+    transformationGate: { passed: true, noOp: false },
+    verifier: { blockingDefect: false },
+    ...overrides,
+  };
+}
+
+function previousAttempt(overrides: Partial<AdaptiveAttempt> = {}): AdaptiveAttempt {
+  return {
+    attemptNumber: 1,
+    overallScore: 6,
+    aiGatePassed: false,
+    verdict: "REFINE",
+    refinementReason: "ADAPTIVE_DECISION:{\"category\":\"COLOR\",\"property\":\"hair color\",\"strategy\":\"COLOR_CORRECT\"}",
+    qaJson: qa({ colorAccuracy: 5 }),
+    prompt: "authoritative style plus first correction",
+    promptRevision: "rev-1",
+    artifactId: "artifact-1",
+    adaptiveDecision: { strategy: "COLOR_CORRECT" },
+    ...overrides,
+  };
+}
+
+test("adaptive comparisons use QA's lightingConsistency field to detect regression", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "hair color is inaccurate",
+    qa: qa({ colorAccuracy: 6, lightingConsistency: 8.9 }),
+    history: [previousAttempt({ qaJson: qa({ colorAccuracy: 5, lightingConsistency: 9.8 }) })],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+
+  assert.equal(result.action, "HUMAN_REVIEW");
+  assert.equal(result.regression, true);
+  assert.deepEqual(result.evidence.regressedDimensions, ["lightingConsistency"]);
+});
+
+test("color and beard target scores use their actual QA field names", () => {
+  const colorResult = decideAdaptiveRefinement({
+    defect: "hair color shade is inaccurate",
+    qa: qa({ colorAccuracy: 6 }),
+    history: [previousAttempt({ qaJson: qa({ colorAccuracy: 5 }) })],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+  assert.equal(colorResult.action, "REFINE");
+  assert.equal(colorResult.plateau, false);
+  assert.equal(colorResult.strategy, "COLOR_CORRECT");
+
+  const beardHistory = [previousAttempt({
+    refinementReason: "ADAPTIVE_DECISION:{\"category\":\"BEARD\",\"property\":\"beard\",\"strategy\":\"BEARD_CORRECT\"}",
+    adaptiveDecision: { strategy: "BEARD_CORRECT" },
+    qaJson: qa({ beardAccuracy: 5 }),
+  })];
+  const beardResult = decideAdaptiveRefinement({
+    defect: "mustache is incorrect",
+    qa: qa({ beardAccuracy: 6 }),
+    history: beardHistory,
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+  assert.equal(beardResult.action, "REFINE");
+  assert.equal(beardResult.plateau, false);
+  assert.equal(beardResult.strategy, "BEARD_CORRECT");
+});
+
+test("comparison evidence includes prior QA, gates, strategy, prompt and artifact and excludes the reserved current row", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "hair color shade is inaccurate",
+    qa: qa({ colorAccuracy: 6 }),
+    history: [
+      previousAttempt(),
+      previousAttempt({ attemptNumber: 2, qaJson: null, artifactId: null, prompt: "reserved attempt" }),
+    ],
+    attemptNumber: 2,
+    maxAttempts: 8,
+    currentPrompt: "authoritative style plus first correction",
+    currentPromptRevision: "rev-2",
+    currentArtifactId: "artifact-2",
+  });
+
+  assert.deepEqual(result.evidence.comparedAttemptNumbers, [1]);
+  assert.equal(result.evidence.priorAttempts[0].scores.colorAccuracy, 5);
+  assert.equal(result.evidence.priorAttempts[0].gates.hairOnly, "PASS");
+  assert.equal(result.evidence.priorAttempts[0].strategy, "COLOR_CORRECT");
+  assert.equal(result.evidence.priorAttempts[0].promptRevision, "rev-1");
+  assert.equal(result.evidence.priorAttempts[0].artifactId, "artifact-1");
+  assert.equal(result.evidence.current.promptRevision, "rev-2");
+  assert.equal(result.evidence.current.artifactId, "artifact-2");
+  assert.equal(result.evidence.current.promptChangedFromPrevious, false);
+});
+
+test("beardAccuracy and colorAccuracy regressions are protected", () => {
+  for (const dimension of ["beardAccuracy", "colorAccuracy"] as const) {
+    const priorQa = qa({ [dimension]: 9.5 });
+    const currentQa = qa({ [dimension]: 8.9 });
+    const result = decideAdaptiveRefinement({
+      defect: dimension === "beardAccuracy" ? "mustache is incorrect" : "hair color is inaccurate",
+      qa: currentQa,
+      history: [previousAttempt({ qaJson: priorQa })],
+      attemptNumber: 2,
+      maxAttempts: 8,
+    });
+    assert.equal(result.action, "HUMAN_REVIEW", `${dimension} regression should escalate`);
+    assert.ok(result.evidence.regressedDimensions.includes(dimension));
+  }
+});

@@ -13,6 +13,10 @@ export type AdaptiveAttempt = {
   verdict: string;
   refinementReason: string | null;
   qaJson: any;
+  prompt?: string | null;
+  promptRevision?: string | null;
+  artifactId?: string | null;
+  adaptiveDecision?: unknown;
 };
 
 export type AdaptiveDecision = {
@@ -25,6 +29,31 @@ export type AdaptiveDecision = {
   regression: boolean;
   plateau: boolean;
   priorStrategies: AdaptiveStrategy[];
+  evidence: {
+    comparedAttemptNumbers: number[];
+    priorAttempts: Array<{
+      attemptNumber: number;
+      scores: Record<string, number | null>;
+      gates: Record<string, string | boolean | null>;
+      verdict: string;
+      defect: string | null;
+      strategy: AdaptiveStrategy | null;
+      promptRevision: string | null;
+      artifactId: string | null;
+    }>;
+    current: {
+      attemptNumber: number;
+      scores: Record<string, number | null>;
+      gates: Record<string, string | boolean | null>;
+      verdict: string;
+      defect: string;
+      promptRevision: string | null;
+      artifactId: string | null;
+      promptChangedFromPrevious: boolean | null;
+    };
+    improvedDimensions: string[];
+    regressedDimensions: string[];
+  };
 };
 
 function classifyDefect(defect: string): { category: DefectCategory; property: string; direction: "increase" | "reduce" | "correct" } {
@@ -53,42 +82,96 @@ function strategiesFor(category: DefectCategory, direction: ReturnType<typeof cl
   if (category === "ARTIFACT") return ["ARTIFACT_REMOVE"];
   return [];
 }
-function parseStrategy(reason: string | null): AdaptiveStrategy | null {
+function parseStrategy(reason: string | null, decision?: unknown): AdaptiveStrategy | null {
+  if (decision && typeof decision === "object" && "strategy" in decision) {
+    const value = (decision as { strategy?: unknown }).strategy;
+    if (typeof value === "string" && STRATEGIES.has(value as AdaptiveStrategy)) return value as AdaptiveStrategy;
+  }
   if (!reason) return null;
   const marker = "ADAPTIVE_DECISION:";
   const index = reason.indexOf(marker);
   if (index < 0) return null;
   try {
     const parsed = JSON.parse(reason.slice(index + marker.length).trim());
-    return typeof parsed.strategy === "string" ? parsed.strategy as AdaptiveStrategy : null;
+    return typeof parsed.strategy === "string" && STRATEGIES.has(parsed.strategy as AdaptiveStrategy)
+      ? parsed.strategy as AdaptiveStrategy
+      : null;
   } catch { return null; }
 }
+
+function parseCategory(decision: unknown): DefectCategory | null {
+  if (!decision || typeof decision !== "object" || !("category" in decision)) return null;
+  const value = (decision as { category?: unknown }).category;
+  return typeof value === "string" && ["VOLUME", "SILHOUETTE", "LENGTH", "TEXTURE", "ROOT", "COLOR", "BEARD", "ARTIFACT", "UNKNOWN"].includes(value)
+    ? value as DefectCategory
+    : null;
+}
+
+const STRATEGIES = new Set<AdaptiveStrategy>([
+  "VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE", "VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE",
+  "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR", "SILHOUETTE_REDUCE_EXCESS_ROUNDING",
+  "LENGTH_CORRECT", "TEXTURE_CORRECT", "ROOT_INTEGRATION_CORRECT", "COLOR_CORRECT", "BEARD_CORRECT", "ARTIFACT_REMOVE",
+]);
 
 function scoreOf(qa: any, key: string) {
   const value = Number(qa?.[key]);
   return Number.isFinite(value) ? value : null;
 }
 
-function regressionDetected(current: any, history: AdaptiveAttempt[]) {
-  const protectedKeys = ["overall", "identity", "hairstyleAccuracy", "rootIntegration", "lighting", "color"];
-  for (const key of protectedKeys) {
+const SCORE_KEYS = [
+  "overall", "identity", "hairstyleAccuracy", "beardAccuracy", "colorAccuracy",
+  "buzzBaldAccuracy", "rootIntegration", "lightingConsistency",
+];
+
+function compareScores(current: any, history: AdaptiveAttempt[]) {
+  const improvedDimensions: string[] = [];
+  const regressedDimensions: string[] = [];
+  for (const key of SCORE_KEYS) {
     const currentScore = scoreOf(current, key);
     if (currentScore == null) continue;
-    const best = Math.max(...history.map((a) => scoreOf(a.qaJson, key) ?? -Infinity));
-    if (Number.isFinite(best) && best - currentScore >= 0.5) return true;
+    const previousScores = history.map((attempt) => scoreOf(attempt.qaJson, key)).filter((value): value is number => value != null);
+    if (!previousScores.length) continue;
+    const best = Math.max(...previousScores);
+    if (currentScore - best >= 0.5) improvedDimensions.push(key);
+    if (best - currentScore >= 0.5) regressedDimensions.push(key);
   }
-  const priorPass = history.some((a) => a.aiGatePassed === true);
-  if (priorPass && current?.transformationGate?.passed === false) return true;
-  const priorArtifactsClear = history.some((a) => a.qaJson?.artifacts === "NONE");
-  if (priorArtifactsClear && current?.artifacts === "FOUND") return true;
+  return { improvedDimensions, regressedDimensions };
+}
+
+function regressionDetected(current: any, history: AdaptiveAttempt[], regressedDimensions: string[]) {
+  if (regressedDimensions.length) return true;
+  const gateKeys = ["hairOnly", "transformationOnly"] as const;
+  for (const key of gateKeys) {
+    const currentResult = current?.[key];
+    if (currentResult === "FAIL" && history.some((attempt) => attempt.qaJson?.[key] === "PASS")) return true;
+  }
+  if (current?.transformationGate?.passed === false && history.some((attempt) => attempt.qaJson?.transformationGate?.passed === true)) return true;
+  if (current?.transformationGate?.noOp === true && history.some((attempt) => attempt.qaJson?.transformationGate?.noOp === false)) return true;
+  if (current?.artifacts === "FOUND" && history.some((attempt) => attempt.qaJson?.artifacts === "NONE")) return true;
+  if (current?.verifier?.blockingDefect === true && history.some((attempt) => attempt.qaJson?.verifier?.blockingDefect === false)) return true;
   return false;
 }
 
+function scoreSnapshot(qa: any) {
+  return Object.fromEntries(SCORE_KEYS.map((key) => [key, scoreOf(qa, key)]));
+}
+
+function gateSnapshot(qa: any, aiGatePassed: boolean | null) {
+  return {
+    aiGatePassed,
+    hairOnly: qa?.hairOnly ?? null,
+    transformationOnly: qa?.transformationOnly ?? null,
+    transformationGatePassed: typeof qa?.transformationGate?.passed === "boolean" ? qa.transformationGate.passed : null,
+    transformationGateNoOp: typeof qa?.transformationGate?.noOp === "boolean" ? qa.transformationGate.noOp : null,
+    artifacts: qa?.artifacts ?? null,
+    verifierBlockingDefect: typeof qa?.verifier?.blockingDefect === "boolean" ? qa.verifier.blockingDefect : null,
+  };
+}
 function targetScore(qa: any, category: DefectCategory) {
   if (category === "VOLUME" || category === "SILHOUETTE" || category === "LENGTH" || category === "TEXTURE") return scoreOf(qa, "hairstyleAccuracy");
   if (category === "ROOT") return scoreOf(qa, "rootIntegration");
-  if (category === "COLOR") return scoreOf(qa, "color");
-  if (category === "BEARD") return scoreOf(qa, "beard");
+  if (category === "COLOR") return scoreOf(qa, "colorAccuracy");
+  if (category === "BEARD") return scoreOf(qa, "beardAccuracy");
   if (category === "ARTIFACT") return qa?.artifacts === "NONE" ? 10 : 0;
   return scoreOf(qa, "overall");
 }
@@ -112,11 +195,46 @@ function makeInstruction(strategy: AdaptiveStrategy, defect: string) {
   return base + "\n\nTARGETED STRATEGY: " + map[strategy] + "\n\nQA DIAGNOSIS: " + defect;
 }
 
-export function decideAdaptiveRefinement(input: { defect: string; qa: any; history: AdaptiveAttempt[]; attemptNumber: number; maxAttempts: number }): AdaptiveDecision {
+export function decideAdaptiveRefinement(input: { defect: string; qa: any; history: AdaptiveAttempt[]; attemptNumber: number; maxAttempts: number; currentPrompt?: string | null; currentPromptRevision?: string | null; currentArtifactId?: string | null; currentAiGatePassed?: boolean | null }): AdaptiveDecision {
   const classified = classifyDefect(input.defect);
-  const priorStrategies = input.history.map((a) => parseStrategy(a.refinementReason)).filter(Boolean) as AdaptiveStrategy[];
-  const regression = regressionDetected(input.qa, input.history);
-  const sameCategory = input.history.filter((a) => classifyDefect(a.refinementReason ?? "").category === classified.category);
+  // The report route's history query also includes the reserved in-flight row for
+  // this attempt. Exclude it so it cannot be mistaken for prior evidence.
+  const history = input.history.filter((attempt) => attempt.attemptNumber < input.attemptNumber);
+  const priorStrategies = history.map((a) => parseStrategy(a.refinementReason, a.adaptiveDecision)).filter(Boolean) as AdaptiveStrategy[];
+  const { improvedDimensions, regressedDimensions } = compareScores(input.qa, history);
+  const regression = regressionDetected(input.qa, history, regressedDimensions);
+  const previousAttempt = [...history].sort((a, b) => b.attemptNumber - a.attemptNumber)[0];
+  const evidence: AdaptiveDecision["evidence"] = {
+    comparedAttemptNumbers: history.map((a) => a.attemptNumber),
+    priorAttempts: history.map((attempt) => ({
+      attemptNumber: attempt.attemptNumber,
+      scores: scoreSnapshot(attempt.qaJson),
+      gates: gateSnapshot(attempt.qaJson, attempt.aiGatePassed),
+      verdict: attempt.verdict,
+      defect: typeof attempt.qaJson?.refinement === "string" ? attempt.qaJson.refinement : attempt.refinementReason,
+      strategy: parseStrategy(attempt.refinementReason, attempt.adaptiveDecision),
+      promptRevision: attempt.promptRevision ?? null,
+      artifactId: attempt.artifactId ?? null,
+    })),
+    current: {
+      attemptNumber: input.attemptNumber,
+      scores: scoreSnapshot(input.qa),
+      gates: gateSnapshot(input.qa, input.currentAiGatePassed ?? null),
+      verdict: typeof input.qa?.verdict === "string" ? input.qa.verdict : "UNKNOWN",
+      defect: input.defect,
+      promptRevision: input.currentPromptRevision ?? null,
+      artifactId: input.currentArtifactId ?? null,
+      promptChangedFromPrevious: previousAttempt?.prompt != null && input.currentPrompt != null
+        ? previousAttempt.prompt !== input.currentPrompt
+        : null,
+    },
+    improvedDimensions,
+    regressedDimensions,
+  };
+  const sameCategory = history.filter((attempt) =>
+    parseCategory(attempt.adaptiveDecision) === classified.category ||
+    classifyDefect(typeof attempt.qaJson?.refinement === "string" ? attempt.qaJson.refinement : attempt.refinementReason ?? "").category === classified.category,
+  );
   const priorScores = sameCategory.map((a) => targetScore(a.qaJson, classified.category)).filter((v): v is number => v != null);
   const currentScore = targetScore(input.qa, classified.category);
   const bestPrior = priorScores.length ? Math.max(...priorScores) : null;
@@ -125,11 +243,11 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
   if (regression || classified.category === "UNKNOWN") {
     return { action: "HUMAN_REVIEW", category: classified.category, property: classified.property, strategy: null, instruction: null,
       reason: regression ? "Regression detected in a protected QA property." : "QA defect could not be mapped safely to one property.",
-      regression, plateau, priorStrategies };
+      regression, plateau, priorStrategies, evidence };
   }
   if (input.attemptNumber >= input.maxAttempts) {
     return { action: "EXHAUSTED", category: classified.category, property: classified.property, strategy: null, instruction: null,
-      reason: "Autonomous attempt ceiling reached.", regression, plateau, priorStrategies };
+      reason: "Autonomous attempt ceiling reached.", regression, plateau, priorStrategies, evidence };
   }
   const compatibleStrategies = strategiesFor(classified.category, classified.direction);
   const progress = currentScore != null && bestPrior != null && currentScore - bestPrior >= 0.5;
@@ -139,9 +257,9 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
     : compatibleStrategies.find((candidate) => !priorStrategies.includes(candidate)) ?? null;
   if (!strategy) {
     return { action: "HUMAN_REVIEW", category: classified.category, property: classified.property, strategy: null, instruction: null,
-      reason: "No untried bounded strategy remains for this repeated defect.", regression, plateau, priorStrategies };
+      reason: "No untried bounded strategy remains for this repeated defect.", regression, plateau, priorStrategies, evidence };
   }
   const reason = JSON.stringify({ category: classified.category, property: classified.property, strategy, regression, plateau });
   return { action: "REFINE", category: classified.category, property: classified.property, strategy,
-    instruction: makeInstruction(strategy, input.defect), reason: "ADAPTIVE_DECISION:" + reason, regression, plateau, priorStrategies };
+    instruction: makeInstruction(strategy, input.defect), reason: "ADAPTIVE_DECISION:" + reason, regression, plateau, priorStrategies, evidence };
 }
