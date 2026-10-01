@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
-import { generateAutonomousPrompt, optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
+import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
@@ -94,24 +94,13 @@ export async function POST(request: Request) {
       ? `database-v${databaseStyle.version}`
       : "compiled";
 
-    const latestAttempt = await tx.rnDAttempt.findFirst({
-      where: { jobId: candidate.id },
-      orderBy: { attemptNumber: "desc" },
-      select: { refinementReason: true },
-    });
-
     let authoritativePrompt: string;
     const hasAuthoritativeRefinementMarker = candidate.currentPrompt.includes("# TARGETED REFINEMENT");
 
-    if (hasAuthoritativeRefinementMarker && latestAttempt?.refinementReason?.trim()) {
-      const rebuilt = await optimizeAutonomousPrompt({
-        instruction: target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
-        currentPrompt: candidate.currentPrompt,
-        defect: latestAttempt.refinementReason,
-        attemptNumber: candidate.attemptCount,
-        authoritativeStylePrompt,
-      });
-      authoritativePrompt = rebuilt.prompt;
+    if (hasAuthoritativeRefinementMarker) {
+      // The report route already persisted the adaptive prompt selected for the next attempt.
+      // Recovery must resume that exact prompt rather than reconstructing it from stale QA text.
+      authoritativePrompt = candidate.currentPrompt;
     } else {
       const rebuilt = await generateAutonomousPrompt(
         target.hardCoreInstruction ?? "Validate the requested production hairstyle.",

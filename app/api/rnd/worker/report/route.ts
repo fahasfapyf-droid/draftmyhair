@@ -4,6 +4,7 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 import { optimizeAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
+import { decideAdaptiveRefinement } from "@/lib/rnd/adaptive-decision";
 import { reconcileRndCampaignLifecycle } from "@/lib/rnd/campaign-lifecycle";
 
 export const runtime = "nodejs";
@@ -197,39 +198,56 @@ export async function POST(request: Request) {
     qa.transformationGate.passed;
 
   const refinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
-
+  let adaptiveDecision = null as ReturnType<typeof decideAdaptiveRefinement> | null;
   let nextPrompt: string | null = null;
   let nextPromptDiagnostics: unknown = null;
-  if (refinement) {
-    try {
-      if (job.target.hairstyleId) {
+
+  if (!hardPass && refinement) {
+    const history = await prisma.rnDAttempt.findMany({
+      where: { jobId },
+      orderBy: { attemptNumber: "asc" },
+      select: { attemptNumber: true, overallScore: true, aiGatePassed: true, verdict: true, refinementReason: true, qaJson: true },
+    });
+    adaptiveDecision = decideAdaptiveRefinement({
+      defect: refinement,
+      qa,
+      history: history.map((item) => ({
+        attemptNumber: item.attemptNumber,
+        overallScore: item.overallScore == null ? null : Number(item.overallScore),
+        aiGatePassed: item.aiGatePassed,
+        verdict: item.verdict,
+        refinementReason: item.refinementReason,
+        qaJson: item.qaJson,
+      })),
+      attemptNumber,
+      maxAttempts: MAX_AUTONOMOUS_ATTEMPTS,
+    });
+
+    if (adaptiveDecision.action === "REFINE" && adaptiveDecision.instruction && job.target.hairstyleId) {
+      try {
         const hairstyle = await prisma.hairstyle.findUnique({
           where: { id: job.target.hairstyleId },
           select: { promptKey: true },
         });
         if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
-
         const authoritativeStylePrompt = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
-        if (!authoritativeStylePrompt) {
-          throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
-        }
+        if (!authoritativeStylePrompt) throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
 
         const rebuilt = await optimizeAutonomousPrompt({
           instruction: job.target.hardCoreInstruction ?? "Validate the requested production hairstyle.",
           currentPrompt: prompt,
-          defect: refinement,
+          defect: adaptiveDecision.instruction,
           attemptNumber,
           authoritativeStylePrompt,
         });
-
         nextPrompt = rebuilt.prompt;
-        nextPromptDiagnostics = rebuilt.diagnostics;
+        nextPromptDiagnostics = { ...rebuilt.diagnostics, adaptiveDecision };
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Autonomous prompt optimization failed." },
+          { status: 503 },
+        );
       }
-    } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "Autonomous prompt optimization failed." },
-        { status: 503 },
-      );
     }
   }
 
@@ -246,9 +264,10 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt ? "REFINE" : "EXHAUSTED",
-        refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt ? `AUTO_${attemptNumber}` : null,
-        refinementReason: hardPass ? null : refinement,
+        verdict: hardPass ? "HUMAN_APPROVAL" : adaptiveDecision?.action === "HUMAN_REVIEW" ? "HUMAN_REVIEW" : adaptiveDecision?.action === "REFINE" && nextPrompt ? "REFINE" : "EXHAUSTED",
+        refinementSlot: hardPass ? null : adaptiveDecision?.action === "REFINE" && nextPrompt ? `AUTO_${attemptNumber}` : null,
+        refinementReason: hardPass ? null : adaptiveDecision?.reason ?? refinement,
+        adaptiveDecision: adaptiveDecision ?? undefined,
         errorCode: null,
         errorMessage: null,
       },
@@ -265,7 +284,17 @@ export async function POST(request: Request) {
       return { job: updatedJob, action: "HUMAN_APPROVAL" as const, promptDiagnostics: null, campaignStatus };
     }
 
-    if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && nextPrompt) {
+    if (adaptiveDecision?.action === "HUMAN_REVIEW") {
+      const updatedJob = await tx.rnDJob.update({
+        where: { id: jobId },
+        data: { status: "HUMAN_REVIEW", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        select: { id: true, status: true, attemptCount: true },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_REVIEW" } });
+      return { job: updatedJob, action: "HUMAN_REVIEW" as const, promptDiagnostics: nextPromptDiagnostics, campaignStatus: null };
+    }
+
+    if (adaptiveDecision?.action === "REFINE" && nextPrompt) {
       const nextEligibleAt = new Date(Date.now() + ONE_MINUTE_MS);
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
@@ -330,6 +359,7 @@ export async function GET(request: Request) {
           qaJson: true,
           refinementSlot: true,
           refinementReason: true,
+          adaptiveDecision: true,
           errorCode: true,
           errorMessage: true,
           artifactId: true,
