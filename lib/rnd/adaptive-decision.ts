@@ -60,11 +60,12 @@ function classifyDefect(defect: string): { category: DefectCategory; property: s
   const d = defect.toLowerCase();
   const increase = /(insufficient|too little|needs more|lack(?:s|ing)?|weak|under|not enough|more weight|more volume|more density)/.test(d);
   const reduce = /(excess|too much|overly|too heavy|too wide|too rounded|too bulky|too dense|reduce|less volume)/.test(d);
-  // When a diagnosis names both shape and fullness, treat the silhouette as
-  // primary so a density strategy cannot explicitly preserve the wrong outline.
+  // Explicit length defects take precedence over silhouette classification. A diagnosis such as
+  // "hair remains long/past the shoulders" must authorize a length correction rather
+  // than a contour-only refinement that can preserve the defective length.
+  if (/(length|jaw[- ]?length|past the shoulders|shoulder[- ]length|too long|too short|shorter|longer|reaches the shoulders|below the jaw|below the chin|above the jaw|above the chin)/.test(d)) return { category: "LENGTH", property: "hair length", direction: "correct" };
   if (/(silhouette|shape|contour|curve|curvature|rounded|compact|straight side|inward)/.test(d)) return { category: "SILHOUETTE", property: "hair silhouette/contour", direction: reduce ? "reduce" : increase ? "increase" : "correct" };
   if (/(volume|weight|density|fullness|body)/.test(d)) return { category: "VOLUME", property: "hair volume/weight", direction: increase ? "increase" : reduce ? "reduce" : "correct" };
-  if (/(length|jaw[- ]?length|chin|nape|shorter|longer)/.test(d)) return { category: "LENGTH", property: "hair length", direction: "correct" };
   if (/(texture|wave|curl|strand|sleek|rough|frizz)/.test(d)) return { category: "TEXTURE", property: "hair texture", direction: "correct" };
   if (/(root|scalp|hairline|integration|blend)/.test(d)) return { category: "ROOT", property: "root/scalp integration", direction: "correct" };
   if (/(color|colour|tone|dye|shade)/.test(d)) return { category: "COLOR", property: "hair color", direction: "correct" };
@@ -184,7 +185,7 @@ function makeInstruction(strategy: AdaptiveStrategy, defect: string) {
     VOLUME_DENSITY_REINFORCE: "Reinforce only the diagnosed local density and internal weight at the deficient jaw-level region; do not increase the global silhouette.",
     VOLUME_REDUCE_EXCESS: "Reduce only the excessive hair volume/weight identified by QA; do not flatten unrelated areas.",
     VOLUME_COMPACT_REDUCE: "Compact only the diagnosed excessive volume while preserving the authoritative perimeter and local density elsewhere.",
-    SILHOUETTE_STRENGTHEN_INWARD_CONTOUR: "Reshape hair only into a distinct rounded, compact jaw-level silhouette by strengthening the inward side contour and adding substantial localized jaw-level volume and side density only as needed to form that outline. Preserve the current hair length and all unrelated global shape, volume, and styling.",
+    SILHOUETTE_STRENGTHEN_INWARD_CONTOUR: "Reshape hair only into a distinct rounded, compact jaw-level silhouette by strengthening the inward side contour and adding substantial localized jaw-level volume and side density only as needed to form that outline. Do not preserve a length that QA has identified as defective; preserve all unrelated global shape, volume, and styling.",
     SILHOUETTE_TIGHTEN_JAW_CONTOUR: "Tighten only the jaw-level contour so the required compact inward curve reads clearly; do not alter length, texture, or global density.",
     SILHOUETTE_REDUCE_EXCESS_ROUNDING: "Reduce only the excessive rounding or width in the diagnosed contour while preserving the authoritative shape and length.",
     LENGTH_CORRECT: "Correct only the diagnosed hair length to the authoritative hairstyle definition; preserve silhouette, texture, and styling.",
@@ -265,3 +266,6 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
   return { action: "REFINE", category: classified.category, property: classified.property, strategy,
     instruction: makeInstruction(strategy, input.defect), reason: "ADAPTIVE_DECISION:" + reason, regression, plateau, priorStrategies, evidence };
 }
+
+
+[executed on device: Muntaha-1 (9ebb2605-8007-4f01-9c00-764f34999579)]

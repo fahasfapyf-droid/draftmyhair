@@ -249,7 +249,13 @@ export async function POST(request: Request) {
           select: { promptKey: true },
         });
         if (!hairstyle) throw new Error("R&D target hairstyle was not found.");
-        const authoritativeStylePrompt = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
+        const databaseStyle = await prisma.promptVersion.findFirst({
+          where: { status: "ACTIVE", hairstyleId: job.target.hairstyleId },
+          orderBy: { version: "desc" },
+          select: { prompt: true, version: true },
+        });
+        const compiledStyle = STYLE_PROMPTS[hairstyle.promptKey]?.prompt;
+        const authoritativeStylePrompt = databaseStyle?.prompt ?? compiledStyle;
         if (!authoritativeStylePrompt) throw new Error("Authoritative production prompt is missing for " + hairstyle.promptKey);
 
         const rebuilt = await optimizeAutonomousPrompt({
