@@ -268,4 +268,3 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
 }
 
 
-[executed on device: Muntaha-1 (9ebb2605-8007-4f01-9c00-764f34999579)]
