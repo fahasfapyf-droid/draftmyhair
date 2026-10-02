@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { runTransformationGate, type TransformationGateResult } from "@/lib/rnd/transformation-gate";
+import { deriveHairstyleAccuracy } from "@/lib/rnd/qa-scoring";
 // R&D QA refinement hardening: verifier evidence is authoritative for targeted retries.
 
 export type RndQaCategory =
@@ -40,24 +41,6 @@ export type RndQaResult = {
   verifier: RndQaVerifierResult;
   transformationGate: TransformationGateResult;
 };
-
-export function deriveHairstyleAccuracy(input: {
-  styleLengthAccuracy: number;
-  styleSilhouetteAccuracy: number;
-  styleWeightDistribution: number;
-  stylePerimeterAccuracy: number;
-  styleStylingAccuracy: number;
-  styleRealism: number;
-}) {
-  return Number((
-    input.styleLengthAccuracy * 0.20 +
-    input.styleSilhouetteAccuracy * 0.25 +
-    input.styleWeightDistribution * 0.15 +
-    input.stylePerimeterAccuracy * 0.15 +
-    input.styleStylingAccuracy * 0.15 +
-    input.styleRealism * 0.10
-  ).toFixed(2));
-}
 
 const QA_SCHEMA = {
   type: "OBJECT",
