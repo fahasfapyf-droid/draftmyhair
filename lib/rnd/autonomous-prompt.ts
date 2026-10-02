@@ -3,6 +3,11 @@ import { MASTER_PROMPT_V2 } from "@/lib/engine/prompts/master-v2";
 import { MASTER_PROMPT_V3 } from "@/lib/engine/prompts/master-v3";
 import { MASTER_PROMPT_V3_SINGLE } from "@/lib/engine/prompts/master-v3-single";
 
+const TEXTURE_STRATEGY_IDS = new Set([
+  "TEXTURE_MATCH_DEFINITION",
+  "TEXTURE_REFINE_STRUCTURE",
+]);
+
 function getMasterPrompt() {
   switch ((process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single")) {
     case "v1": return MASTER_PROMPT;
@@ -34,7 +39,7 @@ function compile(stylePrompt: string) {
   return prompt;
 }
 
-function appendRefinement(prompt: string, refinement: string, attemptNumber: number) {
+function appendRefinement(prompt: string, refinement: string, attemptNumber: number, strategyId?: string | null) {
   const escalation =
     attemptNumber >= 2
       ? [
@@ -60,6 +65,13 @@ function appendRefinement(prompt: string, refinement: string, attemptNumber: num
     "Do not reinterpret, redesign, replace, or broaden the requested transformation.",
     "Do not introduce a new characteristic that is not supported by the authoritative definition.",
     "If correcting the diagnosed defect necessarily requires changing a dependent visual property, make only the minimum dependent change required for the correction while preserving all unrelated passing properties.",
+    ...(strategyId && TEXTURE_STRATEGY_IDS.has(strategyId)
+      ? [
+          "TEXTURE-ONLY PRESERVATION BOUNDARY: Change only hair-fiber surface texture and strand detail needed to correct the diagnosed texture defect.",
+          "Preserve the existing hairline contour, scalp visibility, follicular and root density, root-to-scalp contact and transition, and edge blending exactly; do not refine or regenerate these regions.",
+          "Preserve the existing hairstyle shape, length, silhouette, volume, styling, hair color, and every other passing property.",
+        ]
+      : []),
     ...escalation,
     "",
     refinement.trim(),
@@ -100,6 +112,7 @@ export async function optimizeAutonomousPrompt(input: {
   defect: string;
   attemptNumber: number;
   authoritativeStylePrompt: string;
+  strategyId?: string | null;
 }) {
   const refinement = input.defect.trim();
   if (!refinement) throw new Error("A targeted refinement defect is required.");
@@ -108,6 +121,7 @@ export async function optimizeAutonomousPrompt(input: {
     compile(input.authoritativeStylePrompt),
     refinement,
     input.attemptNumber,
+    input.strategyId,
   );
 
   return {
