@@ -139,6 +139,28 @@ test("combined jaw-level silhouette and density diagnosis selects silhouette cor
   assert.match(result.instruction ?? "", /Do not preserve a length that QA has identified as defective/);
 });
 
+
+
+test("bilateral silhouette diagnosis selects the symmetry-specific strategy", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "The inward blowout and rounded silhouette are inconsistent across both sides; the left side has more density than the right side.",
+    qa: qa({
+      hairstyleAccuracy: 4,
+      styleSilhouetteAccuracy: 3,
+      styleWeightDistribution: 3,
+      styleStylingAccuracy: 2,
+    }),
+    history: [],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+
+  assert.equal(result.category, "SILHOUETTE");
+  assert.equal(result.strategy, "SILHOUETTE_BILATERAL_SYMMETRY");
+  assert.match(result.instruction ?? "", /left\/right silhouette inconsistency/);
+  assert.match(result.instruction ?? "", /both sides/);
+});
+
 test("volume-only diagnosis keeps localized volume strategy", () => {
   const result = decideAdaptiveRefinement({
     defect: "Insufficient substantial jaw-level volume and side density.",
