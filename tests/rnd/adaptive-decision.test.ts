@@ -141,6 +141,23 @@ test("combined jaw-level silhouette and density diagnosis selects silhouette cor
 
 
 
+
+
+test("length correction authorizes only the geometry directly dependent on the diagnosed length", () => {
+  const result = decideAdaptiveRefinement({
+    defect: "The hair is significantly shorter than the requested jaw-length bob.",
+    qa: qa({ styleLengthAccuracy: 3, hairstyleAccuracy: 3 }),
+    history: [],
+    attemptNumber: 2,
+    maxAttempts: 8,
+  });
+
+  assert.equal(result.strategy, "LENGTH_CORRECT");
+  assert.match(result.instruction ?? "", /minimum dependent perimeter and silhouette geometry/);
+  assert.match(result.instruction ?? "", /physically coherent/);
+  assert.match(result.instruction ?? "", /every unrelated passing property/);
+});
+
 test("bilateral silhouette diagnosis selects the symmetry-specific strategy", () => {
   const result = decideAdaptiveRefinement({
     defect: "The inward blowout and rounded silhouette are inconsistent across both sides; the left side has more density than the right side.",
