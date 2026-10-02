@@ -3,7 +3,7 @@ export type DefectCategory = "VOLUME" | "SILHOUETTE" | "LENGTH" | "TEXTURE" | "R
 export type AdaptiveStrategy =
   | "VOLUME_INCREASE_LOCALIZED" | "VOLUME_DENSITY_REINFORCE" | "VOLUME_REDUCE_EXCESS" | "VOLUME_COMPACT_REDUCE"
   | "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR" | "SILHOUETTE_TIGHTEN_JAW_CONTOUR" | "SILHOUETTE_REDUCE_EXCESS_ROUNDING"
-  | "LENGTH_CORRECT" | "TEXTURE_CORRECT" | "ROOT_INTEGRATION_CORRECT"
+  | "LENGTH_CORRECT" | "TEXTURE_MATCH_DEFINITION" | "TEXTURE_REFINE_STRUCTURE" | "ROOT_INTEGRATION_CORRECT"
   | "COLOR_CORRECT" | "BEARD_CORRECT" | "ARTIFACT_REMOVE";
 
 export type AdaptiveAttempt = {
@@ -78,7 +78,7 @@ function strategiesFor(category: DefectCategory, direction: ReturnType<typeof cl
   if (category === "VOLUME") return direction === "reduce" ? ["VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE"] : ["VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE"];
   if (category === "SILHOUETTE") return direction === "reduce" ? ["SILHOUETTE_REDUCE_EXCESS_ROUNDING"] : ["SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR"];
   if (category === "LENGTH") return ["LENGTH_CORRECT"];
-  if (category === "TEXTURE") return ["TEXTURE_CORRECT"];
+  if (category === "TEXTURE") return ["TEXTURE_MATCH_DEFINITION", "TEXTURE_REFINE_STRUCTURE"];
   if (category === "ROOT") return ["ROOT_INTEGRATION_CORRECT"];
   if (category === "COLOR") return ["COLOR_CORRECT"];
   if (category === "BEARD") return ["BEARD_CORRECT"];
@@ -113,7 +113,7 @@ function parseCategory(decision: unknown): DefectCategory | null {
 const STRATEGIES = new Set<AdaptiveStrategy>([
   "VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE", "VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE",
   "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR", "SILHOUETTE_REDUCE_EXCESS_ROUNDING",
-  "LENGTH_CORRECT", "TEXTURE_CORRECT", "ROOT_INTEGRATION_CORRECT", "COLOR_CORRECT", "BEARD_CORRECT", "ARTIFACT_REMOVE",
+  "LENGTH_CORRECT", "TEXTURE_MATCH_DEFINITION", "TEXTURE_REFINE_STRUCTURE", "ROOT_INTEGRATION_CORRECT", "COLOR_CORRECT", "BEARD_CORRECT", "ARTIFACT_REMOVE",
 ]);
 
 function scoreOf(qa: any, key: string) {
@@ -189,7 +189,8 @@ function makeInstruction(strategy: AdaptiveStrategy, defect: string) {
     SILHOUETTE_TIGHTEN_JAW_CONTOUR: "Tighten only the jaw-level contour so the required compact inward curve reads clearly; do not alter length, texture, or global density.",
     SILHOUETTE_REDUCE_EXCESS_ROUNDING: "Reduce only the excessive rounding or width in the diagnosed contour while preserving the authoritative shape and length.",
     LENGTH_CORRECT: "Correct only the diagnosed hair length to the authoritative hairstyle definition; preserve silhouette, texture, and styling.",
-    TEXTURE_CORRECT: "Correct only the diagnosed hair texture/styling characteristic; preserve geometry, length, and density.",
+    TEXTURE_MATCH_DEFINITION: "Correct only hair texture to the authoritative hairstyle definition; preserve shape, length, and all other properties.",
+    TEXTURE_REFINE_STRUCTURE: "Refine only the diagnosed hair texture structure to the authoritative definition; preserve shape, length, and all other properties.",
     ROOT_INTEGRATION_CORRECT: "Correct only the diagnosed root/scalp integration or hairline blend; do not alter face or skull geometry.",
     COLOR_CORRECT: "Correct only the diagnosed hair color property; preserve all facial and photographic properties.",
     BEARD_CORRECT: "Correct only the diagnosed beard/facial-hair property; preserve the complete face and hairstyle.",
