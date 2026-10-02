@@ -264,6 +264,7 @@ export async function POST(request: Request) {
           defect: adaptiveDecision.instruction,
           attemptNumber,
           authoritativeStylePrompt,
+          strategyId: adaptiveDecision.strategy,
         });
         nextPrompt = rebuilt.prompt;
         nextPromptDiagnostics = { ...rebuilt.diagnostics, adaptiveDecision };
