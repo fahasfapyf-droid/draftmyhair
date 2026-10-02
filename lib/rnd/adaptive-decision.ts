@@ -2,7 +2,7 @@ export type AdaptiveAction = "REFINE" | "HUMAN_REVIEW" | "EXHAUSTED";
 export type DefectCategory = "VOLUME" | "SILHOUETTE" | "LENGTH" | "TEXTURE" | "ROOT" | "COLOR" | "BEARD" | "ARTIFACT" | "UNKNOWN";
 export type AdaptiveStrategy =
   | "VOLUME_INCREASE_LOCALIZED" | "VOLUME_DENSITY_REINFORCE" | "VOLUME_REDUCE_EXCESS" | "VOLUME_COMPACT_REDUCE"
-  | "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR" | "SILHOUETTE_TIGHTEN_JAW_CONTOUR" | "SILHOUETTE_REDUCE_EXCESS_ROUNDING"
+  | "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR" | "SILHOUETTE_TIGHTEN_JAW_CONTOUR" | "SILHOUETTE_BILATERAL_SYMMETRY" | "SILHOUETTE_REDUCE_EXCESS_ROUNDING"
   | "LENGTH_CORRECT" | "TEXTURE_MATCH_DEFINITION" | "TEXTURE_REFINE_STRUCTURE" | "ROOT_INTEGRATION_CORRECT"
   | "COLOR_CORRECT" | "BEARD_CORRECT" | "ARTIFACT_REMOVE";
 
@@ -74,9 +74,14 @@ function classifyDefect(defect: string): { category: DefectCategory; property: s
   return { category: "UNKNOWN", property: "unknown property", direction: "correct" };
 }
 
-function strategiesFor(category: DefectCategory, direction: ReturnType<typeof classifyDefect>["direction"]): AdaptiveStrategy[] {
+function strategiesFor(category: DefectCategory, direction: ReturnType<typeof classifyDefect>["direction"], defect = ""): AdaptiveStrategy[] {
   if (category === "VOLUME") return direction === "reduce" ? ["VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE"] : ["VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE"];
-  if (category === "SILHOUETTE") return direction === "reduce" ? ["SILHOUETTE_REDUCE_EXCESS_ROUNDING"] : ["SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR"];
+  if (category === "SILHOUETTE") {
+    if (/(left|right|both sides|symmetr|inconsisten|consistently|across both)/.test(defect.toLowerCase())) {
+      return ["SILHOUETTE_BILATERAL_SYMMETRY", "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR"];
+    }
+    return direction === "reduce" ? ["SILHOUETTE_REDUCE_EXCESS_ROUNDING"] : ["SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR"];
+  }
   if (category === "LENGTH") return ["LENGTH_CORRECT"];
   if (category === "TEXTURE") return ["TEXTURE_MATCH_DEFINITION", "TEXTURE_REFINE_STRUCTURE"];
   if (category === "ROOT") return ["ROOT_INTEGRATION_CORRECT"];
@@ -112,7 +117,7 @@ function parseCategory(decision: unknown): DefectCategory | null {
 
 const STRATEGIES = new Set<AdaptiveStrategy>([
   "VOLUME_INCREASE_LOCALIZED", "VOLUME_DENSITY_REINFORCE", "VOLUME_REDUCE_EXCESS", "VOLUME_COMPACT_REDUCE",
-  "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR", "SILHOUETTE_REDUCE_EXCESS_ROUNDING",
+  "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR", "SILHOUETTE_TIGHTEN_JAW_CONTOUR", "SILHOUETTE_BILATERAL_SYMMETRY", "SILHOUETTE_REDUCE_EXCESS_ROUNDING",
   "LENGTH_CORRECT", "TEXTURE_MATCH_DEFINITION", "TEXTURE_REFINE_STRUCTURE", "ROOT_INTEGRATION_CORRECT", "COLOR_CORRECT", "BEARD_CORRECT", "ARTIFACT_REMOVE",
 ]);
 
@@ -124,6 +129,7 @@ function scoreOf(qa: any, key: string) {
 const SCORE_KEYS = [
   "overall", "identity", "hairstyleAccuracy", "beardAccuracy", "colorAccuracy",
   "buzzBaldAccuracy", "rootIntegration", "lightingConsistency",
+  "styleLengthAccuracy", "styleSilhouetteAccuracy", "styleWeightDistribution", "stylePerimeterAccuracy", "styleStylingAccuracy", "styleRealism",
 ];
 
 function compareScores(current: any, history: AdaptiveAttempt[]) {
@@ -171,7 +177,10 @@ function gateSnapshot(qa: any, aiGatePassed: boolean | null) {
   };
 }
 function targetScore(qa: any, category: DefectCategory) {
-  if (category === "VOLUME" || category === "SILHOUETTE" || category === "LENGTH" || category === "TEXTURE") return scoreOf(qa, "hairstyleAccuracy");
+  if (category === "VOLUME") return scoreOf(qa, "styleWeightDistribution") ?? scoreOf(qa, "hairstyleAccuracy");
+  if (category === "SILHOUETTE") return scoreOf(qa, "styleSilhouetteAccuracy") ?? scoreOf(qa, "hairstyleAccuracy");
+  if (category === "LENGTH") return scoreOf(qa, "styleLengthAccuracy") ?? scoreOf(qa, "hairstyleAccuracy");
+  if (category === "TEXTURE") return scoreOf(qa, "styleStylingAccuracy") ?? scoreOf(qa, "hairstyleAccuracy");
   if (category === "ROOT") return scoreOf(qa, "rootIntegration");
   if (category === "COLOR") return scoreOf(qa, "colorAccuracy");
   if (category === "BEARD") return scoreOf(qa, "beardAccuracy");
@@ -186,6 +195,7 @@ function makeInstruction(strategy: AdaptiveStrategy, defect: string) {
     VOLUME_REDUCE_EXCESS: "Reduce only the excessive hair volume/weight identified by QA; do not flatten unrelated areas.",
     VOLUME_COMPACT_REDUCE: "Compact only the diagnosed excessive volume while preserving the authoritative perimeter and local density elsewhere.",
     SILHOUETTE_STRENGTHEN_INWARD_CONTOUR: "Reshape hair only into a distinct rounded, compact jaw-level silhouette by strengthening the inward side contour and adding substantial localized jaw-level volume and side density only as needed to form that outline. Do not preserve a length that QA has identified as defective; preserve all unrelated global shape, volume, and styling.",
+    SILHOUETTE_BILATERAL_SYMMETRY: "Correct only the diagnosed left/right silhouette inconsistency. Match the jaw-level contour, inward bend, and visible density on both sides of the head so the finished bob reads as one continuous bilateral shape. Use the source head geometry as the symmetry reference; do not alter face, ears, head position, length, or unrelated texture/styling.",
     SILHOUETTE_TIGHTEN_JAW_CONTOUR: "Tighten only the jaw-level contour so the required compact inward curve reads clearly; do not alter length, texture, or global density.",
     SILHOUETTE_REDUCE_EXCESS_ROUNDING: "Reduce only the excessive rounding or width in the diagnosed contour while preserving the authoritative shape and length.",
     LENGTH_CORRECT: "Correct only the diagnosed hair length to the authoritative hairstyle definition; preserve silhouette, texture, and styling.",
@@ -253,7 +263,7 @@ export function decideAdaptiveRefinement(input: { defect: string; qa: any; histo
     return { action: "EXHAUSTED", category: classified.category, property: classified.property, strategy: null, instruction: null,
       reason: "Autonomous attempt ceiling reached.", regression, plateau, priorStrategies, evidence };
   }
-  const compatibleStrategies = strategiesFor(classified.category, classified.direction);
+  const compatibleStrategies = strategiesFor(classified.category, classified.direction, input.defect);
   const progress = currentScore != null && bestPrior != null && currentScore - bestPrior >= 0.5;
   const lastStrategy = priorStrategies[priorStrategies.length - 1] ?? null;
   const strategy = progress && lastStrategy && compatibleStrategies.includes(lastStrategy)
