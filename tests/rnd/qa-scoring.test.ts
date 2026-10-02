@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveHairstyleAccuracy } from "../../lib/rnd/qa";
+import { deriveHairstyleAccuracy } from "../../lib/rnd/qa-scoring";
 
 test("hairstyle accuracy is derived from explicit visual subdimensions", () => {
   const score = deriveHairstyleAccuracy({
