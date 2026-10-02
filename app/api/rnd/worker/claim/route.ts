@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
+import { resolvePersistedRefinementPrompt } from "@/lib/rnd/claim-prompt";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
@@ -69,6 +70,13 @@ export async function POST(request: Request) {
     });
     if (!target?.hairstyleId) throw new Error("R&D target hairstyle is missing.");
 
+    const latestCompletedAttempt = candidate.attemptCount > 0
+      ? await tx.rnDAttempt.findUnique({
+          where: { jobId_attemptNumber: { jobId: candidate.id, attemptNumber: candidate.attemptCount } },
+          select: { adaptiveDecision: true },
+        })
+      : null;
+
     const hairstyle = await tx.hairstyle.findUnique({
       where: { id: target.hairstyleId },
       select: { promptKey: true },
@@ -95,12 +103,17 @@ export async function POST(request: Request) {
       : "compiled";
 
     let authoritativePrompt: string;
-    const hasAuthoritativeRefinementMarker = candidate.currentPrompt.includes("# TARGETED REFINEMENT");
+    const persistedRefinementPrompt = latestCompletedAttempt?.adaptiveDecision
+      ? resolvePersistedRefinementPrompt({
+          persistedPrompt: candidate.currentPrompt,
+          adaptiveDecision: latestCompletedAttempt.adaptiveDecision,
+        })
+      : null;
 
-    if (hasAuthoritativeRefinementMarker) {
-      // The report route already persisted the adaptive prompt selected for the next attempt.
-      // Recovery must resume that exact prompt rather than reconstructing it from stale QA text.
-      authoritativePrompt = candidate.currentPrompt;
+    if (persistedRefinementPrompt) {
+      // The report route already persisted the validated adaptive prompt selected for the next attempt.
+      // Reuse it verbatim so claim-time authoritative-source changes cannot alter the worker input.
+      authoritativePrompt = persistedRefinementPrompt;
     } else {
       const rebuilt = await generateAutonomousPrompt(
         target.hardCoreInstruction ?? "Validate the requested production hairstyle.",

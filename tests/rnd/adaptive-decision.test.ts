@@ -136,7 +136,7 @@ test("combined jaw-level silhouette and density diagnosis selects silhouette cor
   assert.equal(result.strategy, "SILHOUETTE_STRENGTHEN_INWARD_CONTOUR");
   assert.match(result.instruction ?? "", /rounded, compact jaw-level silhouette/);
   assert.match(result.instruction ?? "", /inward side contour/);
-  assert.match(result.instruction ?? "", /Preserve the current hair length/);
+  assert.match(result.instruction ?? "", /Do not preserve a length that QA has identified as defective/);
 });
 
 test("volume-only diagnosis keeps localized volume strategy", () => {
