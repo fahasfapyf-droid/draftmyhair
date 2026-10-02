@@ -82,10 +82,39 @@ export async function POST(request: Request) {
       leaseOwner: true,
       leaseExpiresAt: true,
       currentPrompt: true,
+      failureCode: true,
       target: { select: { hairstyleId: true, hardCoreInstruction: true, campaignId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+
+  const reservation = await prisma.rnDAttempt.findUnique({
+    where: { jobId_attemptNumber: { jobId, attemptNumber } },
+    select: { id: true, submittedAt: true, artifactId: true, verdict: true, qaJson: true, errorCode: true },
+  });
+  if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
+
+  if (
+    attemptNumber === job.attemptCount &&
+    artifactId &&
+    reservation.artifactId === artifactId &&
+    reservation.qaJson != null &&
+    reservation.errorCode === null &&
+    ["QUEUED", "HUMAN_REVIEW", "HUMAN_APPROVAL", "EXHAUSTED"].includes(job.status) &&
+    job.failureCode === "WORKER_EXECUTION_ERROR"
+  ) {
+    await prisma.rnDJob.updateMany({
+      where: {
+        id: jobId,
+        attemptCount: attemptNumber,
+        status: job.status,
+        failureCode: "WORKER_EXECUTION_ERROR",
+      },
+      data: { failureCode: null, failureMessage: null },
+    });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+  }
+
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
@@ -93,11 +122,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
   }
 
-  const reservation = await prisma.rnDAttempt.findUnique({
-    where: { jobId_attemptNumber: { jobId, attemptNumber } },
-    select: { id: true, submittedAt: true, artifactId: true, verdict: true },
-  });
-  if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
   if (reservation.artifactId) return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
 
   const prompt = job.currentPrompt;
@@ -313,7 +337,7 @@ export async function POST(request: Request) {
     if (adaptiveDecision?.action === "HUMAN_REVIEW") {
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "HUMAN_REVIEW", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        data: { status: "HUMAN_REVIEW", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
         select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_REVIEW" } });
@@ -334,6 +358,8 @@ export async function POST(request: Request) {
           leaseExpiresAt: null,
           heartbeatAt: now,
           completedAt: null,
+          failureCode: null,
+          failureMessage: null,
         },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
@@ -343,7 +369,7 @@ export async function POST(request: Request) {
 
     const updatedJob = await tx.rnDJob.update({
       where: { id: jobId },
-      data: { status: "EXHAUSTED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now },
+      data: { status: "EXHAUSTED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: null, failureMessage: null },
       select: { id: true, status: true, attemptCount: true },
     });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
