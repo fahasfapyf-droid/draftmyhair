@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   const built = await optimizeAutonomousPrompt({ instruction: "Italian Bob", currentPrompt: job.currentPrompt, defect: decision.instruction, attemptNumber: 2, authoritativeStylePrompt: style.prompt, strategyId: decision.strategy });
   await prisma.$transaction(async (tx) => {
     await tx.rnDAttempt.deleteMany({ where: { jobId, attemptNumber: 1 } });
-    await tx.rnDAttempt.create({ data: { jobId, attemptNumber: 1, prompt: job.currentPrompt, promptRevision: "controlled-texture-setup", submittedAt: new Date(Date.now() - 1000), verdict: "REFINE", adaptiveDecision: decision } });
+    await tx.rnDAttempt.create({ data: { jobId, attemptNumber: 1, prompt: job.currentPrompt, promptRevision: "controlled-texture-setup", submittedAt: new Date(Date.now() - 2 * 60 * 1000), verdict: "REFINE", adaptiveDecision: decision } });
     await tx.rnDJob.update({ where: { id: jobId }, data: { status: "QUEUED", attemptCount: 1, currentPrompt: built.prompt, nextEligibleAt: null, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, startedAt: null, completedAt: null, failureCode: null, failureMessage: null } });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED", currentJobId: jobId } });
   });
