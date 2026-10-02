@@ -213,8 +213,8 @@ export async function POST(request: Request) {
   }
 
   const hardPass =
-    qa.verdict === "APPROVE" &&
-    qa.overall >= 9.5 &&
+    qa.productionReady &&
+    qa.transformationFloor >= 9.5 &&
     qa.hairOnly === "PASS" &&
     qa.rootIntegration >= 9.5 &&
     qa.transformationOnly === "PASS" &&
