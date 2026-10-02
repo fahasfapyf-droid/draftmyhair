@@ -199,6 +199,12 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   for (const key of [
     "overall",
     "identity",
+    "styleLengthAccuracy",
+    "styleSilhouetteAccuracy",
+    "styleWeightDistribution",
+    "stylePerimeterAccuracy",
+    "styleStylingAccuracy",
+    "styleRealism",
     "hairstyleAccuracy",
     "beardAccuracy",
     "colorAccuracy",
@@ -352,7 +358,7 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
     stylePerimeterAccuracy: Math.min(primary.stylePerimeterAccuracy, challenger.stylePerimeterAccuracy),
     styleStylingAccuracy: Math.min(primary.styleStylingAccuracy, challenger.styleStylingAccuracy),
     styleRealism: Math.min(primary.styleRealism, challenger.styleRealism),
-    hairstyleAccuracy: Math.min(primary.hairstyleAccuracy, challenger.hairstyleAccuracy),
+    hairstyleAccuracy: 0,
     beardAccuracy: Math.min(primary.beardAccuracy, challenger.beardAccuracy),
     colorAccuracy: Math.min(primary.colorAccuracy, challenger.colorAccuracy),
     buzzBaldAccuracy: Math.min(primary.buzzBaldAccuracy, challenger.buzzBaldAccuracy),
@@ -369,8 +375,23 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   };
 
   const categoryScores = applicableCategories.map(scoreFor);
-  const categoryAverage = categoryScores.reduce((sum, score) => sum + score, 0) / categoryScores.length;
-  result.transformationFloor = Math.min(...categoryScores, result.rootIntegration);
+
+  if (applicableCategories.includes("HAIRSTYLE")) {
+    result.hairstyleAccuracy = Number((
+      result.styleLengthAccuracy * 0.20 +
+      result.styleSilhouetteAccuracy * 0.25 +
+      result.styleWeightDistribution * 0.15 +
+      result.stylePerimeterAccuracy * 0.15 +
+      result.styleStylingAccuracy * 0.15 +
+      result.styleRealism * 0.10
+    ).toFixed(2));
+  }
+
+  const calibratedCategoryScores = applicableCategories.map((category, index) =>
+    category === "HAIRSTYLE" ? result.hairstyleAccuracy : categoryScores[index],
+  );
+  const categoryAverage = calibratedCategoryScores.reduce((sum, score) => sum + score, 0) / calibratedCategoryScores.length;
+  result.transformationFloor = Math.min(...calibratedCategoryScores, result.rootIntegration);
   result.overall = Number((categoryAverage * 0.80 + result.rootIntegration * 0.20).toFixed(2));
 
   // Numeric judge scores and deterministic gates are authoritative.
