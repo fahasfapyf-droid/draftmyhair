@@ -41,6 +41,24 @@ export type RndQaResult = {
   transformationGate: TransformationGateResult;
 };
 
+export function deriveHairstyleAccuracy(input: {
+  styleLengthAccuracy: number;
+  styleSilhouetteAccuracy: number;
+  styleWeightDistribution: number;
+  stylePerimeterAccuracy: number;
+  styleStylingAccuracy: number;
+  styleRealism: number;
+}) {
+  return Number((
+    input.styleLengthAccuracy * 0.20 +
+    input.styleSilhouetteAccuracy * 0.25 +
+    input.styleWeightDistribution * 0.15 +
+    input.stylePerimeterAccuracy * 0.15 +
+    input.styleStylingAccuracy * 0.15 +
+    input.styleRealism * 0.10
+  ).toFixed(2));
+}
+
 const QA_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -240,14 +258,7 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   // observable subdimensions so a single intuitive lowball score cannot collapse
   // an otherwise recognizable transformation.
   if (value.applicableCategories.includes("HAIRSTYLE")) {
-    value.hairstyleAccuracy = Number((
-      value.styleLengthAccuracy * 0.20 +
-      value.styleSilhouetteAccuracy * 0.25 +
-      value.styleWeightDistribution * 0.15 +
-      value.stylePerimeterAccuracy * 0.15 +
-      value.styleStylingAccuracy * 0.15 +
-      value.styleRealism * 0.10
-    ).toFixed(2));
+    value.hairstyleAccuracy = deriveHairstyleAccuracy(value);
   }
 
   const applicableScores: number[] = [];
@@ -377,14 +388,7 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   const categoryScores = applicableCategories.map(scoreFor);
 
   if (applicableCategories.includes("HAIRSTYLE")) {
-    result.hairstyleAccuracy = Number((
-      result.styleLengthAccuracy * 0.20 +
-      result.styleSilhouetteAccuracy * 0.25 +
-      result.styleWeightDistribution * 0.15 +
-      result.stylePerimeterAccuracy * 0.15 +
-      result.styleStylingAccuracy * 0.15 +
-      result.styleRealism * 0.10
-    ).toFixed(2));
+    result.hairstyleAccuracy = deriveHairstyleAccuracy(result);
   }
 
   const calibratedCategoryScores = applicableCategories.map((category, index) =>
