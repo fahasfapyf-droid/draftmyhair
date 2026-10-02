@@ -49,16 +49,38 @@ The outline should remain clean while displaying subtle natural variation create
 The hairstyle should never appear flat, triangular, boxy, or helmet-like.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OVERALL LENGTH
+OVERALL LENGTH — HARD VISUAL ANCHOR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Maintain a classic jaw-length bob.
+The finished haircut MUST read as a compact jaw-length bob in the final image.
 
-The perimeter should finish naturally between the jawline and upper neck depending on the subject's original proportions.
+The visible perimeter on both sides of the face must terminate at approximately jaw level, with the main mass ending around the jaw/upper-neck transition.
 
-Front sections may fall only slightly longer through natural movement.
+NO hair may remain at shoulder length, upper-chest length, or long-lob length.
+
+Do not preserve the source's original long length when creating this haircut. The transformation requires an actual haircut-length reduction to the authoritative Italian Bob length.
+
+Front sections may fall only minimally longer than the jaw through natural movement; they must still read as a compact bob rather than a lob.
 
 Avoid pronounced A-line geometry.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SILHOUETTE ANCHOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+From the frontal view, the haircut must form a visibly compact, rounded mass around the jaw on both sides.
+
+The side sections must carry enough density to create continuous visual weight from the cheek/ear region into the jaw-level perimeter.
+
+The silhouette must not collapse into a thin straight curtain, generic blunt chin bob, or long straight hair with only the ends shortened.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INWARD BLOWOUT ANCHOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The lower perimeter on both sides must show a subtle but clearly visible inward round-brush bend beneath the jaw.
+
+The bend must be symmetrical enough to read as a deliberate salon blowout while remaining natural and photographic.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WEIGHT DISTRIBUTION
