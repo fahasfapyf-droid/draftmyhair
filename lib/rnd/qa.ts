@@ -15,6 +15,8 @@ export type RndQaVerifierResult = {
 
 export type RndQaResult = {
   overall: number;
+  transformationFloor: number;
+  productionReady: boolean;
   identity: number;
   hairOnly: "PASS" | "FAIL";
   hairstyleAccuracy: number;
@@ -38,6 +40,12 @@ const QA_SCHEMA = {
   properties: {
     overall: { type: "NUMBER", minimum: 0, maximum: 10 },
     identity: { type: "NUMBER", minimum: 0, maximum: 10 },
+    styleLengthAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
+    styleSilhouetteAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
+    styleWeightDistribution: { type: "NUMBER", minimum: 0, maximum: 10 },
+    stylePerimeterAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
+    styleStylingAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
+    styleRealism: { type: "NUMBER", minimum: 0, maximum: 10 },
     hairOnly: { type: "STRING", enum: ["PASS", "FAIL"] },
     hairstyleAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
     beardAccuracy: { type: "NUMBER", minimum: 0, maximum: 10 },
@@ -58,6 +66,18 @@ const QA_SCHEMA = {
   required: [
     "overall",
     "identity",
+    "styleLengthAccuracy",
+    "styleSilhouetteAccuracy",
+    "styleWeightDistribution",
+    "stylePerimeterAccuracy",
+    "styleStylingAccuracy",
+    "styleRealism",
+    "styleLengthAccuracy",
+    "styleSilhouetteAccuracy",
+    "styleWeightDistribution",
+    "stylePerimeterAccuracy",
+    "styleStylingAccuracy",
+    "styleRealism",
     "hairOnly",
     "hairstyleAccuracy",
     "beardAccuracy",
@@ -110,8 +130,11 @@ const BASE_RULES = [
   "For non-applicable category scores, return 10. They must not affect the verdict.",
   "Score only from directly observed transformation evidence. Do not infer a score from the existence of an approval threshold or from the expected business outcome.",
   "Use the full 0-10 scale. Do not cluster acceptable outputs at 9.5-10.",
-  "Assume defects may exist until visually checked. If uncertain, choose the lower score.",
-  "The overall score is a transformation-quality score only. It must reflect the weakest applicable transformation dimension: hairstyle/beard/color/buzz-bald as applicable and rootIntegration. Identity and lighting scores are diagnostic safety evidence only and must never raise or lower overall.",
+  "For hairstyle requests, first score these observable subdimensions independently: length, silhouette, weight distribution, perimeter, styling/defining features, and hair realism. Then derive hairstyleAccuracy from those subdimensions. Do not collapse the entire haircut into one intuitive impression.",
+  "Score anchors for hairstyleAccuracy: 9.5-10 = the requested style and defining geometry are convincingly exact with only negligible deviations; 8.5-9.4 = clearly the requested style with minor deviations; 7.0-8.4 = clearly recognizable but generic, softened, or missing one significant defining characteristic; 5.0-6.9 = partially correct but with a major structural mismatch; below 5 = wrong style, wrong length family, or major structural failure. Use these anchors consistently.",
+  "Aesthetic preference is not a defect. Penalize only observable mismatch against the requested hairstyle definition.",
+  "Do not lower a score merely because the image is not perfect. Score the observed degree of compliance. If two plausible interpretations exist, describe the concrete visible difference rather than automatically collapsing the score.",
+  "The overall score is a calibrated transformation-quality summary, not the weakest single dimension. Production readiness is enforced separately by transformationFloor and hard gates. Identity and lighting scores are diagnostic safety evidence only and must never raise or lower transformationFloor.",
   "Return one JSON object matching the supplied schema. No markdown.",
   "APPROVE means the observed transformation is production-ready under this rubric; the application, not the model, enforces the numeric approval threshold.",
   "If hairOnly, transformationOnly, artifacts, transformation gate, rootIntegration, or any applicable transformation score is below production threshold, verdict must be REGENERATE. Identity and lighting are not part of the numerical production threshold; concrete identity or lighting regressions may still be treated as blocking safety defects by the fail-only verifier.",
@@ -201,6 +224,20 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
     throw new Error("QA returned an invalid verdict.");
   }
 
+  // The model's holistic hairstyle score is advisory. Derive it from explicit
+  // observable subdimensions so a single intuitive lowball score cannot collapse
+  // an otherwise recognizable transformation.
+  if (value.applicableCategories.includes("HAIRSTYLE")) {
+    value.hairstyleAccuracy = Number((
+      value.styleLengthAccuracy * 0.20 +
+      value.styleSilhouetteAccuracy * 0.25 +
+      value.styleWeightDistribution * 0.15 +
+      value.stylePerimeterAccuracy * 0.15 +
+      value.styleStylingAccuracy * 0.15 +
+      value.styleRealism * 0.10
+    ).toFixed(2));
+  }
+
   const applicableScores: number[] = [];
   if (value.applicableCategories.includes("HAIRSTYLE")) applicableScores.push(value.hairstyleAccuracy);
   if (value.applicableCategories.includes("BEARD")) applicableScores.push(value.beardAccuracy);
@@ -208,20 +245,17 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   if (value.applicableCategories.includes("BUZZ_BALD")) applicableScores.push(value.buzzBaldAccuracy);
   applicableScores.push(value.rootIntegration);
 
-  const expectedOverall = Math.min(...applicableScores);
-  // The model's aggregate score is advisory; the deterministic weakest-applicable
-  // score is authoritative. Normalize a mismatch instead of turning valid QA into
-  // an infrastructure failure that discards the generated artifact.
-  if (Math.abs(value.overall - expectedOverall) > 0.01) {
-    value.overall = expectedOverall;
-  }
+  const transformationFloor = Math.min(...applicableScores);
+  const categoryAverage = applicableScores.reduce((sum, score) => sum + score, 0) / applicableScores.length;
+  const calibratedOverall = Number((categoryAverage * 0.80 + value.rootIntegration * 0.20).toFixed(2));
+  value.overall = calibratedOverall;
 
   if (value.verdict === "APPROVE" &&
-      (expectedOverall < 9.5 || value.hairOnly !== "PASS" || value.transformationOnly !== "PASS" || value.artifacts !== "NONE")) {
+      (transformationFloor < 9.5 || value.hairOnly !== "PASS" || value.transformationOnly !== "PASS" || value.artifacts !== "NONE")) {
     value.verdict = "REGENERATE";
   }
 
-  return value;
+  return { ...value, transformationFloor, productionReady: false };
 }
 
 async function verify(
@@ -302,8 +336,16 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
 
   const result: RndQaResult = {
     overall: 10,
+    transformationFloor: 10,
+    productionReady: false,
     identity: Math.min(primary.identity, challenger.identity),
     hairOnly: primary.hairOnly === "PASS" && challenger.hairOnly === "PASS" ? "PASS" : "FAIL",
+    styleLengthAccuracy: Math.min(primary.styleLengthAccuracy, challenger.styleLengthAccuracy),
+    styleSilhouetteAccuracy: Math.min(primary.styleSilhouetteAccuracy, challenger.styleSilhouetteAccuracy),
+    styleWeightDistribution: Math.min(primary.styleWeightDistribution, challenger.styleWeightDistribution),
+    stylePerimeterAccuracy: Math.min(primary.stylePerimeterAccuracy, challenger.stylePerimeterAccuracy),
+    styleStylingAccuracy: Math.min(primary.styleStylingAccuracy, challenger.styleStylingAccuracy),
+    styleRealism: Math.min(primary.styleRealism, challenger.styleRealism),
     hairstyleAccuracy: Math.min(primary.hairstyleAccuracy, challenger.hairstyleAccuracy),
     beardAccuracy: Math.min(primary.beardAccuracy, challenger.beardAccuracy),
     colorAccuracy: Math.min(primary.colorAccuracy, challenger.colorAccuracy),
@@ -320,10 +362,10 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
     transformationGate,
   };
 
-  result.overall = Math.min(
-    ...applicableCategories.map(scoreFor),
-    result.rootIntegration,
-  );
+  const categoryScores = applicableCategories.map(scoreFor);
+  const categoryAverage = categoryScores.reduce((sum, score) => sum + score, 0) / categoryScores.length;
+  result.transformationFloor = Math.min(...categoryScores, result.rootIntegration);
+  result.overall = Number((categoryAverage * 0.80 + result.rootIntegration * 0.20).toFixed(2));
 
   // Numeric judge scores and deterministic gates are authoritative.
   // A fail-only verifier is allowed to veto a result only when at least one
@@ -346,17 +388,20 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
   const verifierMayVeto = verifier.blockingDefect && !(primaryPass && challengerPass);
 
   const hardPass =
-    result.overall >= 9.5 &&
+    result.transformationFloor >= 9.5 &&
     result.hairOnly === "PASS" &&
     result.transformationOnly === "PASS" &&
     result.artifacts === "NONE" &&
     !verifierMayVeto &&
     transformationGate.passed;
 
+  result.productionReady = hardPass;
   result.verdict = hardPass ? "APPROVE" : "REGENERATE";
 
   if (transformationGate.noOp) {
     result.overall = 0;
+    result.transformationFloor = 0;
+    result.productionReady = false;
     result.reason = "Deterministic transformation gate failed: " + transformationGate.reason;
     result.refinement = "Regenerate the image so the requested hairstyle transformation is visibly and materially applied; preserve all locked non-hair regions.";
     return result;
@@ -372,7 +417,9 @@ function aggregate(primary: Omit<RndQaResult, "verifier" | "transformationGate">
     ].filter((item) => item.text);
     candidates.sort((a, b) => a.score - b.score);
     result.reason =
-      "Hair-transformation QA hard gate failed. Deterministic gate: " + transformationGate.reason + " Primary: " +
+      "Hair-transformation QA hard gate failed. Calibrated overall is " + result.overall +
+      " while the production transformation floor is " + result.transformationFloor +
+      ". Deterministic gate: " + transformationGate.reason + " Primary: " +
       primary.reason +
       " Challenger: " +
       challenger.reason +
