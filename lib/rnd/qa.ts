@@ -209,8 +209,11 @@ function parseQa(text: string): Omit<RndQaResult, "verifier" | "transformationGa
   applicableScores.push(value.rootIntegration);
 
   const expectedOverall = Math.min(...applicableScores);
+  // The model's aggregate score is advisory; the deterministic weakest-applicable
+  // score is authoritative. Normalize a mismatch instead of turning valid QA into
+  // an infrastructure failure that discards the generated artifact.
   if (Math.abs(value.overall - expectedOverall) > 0.01) {
-    throw new Error("QA overall must equal the weakest applicable transformation score.");
+    value.overall = expectedOverall;
   }
 
   if (value.verdict === "APPROVE" &&
