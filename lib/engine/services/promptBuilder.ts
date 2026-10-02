@@ -20,11 +20,14 @@ function getMasterPrompt(): string {
 }
 
 export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBuildResult> {
-  const databaseStyle = await prisma.promptVersion.findFirst({
-    where: { status: "ACTIVE", hairstyle: { promptKey: request.promptKey, isActive: true } },
-    orderBy: { version: "desc" },
-    select: { prompt: true, version: true },
-  });
+  const databaseStyle =
+    process.env.VERCEL_ENV === "production"
+      ? await prisma.promptVersion.findFirst({
+          where: { status: "ACTIVE", hairstyle: { promptKey: request.promptKey, isActive: true } },
+          orderBy: { version: "desc" },
+          select: { prompt: true, version: true },
+        })
+      : null;
   const compiledStyle = STYLE_PROMPTS[request.promptKey];
   const stylePrompt = databaseStyle?.prompt ?? compiledStyle?.prompt;
   if (!stylePrompt) throw new Error(`Unknown hairstyle prompt key: ${request.promptKey}`);
