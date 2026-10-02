@@ -18,6 +18,12 @@ export type RndQaResult = {
   transformationFloor: number;
   productionReady: boolean;
   identity: number;
+  styleLengthAccuracy: number;
+  styleSilhouetteAccuracy: number;
+  styleWeightDistribution: number;
+  stylePerimeterAccuracy: number;
+  styleStylingAccuracy: number;
+  styleRealism: number;
   hairOnly: "PASS" | "FAIL";
   hairstyleAccuracy: number;
   beardAccuracy: number;
@@ -72,12 +78,6 @@ const QA_SCHEMA = {
     "stylePerimeterAccuracy",
     "styleStylingAccuracy",
     "styleRealism",
-    "styleLengthAccuracy",
-    "styleSilhouetteAccuracy",
-    "styleWeightDistribution",
-    "stylePerimeterAccuracy",
-    "styleStylingAccuracy",
-    "styleRealism",
     "hairOnly",
     "hairstyleAccuracy",
     "beardAccuracy",
@@ -95,6 +95,12 @@ const QA_SCHEMA = {
   propertyOrdering: [
     "overall",
     "identity",
+    "styleLengthAccuracy",
+    "styleSilhouetteAccuracy",
+    "styleWeightDistribution",
+    "stylePerimeterAccuracy",
+    "styleStylingAccuracy",
+    "styleRealism",
     "hairOnly",
     "hairstyleAccuracy",
     "beardAccuracy",
