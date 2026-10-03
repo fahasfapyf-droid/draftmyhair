@@ -40,7 +40,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             qaStatus: qaStatus ?? PromptQAStatus.PASSED,
             status: nextStatus,
           },
-          include: { hairstyle: { select: { id: true, name: true, promptKey: true } } },
+          select: {
+            id: true,
+            hairstyleId: true,
+            version: true,
+            prompt: true,
+            status: true,
+            qaStatus: true,
+            notes: true,
+            createdAt: true,
+            updatedAt: true,
+            hairstyle: { select: { id: true, name: true, promptKey: true } },
+          },
         });
       });
       return NextResponse.json({ prompt: result }, { status: 201 });
@@ -61,7 +72,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (typeof body.notes === "string") data.notes = body.notes.trim() || null;
       if (qaStatus) data.qaStatus = qaStatus;
       if (status) data.status = status;
-      return tx.promptVersion.update({ where: { id }, data, include: { hairstyle: { select: { id: true, name: true, promptKey: true } } } });
+      return tx.promptVersion.update({
+        where: { id },
+        data,
+        select: {
+          id: true,
+          hairstyleId: true,
+          version: true,
+          prompt: true,
+          status: true,
+          qaStatus: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+          hairstyle: { select: { id: true, name: true, promptKey: true } },
+        },
+      });
     });
     return NextResponse.json({ prompt: result });
   } catch (error) {

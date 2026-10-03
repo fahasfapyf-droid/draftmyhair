@@ -12,9 +12,17 @@ export async function GET() {
   const [prompts, styles] = await Promise.all([
     prisma.promptVersion.findMany({
       orderBy: [{ hairstyle: { name: "asc" } }, { version: "desc" }],
-      include: {
+      select: {
+        id: true,
+        hairstyleId: true,
+        version: true,
+        prompt: true,
+        status: true,
+        qaStatus: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true,
         hairstyle: { select: { id: true, name: true, promptKey: true } },
-        sourceRnDAttempt: { select: { id: true, attemptNumber: true, overallScore: true, artifactId: true } },
       },
     }),
     prisma.hairstyle.findMany({
@@ -61,7 +69,21 @@ export async function POST(request: Request) {
       const latest = await tx.promptVersion.findFirst({ where: { hairstyleId }, orderBy: { version: "desc" }, select: { version: true } });
       const version = (latest?.version ?? 0) + 1;
       if (status === PromptStatus.ACTIVE) await tx.promptVersion.updateMany({ where: { hairstyleId, status: PromptStatus.ACTIVE }, data: { status: PromptStatus.ARCHIVED } });
-      return tx.promptVersion.create({ data: { hairstyleId, version, prompt, qaStatus, notes, status }, include: { hairstyle: { select: { id: true, name: true, promptKey: true } } } });
+      return tx.promptVersion.create({
+        data: { hairstyleId, version, prompt, qaStatus, notes, status },
+        select: {
+          id: true,
+          hairstyleId: true,
+          version: true,
+          prompt: true,
+          status: true,
+          qaStatus: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+          hairstyle: { select: { id: true, name: true, promptKey: true } },
+        },
+      });
     });
     return NextResponse.json({ prompt: result }, { status: 201 });
   } catch (error) {
