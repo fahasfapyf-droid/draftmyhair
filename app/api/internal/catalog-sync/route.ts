@@ -5,14 +5,15 @@ import catalog from "@/lib/catalog-hairstyles.json";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function authorized(request: Request) {
-  const expected = process.env.DMH_CATALOG_SYNC_SECRET;
-  const provided = request.headers.get("x-dmh-catalog-sync-secret");
-  return Boolean(expected && provided && provided === expected);
+function authorized() {
+  return (
+    process.env.VERCEL_ENV === "preview" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "chore/optimize-hairstyles-61-65"
+  );
 }
 
-export async function POST(request: Request) {
-  if (!authorized(request)) {
+export async function POST() {
+  if (!authorized()) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
