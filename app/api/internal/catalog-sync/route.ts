@@ -20,6 +20,20 @@ export async function POST() {
   try {
     const results = [];
 
+    // Free the unique promptKey constraint first so the canonical catalog can
+    // safely repair legacy preview records whose promptKey values drifted.
+    const existing = await prisma.hairstyle.findMany({
+      where: { slug: { in: catalog.map((style) => style.slug) } },
+      select: { id: true, promptKey: true },
+    });
+
+    for (const style of existing) {
+      await prisma.hairstyle.update({
+        where: { id: style.id },
+        data: { promptKey: `__catalog_sync__${style.id}` },
+      });
+    }
+
     for (const style of catalog) {
       const result = await prisma.hairstyle.upsert({
         where: { slug: style.slug },
