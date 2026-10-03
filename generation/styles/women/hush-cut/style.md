@@ -1,48 +1,31 @@
 # Hush Cut
 
-## 1. INPAINT HAIR ONLY
+Create a true Hush Cut as a long, quiet, low-contrast layered haircut. Its identity comes from closely integrated internal layers and delicate face framing while the crown remains calm and the overall silhouette stays narrow and elongated.
 
-Modify only the hair. The face, facial features, expression, eyes, brows, skin texture, skin tone, jawline, chin, neck, ears, body, clothing, background, lighting, exposure, color balance, focus, grain, pose, framing, perspective and source scale remain completely untouched.
+## CORE GEOMETRY
+- Preserve a medium-to-long foundation with the longest lengths remaining continuous and dominant.
+- The first meaningful framing/layer transition begins around upper cheekbone to jaw level.
+- Add several closely spaced internal transitions from the front and upper sides into progressively longer lower lengths.
+- Layer spacing should be tighter and less dramatic than Butterfly or Shag architecture.
+- Keep the crown flat-to-low volume; do not create a high cap or broad wing.
+- Maintain a narrow elongated silhouette with controlled width through the upper sides.
+- The perimeter is light and softly separated rather than blunt, but the longest foundation remains clearly readable.
 
-## 2. GEOMETRY LOCK — ABSOLUTE
+## FACE FRAMING
+Use delicate cheekbone-to-jaw framing that immediately merges into the next-longer layer. No single disconnected panel, curtain-bang structure or dramatic wing. The shortest visible framing point should be purposeful but not aggressively short.
 
-Preserve the exact head position, tilt and viewing angle. Any natural head tilt in the source is intentional and must remain unchanged. Jaw shape and width are locked. Chin is locked. Neck is locked. Ear shape locked — do not regenerate the ears. The skull is a rigid fixed object. Only the surface hair changes. Match the source scale and framing exactly; no zoom, crop or reframe. Do not reshape the skull or alter the position of the ears.
+## INTERNAL MOVEMENT
+The haircut should contain more internal structure than ordinary Long Layers, but the transitions remain low-contrast and blended. Upper and mid-length sections move independently in small groups rather than forming large blowout wings.
 
-## 3. SKIN PRESERVATION — CRITICAL
+## CROWN / WEIGHT
+Keep root and crown weight controlled. Remove internal weight progressively through the upper and mid-lengths without creating a short shag cap. The lower foundation retains enough mass to prevent the style from becoming wispy or mullet-like.
 
-Preserve the exact facial and visible skin texture, pores, tone and natural micro-variation. No smoothing, beauty filter, retouching, relighting or skin-tone drift. Hair must not cast artificial color onto the face or scalp. Never lighten the source skin tone.
+## TEXTURE / FINISH
+Use fine separated strand groups, soft feathering and subtle natural movement. Preserve gravity and source texture. No exaggerated salon blowout, crunchy feathering or repetitive digital strand pattern.
 
-## 4. HAIR COLOR — ROOT AUTHORITY
+## STYLE DIFFERENTIATION
+Hush Cut = long foundation + closely spaced low-contrast layers + delicate integrated framing + calm crown + narrow silhouette.
+Distinct from Long Layers by denser internal transitions; Korean Layer Cut by quieter/less polished front movement; Butterfly by lower contrast and less wing volume; Shag/Wolf by calmer crown and absence of short choppy fragmentation.
 
-STEP 1 — Read true hair color ONLY from the first 2–3 mm at the scalp, sampling the hairline, temples, part and nape where visible, and use that root-zone evidence as the authority.
-
-STEP 2 — Ignore and discard color information coming from the background, lighting, environment, clothing or reflected surroundings.
-
-STEP 3 — Reproduce the exact source root color and only the natural color variation already present in the source hair. Do not invent highlights, lowlights, dye or artificial color shift.
-
-STEP 4 — White-background contamination check: would the reproduced hair color still look correct on a pure white background? If no, correct the contamination before completing the result.
-
-## 5. STYLE-SPECIFIC DESIGN
-
-Create a true Hush Cut as a long, quiet, low-contrast layered haircut whose movement comes from closely integrated internal layers rather than dramatic volume or visible step changes.
-
-### CORE GEOMETRY
-- Preserve a long overall foundation; the longest hair remains continuous and clearly dominant.
-- Begin the first meaningful internal layer around the upper cheekbone-to-jaw region, then distribute progressively longer layers through the sides and lower lengths.
-- Use multiple but closely spaced layer transitions so the haircut feels airy and cascading without forming shelves.
-- Keep the crown relatively flat and calm; do not build a high crown or wide butterfly silhouette.
-- Face framing should be delicate and integrated: short enough to create movement around the cheek/jaw area but long enough to merge continuously into the next layers.
-- Maintain a narrow, elongated external silhouette with controlled width through the upper sides.
-- The ends should retain fine, separated movement rather than a heavy blunt perimeter.
-
-### TEXTURE AND FINISH
-Use soft, lightweight strand grouping with low-contrast transitions. Movement should be subtle and inward/outward in small sections, not large salon blowout wings. Preserve realistic root density and natural gravity. The haircut should look polished but quiet, with no exaggerated feathering.
-
-### STYLE DIFFERENTIATION
-The defining signal is long length + closely integrated cascading layers + restrained face framing + a calm crown. This must remain distinct from Long Layers, Butterfly Cut, Korean Layer Cut, Shag, Wolf Cut and high-volume face-framing styles.
-
-## 6. NEGATIVE CONSTRAINTS
-
-No butterfly wings, shag, wolf cut, mullet, heavy feathering, dramatic crown volume, short choppy layers, aggressive disconnected steps, generic one-layer face framing, curtain bangs, long-layer-only silhouette, high-volume blowout, jellyfish structure, bob, lob, pixie, artificial wig effect, face changes, ear regeneration, skin changes, lighting changes, background changes, zoom, crop or reframe.
-
-The finished image must look like the same original photograph after a professional haircut, not a generated replacement person or synthetic wig.
+## NEGATIVE CONSTRAINTS
+No butterfly wings, wolf cut, shag, mullet, high-volume blowout, short choppy crown, curtain bangs, disconnected framing panels, jellyfish tiers, bob, lob, pixie, heavy feathering or dramatic crown lift.
