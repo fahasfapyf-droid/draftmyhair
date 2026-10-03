@@ -1,6 +1,6 @@
-# CLAVI CUT
+# SHORT BOXED BEARD
 
-Create a genuine Clavi Cut. The defining architecture is collarbone-length perimeter, elongated medium haircut, substantial lower weight, restrained internal layers, integrated cheekbone-to-jaw framing, controlled crown.
+Create a genuine Short Boxed Beard. The defining architecture is compact short boxed beard with fuller jaw/chin/moustache coverage and controlled natural cheek and neckline boundaries.
 
 Preserve the exact source face, expression, skin texture and tone, head position, skull geometry, jaw, chin, neck, ears, body, clothing, background, lighting, exposure, framing, perspective, focus, grain and color balance. Ear shape locked — do not regenerate the ears. The skull is a rigid fixed object. Only the requested hair or facial-hair region changes.
 
@@ -8,7 +8,7 @@ The result must look like a real professional transformation photographed in the
 
 
 STYLE DISTINCTION:
-Clavi Cut must be immediately distinguishable from Lob, Soft Lob, long layers, Butterfly Cut, Shag.
+Short Boxed Beard must be immediately distinguishable from giant beard, goatee, disconnected moustache, painted edge.
 
 NEGATIVE:
-No Lob, Soft Lob, long layers, Butterfly Cut, Shag; no facial changes; no skin changes; no ear regeneration; no skull reshaping; no head-angle change; no lighting change; no background change; no crop/zoom/reframe; no artificial hairline; no synthetic texture.
+No giant beard, goatee, disconnected moustache, painted edge; no facial changes; no skin changes; no ear regeneration; no skull reshaping; no head-angle change; no lighting change; no background change; no crop/zoom/reframe; no artificial hairline; no synthetic texture.
