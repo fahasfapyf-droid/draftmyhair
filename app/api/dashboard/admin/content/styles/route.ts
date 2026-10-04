@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       select: { id: true, name: true },
     });
     const existingNames = new Set(existing.map((r: { name: string }) => r.name));
-    const toCreate = normalized.filter((r) => !existingNames.has(r.name));
+    const toCreate = normalized.filter((r: (typeof normalized)[number]) => !existingNames.has(r.name));
 
     const result = await prisma.$transaction(async (tx) => {
       if (toCreate.length) {
