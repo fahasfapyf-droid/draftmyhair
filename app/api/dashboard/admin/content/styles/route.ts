@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       where: { name: { in: names } },
       select: { id: true, name: true },
     });
-    const existingNames = new Set(existing.map((r) => r.name));
+    const existingNames = new Set(existing.map((r: { name: string }) => r.name));
     const toCreate = normalized.filter((r) => !existingNames.has(r.name));
 
     const result = await prisma.$transaction(async (tx) => {
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       return after;
     });
 
-    const finalNames = new Set(result.map((r) => r.name));
+    const finalNames = new Set(result.map((r: { name: string }) => r.name));
     const missing = names.filter((n) => !finalNames.has(n));
     return NextResponse.json({
       ok: missing.length === 0,
