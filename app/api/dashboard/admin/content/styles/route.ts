@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     });
 
     const finalNames = new Set(result.map((r: { name: string }) => r.name));
-    const missing = names.filter((n) => !finalNames.has(n));
+    const missing = names.filter((n: string) => !finalNames.has(n));
     return NextResponse.json({
       ok: missing.length === 0,
       expected: 147,
