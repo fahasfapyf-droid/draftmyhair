@@ -29,6 +29,6 @@ export async function GET() {
     const after = await prisma.promptVersion.findMany({where:{id:{in:updatedIds}},select:{id:true,version:true,status:true,qaStatus:true,prompt:true,hairstyle:{select:{name:true}}}});
     const changed = after.filter(x => x.prompt === TARGETS.find(t=>t[0]===x.hairstyle.name)?.[1]).length;
     if (after.length !== TARGETS.length || changed !== TARGETS.length) return NextResponse.json({ok:false,error:"Post-check failed",afterCount:after.length,changed}, {status:500});
-    return NextResponse.json({ok:true,expected:TARGETS.length,matched:before.length,updated:updated.length,created:0,versions:after.map(x=>({name:x.hairstyle.name,id:x.id,version:x.version,status:x.status,qaStatus:x.qaStatus})),noNewPromptVersions:true});
+    return NextResponse.json({ok:true,expected:TARGETS.length,matched:before.length,updated:after.length,created:0,versions:after.map(x=>({name:x.hairstyle.name,id:x.id,version:x.version,status:x.status,qaStatus:x.qaStatus})),noNewPromptVersions:true});
   } catch (e) { console.error(e); return NextResponse.json({ok:false,error:"Refinement failed"}, {status:500}); }
 }
