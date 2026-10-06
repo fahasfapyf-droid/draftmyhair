@@ -6,6 +6,39 @@ export const dynamic = "force-dynamic";
 
 const BRANCH = "chore/batch-1-30-architecture";
 
+const BATCH_NAMES = [
+  "Asymmetrical Bob",
+  "Bixie",
+  "Blunt Bob",
+  "Blunt Lob",
+  "Bowl Cut",
+  "Boyish Pixie",
+  "Butterfly Cut",
+  "C-Cut",
+  "Chelsea Cut",
+  "Chin-Length Bob",
+  "Classic Bob",
+  "Classic Rounded Precision Bob with Full Blunt Fringe",
+  "Crew Cut",
+  "Curtain Layers",
+  "Curtains",
+  "Face-Framing Layers",
+  "Faux Hawk",
+  "French Bob",
+  "French Bob — No Bangs",
+  "French Bob — With Bangs",
+  "French Crop",
+  "Hime Cut",
+  "Hush Cut",
+  "Italian Bob",
+  "Ivy League",
+  "Jaw-Length Bob",
+  "Jellyfish Cut",
+  "Kicktail Bobcut",
+  "Korean Layer Cut",
+  "Layered Bob",
+] as const;
+
 function allowed() {
   return process.env.VERCEL_ENV === "preview" &&
     process.env.VERCEL_GIT_COMMIT_REF === BRANCH;
@@ -19,10 +52,7 @@ export async function GET() {
   if (!allowed()) return blocked();
 
   const rows = await prisma.hairstyle.findMany({
-    where: { isActive: true },
-    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-    skip: 0,
-    take: 30,
+    where: { isActive: true, name: { in: [...BATCH_NAMES] } },
     select: {
       id: true,
       name: true,
@@ -36,7 +66,14 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ count: rows.length, rows });
+  const byName = new Map(rows.map((row) => [row.name, row]));
+  const ordered = BATCH_NAMES.map((name, index) => ({
+    batchNumber: index + 1,
+    requestedName: name,
+    row: byName.get(name) ?? null,
+  }));
+
+  return NextResponse.json({ count: ordered.length, found: rows.length, rows: ordered });
 }
 
 export async function POST(request: Request) {
@@ -64,11 +101,7 @@ export async function POST(request: Request) {
 
     const updated = await tx.promptVersion.update({
       where: { id: promptVersionId },
-      data: {
-        prompt: newPrompt,
-        notes: note,
-        qaStatus: "DRAFT",
-      },
+      data: { prompt: newPrompt, notes: note, qaStatus: "DRAFT" },
       select: { id: true, hairstyleId: true, version: true, status: true, qaStatus: true, prompt: true },
     });
 
