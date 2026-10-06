@@ -5,7 +5,7 @@ export async function GET(){try{
  const before=await prisma.promptVersion.findMany({where:{hairstyle:{name:{in:names}},status:"DRAFT"},select:{id:true,version:true,status:true,qaStatus:true,prompt:true,hairstyle:{select:{name:true}}}});
  if(before.length!==TARGETS.length||new Set(before.map(x=>x.hairstyle.name)).size!==TARGETS.length)return NextResponse.json({ok:false,error:"Exact target mismatch",expected:TARGETS.length,matched:before.length},{status:409});
  const ids=before.map(x=>x.id);
- await prisma.$transaction(async tx=>{for(const [name,prompt] of TARGETS){const row=before.find(x=>x.hairstyle.name===name);await tx.promptVersion.update({where:{id:row.id},data:{prompt,notes:"Refined during prompt R&D pass 11-20. DRAFT only; generation QA required."}});}});
+ await prisma.$transaction(async tx=>{for(const [name,prompt] of TARGETS){const row=before.find(x=>x.hairstyle.name===name);if(!row)throw new Error("Missing target: "+name);await tx.promptVersion.update({where:{id:row.id},data:{prompt,notes:"Refined during prompt R&D pass 11-20. DRAFT only; generation QA required."}});}});
  const after=await prisma.promptVersion.findMany({where:{id:{in:ids}},select:{id:true,version:true,status:true,qaStatus:true,prompt:true,hairstyle:{select:{name:true}}}});
  const changed=after.filter(x=>x.prompt===TARGETS.find(t=>t[0]===x.hairstyle.name)?.[1]).length;
  if(after.length!==TARGETS.length||changed!==TARGETS.length)return NextResponse.json({ok:false,error:"Post-check failed",afterCount:after.length,changed},{status:500});
