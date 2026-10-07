@@ -39,7 +39,6 @@
   "exclude": [
     "node_modules",
     "scripts/test-gemini-image.ts",
-    "tools/rnd-worker/**",
-    "browser-agent/**"
+    "tools/rnd-worker/**"
   ]
 }

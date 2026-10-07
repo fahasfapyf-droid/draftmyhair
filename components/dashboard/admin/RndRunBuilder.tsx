@@ -46,10 +46,6 @@ export function RndRunBuilder() {
   const [busy, setBusy] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const [geminiSessionId, setGeminiSessionId] = useState("");
-  const [geminiLiveUrl, setGeminiLiveUrl] = useState("");
-  const [geminiStatus, setGeminiStatus] = useState("");
-  const [geminiBusy, setGeminiBusy] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [genderPresentation, setGenderPresentation] = useState("");
@@ -143,79 +139,9 @@ export function RndRunBuilder() {
     } finally { setBusy(false); }
   }
 
-  async function startGeminiLogin() {
-    setGeminiBusy(true);
-    setGeminiStatus("Starting a persistent Browserbase Gemini session…");
-    try {
-      const response = await fetch("/api/rnd/browserbase/supervised-login/start", { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not start Gemini session."); return; }
-      setGeminiSessionId(body.sessionId ?? "");
-      setGeminiLiveUrl(body.liveViewUrl ?? "");
-      setGeminiStatus("Session ready. Open Live View and complete Google/Gemini login normally. When Gemini is fully authenticated, click Finish & verify Context.");
-    } catch {
-      setGeminiStatus("Could not start Gemini session.");
-    } finally { setGeminiBusy(false); }
-  }
-
-  async function finishGeminiLogin() {
-    if (!geminiSessionId) return;
-    setGeminiBusy(true);
-    setGeminiStatus("Verifying authentication and releasing the session…");
-    try {
-      const response = await fetch("/api/rnd/browserbase/supervised-login/finish", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: geminiSessionId }),
-      });
-      const body = await response.json();
-      if (!response.ok) { setGeminiStatus(body?.error ?? "Could not finish Gemini login."); return; }
-      const calibration = body?.calibration;
-      const ui = calibration?.ui;
-      const authenticated = Boolean(ui?.authenticatedLikely);
-      if (authenticated) {
-        setGeminiStatus("Gemini authentication verified by the post-release calibration Function. The persistent Context is ready for R&D generation.");
-      } else {
-        const signIn = ui?.hasSignInLanguage ? "Sign-in language detected." : "No sign-in language detected.";
-        const prompt = ui?.hasPromptSurface ? "Prompt surface detected." : "Prompt surface NOT detected.";
-        const title = typeof ui?.title === "string" ? ui.title : "unknown";
-        setGeminiStatus(
-          "Calibration did not confirm authenticated Gemini. " +
-          signIn + " " + prompt + " Page title: " + title +
-          " Browserbase Function deployment must be verified before retrying."
-        );
-      }
-      setGeminiLiveUrl(""); setGeminiSessionId("");
-    } catch {
-      setGeminiStatus("Could not finish Gemini login.");
-    } finally { setGeminiBusy(false); }
-  }
-
   return (
     <div className="space-y-6">
       {notice ? <div className="rounded-lg border border-border bg-card p-4 text-sm">{notice}</div> : null}
-
-      <section className="rounded-xl border border-border bg-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Gemini Authentication</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Create a persistent Browserbase session, log in through Live View, then release it and run an automated Gemini calibration against the saved Context.</p>
-          </div>
-          {!geminiSessionId ? (
-            <button disabled={geminiBusy} onClick={() => void startGeminiLogin()} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-              {geminiBusy ? "Starting…" : "CONNECT GEMINI"}
-            </button>
-          ) : null}
-        </div>
-        {geminiSessionId ? (
-          <div className="mt-4 space-y-3 rounded-lg border border-border bg-background/40 p-4">
-            <div className="text-xs text-muted-foreground">Session: <span className="font-mono">{geminiSessionId}</span></div>
-            {geminiLiveUrl ? <a href={geminiLiveUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-md border border-border px-3 py-2 text-sm font-medium underline">Open Browserbase Live View</a> : null}
-            <div className="flex flex-wrap gap-2">
-              <button disabled={geminiBusy} onClick={() => void finishGeminiLogin()} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Finish & verify Context</button>
-            </div>
-          </div>
-        ) : null}
-        {geminiStatus ? <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 text-sm">{geminiStatus}</div> : null}
-      </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
