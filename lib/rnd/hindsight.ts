@@ -1,5 +1,3 @@
-import { NextResponse } from "next/server";
-
 const DEFAULT_BANK_ID = "draftmyhair-rnd";
 const REQUEST_TIMEOUT_MS = 2_500;
 
