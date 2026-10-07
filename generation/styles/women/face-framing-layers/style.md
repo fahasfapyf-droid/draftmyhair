@@ -1,30 +1,26 @@
 # Face-Framing Layers
 
-Create a true Face-Framing Layers haircut whose defining feature is two deliberate front framing sections integrated into the surrounding haircut, without creating curtain bangs, butterfly layers, or a separate bang structure.
+Create a true Face-Framing Layers haircut whose defining feature is deliberate bilateral face-framing sections integrated into the existing overall haircut, without creating a separate fringe or changing the dominant length family.
 
 ## PRIMARY FRAMING GEOMETRY
+- Establish one primary framing section on each side of the face.
+- The shortest visible point sits around cheekbone-to-jaw level, with the exact point chosen to remain clearly visible from the source angle.
+- Each section lengthens continuously into the next-longer side layer and then into the main haircut.
+- The transition must be smooth and connected; no shelf, gap or isolated panel.
+- Keep left/right framing structurally balanced unless the source already contains meaningful asymmetry.
 
-- Create two balanced left/right framing sections beginning around the cheekbone-to-jaw region.
-- The shortest framing point must be clearly visible and must lengthen progressively into the next-longer side and overall haircut layers.
-- The framing sections must remain subordinate to the overall haircut length; they are not a standalone fringe.
-- Preserve a continuous transition from each shortest face-framing point into the surrounding longer hair with no abrupt shelf or disconnected panel.
-- Keep the two sides anatomically balanced unless the source photograph already contains meaningful asymmetry.
+## RELATIONSHIP TO OVERALL HAIRCUT
+The face framing is the defining modification, not a replacement for the underlying haircut. Preserve the source's broad length family and overall silhouette. Use only a small number of intentional layer transitions around the front and upper sides.
 
-## INTERNAL STRUCTURE
+## CROWN / BACK
+Keep the crown and rear structure comparatively calm. Do not distribute short layers throughout the entire head. The dominant visual change should remain around the face and upper side perimeter.
 
-- Use a small number of intentional long-to-short layer transitions rather than many short choppy layers.
-- Keep the crown relatively calm and preserve the overall silhouette of the source length.
-- The primary visual change should occur around the front perimeter and upper side sections, not as a full-head shag.
-- Let the framing blend into the next-longer layers so the haircut reads as one continuous system.
+## TEXTURE / FINISH
+Use natural movement and realistic strand grouping. The framing must remain readable without a blowout, dramatic outward sweep or exaggerated curls. Ends show microscopic natural variation.
 
 ## STYLE DIFFERENTIATION
-
-The defining geometry is: two visible face-framing sections + a clear shortest-point-to-longer transition + no separate fringe. Do not convert the framing into center-parted curtain bangs, butterfly wings, or generic long layers.
-
-## TEXTURE AND FINISH
-
-Use restrained natural movement, realistic strand grouping, believable root density, and microscopic end variation. Geometry must remain readable without relying on a blowout or dramatic outward sweep.
+Face-Framing Layers = two integrated front framing sections + clear shortest point + continuous lengthening into the existing haircut.
+Distinct from Curtains/Curtain Layers because there is no curtain-bang panel or central fringe system; from Butterfly because there are no large wing-like upper layers; from Shag/Wolf because the rest of the haircut remains comparatively intact.
 
 ## NEGATIVE CONSTRAINTS
-
-No curtain bangs, Curtains, Curtain Layers, Butterfly Cut, shag, wolf cut, heavy face-framing bangs, disconnected panels, blunt fringe, dramatic short layers, or generic unstructured long layers. Do not alter the face, forehead, brows, eyes, jaw, chin, neck, ears, skin, lighting, background, framing, perspective, or source hair colour.
+No curtain bangs, curtains, curtain layers, butterfly wings, wolf cut, shag, heavy fringe, disconnected face panels, blunt fringe, dramatic short crown layers, full-head shag architecture or generic unstructured long layers.

@@ -1,43 +1,28 @@
 # Shaggy Bob
 
-## 1. INPAINT HAIR ONLY
-Modify only the hair and the minimum hidden area required to reveal anatomy naturally covered by removed hair. Face, facial features, expression, eyes, brows, skin texture, skin tone, jawline, chin, neck, ears, body, clothing, background, lighting, exposure, color balance, focus, grain, pose, framing, perspective and source scale remain completely untouched.
+Create a true Shaggy Bob: a compact bob foundation deliberately fragmented by short shag-style internal layers, feathered/choppy movement and integrated face framing.
 
-## 2. GEOMETRY LOCK — ABSOLUTE
-Preserve exact head position, tilt, rotation and viewing angle. Jaw, chin and neck are locked. Ear shape locked — do not regenerate the ears. The skull is a rigid fixed object. Only the surface hair changes. No zoom, crop, reframe, perspective change or head repositioning.
+## FOUNDATION / LENGTH
+- Overall foundation remains chin through upper-neck level and clearly shorter than a lob.
+- Retain a recognizable bob perimeter and enough lower weight to preserve bob identity.
+- Nape stays compact with no long rear tail.
+- The shortest meaningful layers begin around the upper crown and upper sides.
 
-## 3. SKIN PRESERVATION
-Preserve exact skin tone, undertone, pores, texture and expression. No smoothing, beautification, relighting, brightening, darkening or color drift. Never lighten the source skin tone.
+## LAYER ARCHITECTURE
+- Use several short-to-medium internal transitions distributed through the upper structure.
+- The haircut is visibly more fragmented than Layered Bob and Textured Bob.
+- Keep the fragmentation contained within a bob-length silhouette; do not extend the layered system into a long shag.
+- Preserve a stronger lower perimeter than a conventional Shag or Modern Shag.
 
-## 4. HAIR COLOR — ROOT AUTHORITY
-STEP 1 — Read true hair color ONLY from the first 2–3 mm at visible scalp roots, hairline, temples, part, crown and nape.
-STEP 2 — Ignore background, lighting, clothing and environmental reflections.
-STEP 3 — Reproduce exact root color with only natural source variation.
-STEP 4 — White-background contamination check: reproduced hair color must remain correct against pure white.
+## FACE FRAMING
+Create integrated cheekbone-to-jaw pieces that connect progressively into the bob sides. They should feel feathered and lived-in, not like two curtain panels or butterfly wings.
 
-## 5. STYLE-SPECIFIC DESIGN
-Create a true Shaggy Bob: a compact bob-length foundation deliberately broken into shag-style internal layers, feathered/choppy movement and integrated face framing.
+## TEXTURE / FINISH
+Use dry, airy, naturally piece-separated texture with irregular feathering and restrained lived-in movement. Fine strand groups overlap and separate naturally. No crunchy product, wet gloss or plastic finish.
 
-### GEOMETRY
-- Overall foundation: chin through upper-neck level; clearly shorter than a lob.
-- Keep a recognizable bob perimeter underneath, but interrupt its visual continuity with controlled choppy exits.
-- Nape stays compact; no long rear tail.
-- Shortest meaningful layers sit around upper crown and upper sides.
-- Use several integrated layer transitions; more fragmented than Layered Bob, less distributed/long than Shag or Modern Shag.
-- Preserve enough perimeter weight to keep the bob identity.
+## FAMILY POSITION
+Shaggy Bob = compact bob foundation + short shag layers + fragmented texture + integrated framing.
+Distinct from Layered Bob through stronger fragmentation; Textured Bob through actual short layer architecture; Shag/Modern Shag through shorter overall length and preserved bob perimeter; Wolf through lower crown-to-length contrast.
 
-### FACE FRAMING
-- Integrated cheekbone-to-jaw pieces progressively connect into the bob sides.
-- No single disconnected curtain panel, butterfly wing or wolf-style framing.
-
-### TEXTURE / FINISH
-Use dry, airy, naturally piece-separated texture with soft feathering and restrained lived-in movement. Fine irregular strand groups, realistic fibre overlap, no crunchy or plastic finish.
-
-### DIFFERENTIATION
-Shaggy Bob = compact bob foundation + short shag layers + choppy texture + integrated framing.
-Distinct from Layered Bob (cleaner), Textured Bob (less fragmented), Shag/Modern Shag (longer/distributed), and Wolf Cut (stronger crown-to-length contrast).
-
-## 6. NEGATIVE CONSTRAINTS
-No long shag, modern shag, wolf cut, mullet, butterfly cut, hush cut, jellyfish cut, lob, long bob, blunt bob, one-length bob, dominant tail, disconnected rear, curtain bangs, heavy fringe, excessive crown volume, excessive layering, wet hair, plastic shine, wig effect, face changes, skin changes, jaw reshaping, ear regeneration, head movement, lighting changes, background changes, zoom, crop or reframe.
-
-The result must look like the same photograph after a professionally executed recognizable Shaggy Bob.
+## NEGATIVE CONSTRAINTS
+No long shag, modern shag, wolf cut, mullet, butterfly cut, hush cut, jellyfish cut, lob, long bob, blunt one-length bob, dominant tail, disconnected rear, curtain bangs, heavy fringe, excessive crown volume, excessive long layering, wet hair, plastic shine or wig effect.
