@@ -1,0 +1,8 @@
+node_modules/
+output/
+.rnd-worker-id
+.env
+.env.*
+!*.example
+profiles.json
+profile-state.json

@@ -12,6 +12,7 @@ const navigation = [
   { href: "/dashboard/admin/users", label: "Users" },
   { href: "/dashboard/admin/payments", label: "Payments" },
   { href: "/dashboard/admin/generations", label: "AI Generations" },
+  { href: "/dashboard/admin/rnd", label: "R&D Generation" },
   { href: "/dashboard/admin/promo-codes", label: "Promo Codes" },
 ];
 

@@ -1,0 +1,14 @@
+{
+  "name": "dmh-rnd-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env --import ./vercel-bypass.ts --import tsx worker.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.4.2"
+  }
+}
