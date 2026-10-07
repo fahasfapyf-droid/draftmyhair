@@ -140,8 +140,8 @@ model CreditTransaction {
 model Payment {
   id                 String              @id @default(cuid())
   userId             String
-  provider           PaymentProvider
-  type               PaymentType
+  provider            PaymentProvider
+  type                PaymentType
   status              PaymentStatus       @default(PENDING)
   amount             Decimal             @db.Decimal(10, 2)
   currency           String              @default("USD")
@@ -151,8 +151,8 @@ model Payment {
   creditsPurchased   Int                 @default(0)
   metadata           Json?
   refundedAt         DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   creditTransactions CreditTransaction[]
   generations        Generation[]
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -263,10 +263,10 @@ model ContactMessageReply {
   senderId         String
   senderRole       ContactReplySender
   message          String
-  readAt           DateTime?
-  createdAt        DateTime           @default(now())
+  readAt            DateTime?
+  createdAt         DateTime           @default(now())
   contactMessage   ContactMessage     @relation(fields: [contactMessageId], references: [id], onDelete: Cascade)
-  sender           User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender            User               @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([contactMessageId])
   @@index([senderId])
@@ -308,10 +308,12 @@ model PromptVersion {
   prompt      String          @db.Text
   status      PromptStatus    @default(DRAFT)
   qaStatus    PromptQAStatus  @default(DRAFT)
-  notes       String?         @db.Text
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  hairstyle   Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+  notes              String?         @db.Text
+  sourceRnDAttemptId String?         @unique
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  hairstyle          Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
+  sourceRnDAttempt   RnDAttempt?     @relation(fields: [sourceRnDAttemptId], references: [id], onDelete: SetNull)
 
   @@unique([hairstyleId, version])
   @@index([hairstyleId, status])
@@ -561,6 +563,7 @@ enum FeedbackIssue {
   OTHER
 }
 
+
 // R&D Prompt Lab schema
 enum RnDCampaignStatus {
   DRAFT
@@ -605,6 +608,21 @@ enum RnDJobStatus {
   CANCELLED
 }
 
+model RnDQAReferenceRating {
+  id                  String    @id @default(cuid())
+  attemptId           String
+  reviewerKey         String
+  humanOverallScore   Decimal   @db.Decimal(4, 2)
+  humanHairstyleScore Decimal?  @db.Decimal(4, 2)
+  notes               String?   @db.Text
+  createdAt           DateTime  @default(now())
+  attempt             RnDAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, reviewerKey])
+  @@index([attemptId])
+  @@index([createdAt])
+}
+
 enum RnDAttemptVerdict {
   REFINE
   HUMAN_APPROVAL
@@ -634,7 +652,6 @@ model RnDWorkerStatus {
   @@index([lastHeartbeatAt])
   @@index([activeProfileId])
 }
-
 model RnDCampaign {
   id                  String            @id @default(cuid())
   name                String
@@ -685,12 +702,22 @@ model RnDAsset {
   width                 Int?
   height                Int?
   checksum              String?
+  displayName           String?
+  genderPresentation    String?
+  cohortLabel           String?
+  hairTexture           String?
+  hairLength            String?
+  notes                 String?         @db.Text
   immutable             Boolean         @default(true)
   createdAt             DateTime        @default(now())
   sourceForTargets      RnDTarget[]
   generatedForAttempts  RnDAttempt[]
 
   @@index([kind])
+  @@index([genderPresentation])
+  @@index([cohortLabel])
+  @@index([hairTexture])
+  @@index([hairLength])
   @@index([createdAt])
 }
 
@@ -741,6 +768,8 @@ model RnDAttempt {
   errorMessage          String?           @db.Text
   job                   RnDJob            @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifact              RnDAsset?         @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  calibrationRatings     RnDQAReferenceRating[]
+  promptVersion         PromptVersion?
 
   @@unique([jobId, attemptNumber])
   @@index([jobId, submittedAt])
