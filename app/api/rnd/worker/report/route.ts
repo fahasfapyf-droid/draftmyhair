@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
+import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 
 export const runtime = "nodejs";
 const MAX_AUTONOMOUS_ATTEMPTS = 2;
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
       leaseOwner: true,
       leaseExpiresAt: true,
       currentPrompt: true,
-      target: { select: { hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+      target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -113,6 +114,26 @@ export async function POST(request: Request) {
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
       return attempt;
+    });
+    await retainRndOutcome({
+      jobId,
+      attemptId: result.id,
+      attemptNumber,
+      targetKey: job.target.targetKey,
+      hairstyleId: job.target.hairstyleId,
+      prompt,
+      verdict: "FAILED",
+      overallScore: null,
+      identityScore: null,
+      styleAccuracy: null,
+      rootIntegration: null,
+      lightingConsistency: null,
+      hairOnly: null,
+      artifacts: null,
+      refinement: null,
+      refinementApplied: false,
+      failureCode: errorCode,
+      failureMessage: errorMessage,
     });
     return NextResponse.json({ ok: true, jobId, attemptId: result.id, status: "FAILED" });
   }
@@ -149,6 +170,20 @@ export async function POST(request: Request) {
     qa.artifacts === "NONE";
 
   const rawRefinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+  const hindsightHistory = await recallRndHistory([
+    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
+    `Target: ${job.target.targetKey}.`,
+    `Current QA defect/refinement: ${rawRefinement ?? "no refinement requested"}.`,
+    "Find prior successful or failed refinement strategies and recurring defects. Return historical evidence only; do not invent a new prompt.",
+  ].join(" "));
+  const qaWithMemory = {
+    ...qa,
+    hindsight: {
+      enabled: hindsightEnabled(),
+      recalledCount: hindsightHistory.length,
+      recalled: hindsightHistory,
+    },
+  };
   const refinementBuild = rawRefinement
     ? await buildRndPrompt({ prompt, refinement: rawRefinement })
     : null;
@@ -166,7 +201,7 @@ export async function POST(request: Request) {
         generationStartedAt,
         generationCompletedAt,
         artifactId,
-        qaJson: qa,
+        qaJson: qaWithMemory,
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
@@ -210,7 +245,32 @@ export async function POST(request: Request) {
     return { job: updatedJob, action: "EXHAUSTED" as const };
   });
 
-  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa });
+  const finalAttempt = await prisma.rnDAttempt.findUnique({
+    where: { jobId_attemptNumber: { jobId, attemptNumber } },
+    select: { id: true },
+  });
+  if (finalAttempt) {
+    await retainRndOutcome({
+      jobId,
+      attemptId: finalAttempt.id,
+      attemptNumber,
+      targetKey: job.target.targetKey,
+      hairstyleId: job.target.hairstyleId,
+      prompt,
+      verdict: finalResult.action === "HUMAN_APPROVAL" ? "HUMAN_APPROVAL" : finalResult.action,
+      overallScore: Number(qa.overall),
+      identityScore: Number(qa.identity),
+      styleAccuracy: Number(qa.styleAccuracy),
+      rootIntegration: Number(qa.rootIntegration),
+      lightingConsistency: Number(qa.lightingConsistency),
+      hairOnly: qa.hairOnly,
+      artifacts: qa.artifacts,
+      refinement: rawRefinement,
+      refinementApplied,
+    });
+  }
+
+  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa: qaWithMemory });
 }
 
 
