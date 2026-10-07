@@ -115,6 +115,7 @@ export async function retainRndOutcome(input: {
     `Scores: overall=${input.overallScore ?? "n/a"}, identity=${input.identityScore ?? "n/a"}, style=${input.styleAccuracy ?? "n/a"}, rootIntegration=${input.rootIntegration ?? "n/a"}, lighting=${input.lightingConsistency ?? "n/a"}.`,
     `Hair-only=${input.hairOnly ?? "n/a"}; artifacts=${input.artifacts ?? "n/a"}.`,
     `Refinement applied=${input.refinementApplied}; refinement=${input.refinement ?? "none"}.`,
+    `Prompt used for this attempt (truncated for memory):\n${input.prompt.slice(0, 6000)}` ,
     input.failureCode ? `Failure code: ${input.failureCode}.` : "",
     input.failureMessage ? `Failure message: ${input.failureMessage}.` : "",
     "This is historical R&D evidence. It must not be treated as an authoritative production prompt.",
