@@ -466,8 +466,8 @@ export async function POST(request: Request) {
           styleAccuracy: scoreFromQaJson(bestAttempt.qaJson, "styleAccuracy"),
           rootIntegration: scoreFromQaJson(bestAttempt.qaJson, "rootIntegration"),
           lightingConsistency: scoreFromQaJson(bestAttempt.qaJson, "lightingConsistency"),
-          hairOnly: scoreFromQaJson(bestAttempt.qaJson, "hairOnly"),
-          artifacts: scoreFromQaJson(bestAttempt.qaJson, "artifacts"),
+          hairOnly: (bestAttempt.qaJson as Record<string, unknown>).hairOnly ?? null,
+          artifacts: (bestAttempt.qaJson as Record<string, unknown>).artifacts ?? null,
           artifactId: bestAttempt.artifactId,
           generationCompletedAt: bestAttempt.generationCompletedAt,
         }
@@ -556,8 +556,8 @@ export async function GET(request: Request) {
           styleAccuracy: scoreFromQaJson(bestCandidate.qaJson, "styleAccuracy"),
           rootIntegration: scoreFromQaJson(bestCandidate.qaJson, "rootIntegration"),
           lightingConsistency: scoreFromQaJson(bestCandidate.qaJson, "lightingConsistency"),
-          hairOnly: scoreFromQaJson(bestCandidate.qaJson, "hairOnly"),
-          artifacts: scoreFromQaJson(bestCandidate.qaJson, "artifacts"),
+          hairOnly: (bestCandidate.qaJson as Record<string, unknown>).hairOnly ?? null,
+          artifacts: (bestCandidate.qaJson as Record<string, unknown>).artifacts ?? null,
           artifactId: bestCandidate.artifactId,
           generationCompletedAt: bestCandidate.generationCompletedAt,
         }
