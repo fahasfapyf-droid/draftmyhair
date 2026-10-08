@@ -110,6 +110,12 @@ export interface PromptBuildRequest {
    * Selected hairstyle prompt key.
    */
   promptKey: string;
+
+  /**
+   * Optional exact database prompt version for controlled R&D tests.
+   * When omitted, production behavior continues to resolve the ACTIVE version.
+   */
+  promptVersion?: number;
 }
 
 export interface PromptBuildDiagnostics {

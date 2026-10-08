@@ -21,9 +21,11 @@ function getMasterPrompt(): string {
 
 export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBuildResult> {
   const databaseStyle = await prisma.promptVersion.findFirst({
-    where: { status: "ACTIVE", hairstyle: { promptKey: request.promptKey, isActive: true } },
+    where: request.promptVersion != null
+      ? { version: request.promptVersion, hairstyle: { promptKey: request.promptKey, isActive: true } }
+      : { status: "ACTIVE", hairstyle: { promptKey: request.promptKey, isActive: true } },
     orderBy: { version: "desc" },
-    select: { prompt: true, version: true },
+    select: { prompt: true, version: true, status: true },
   });
   const compiledStyle = STYLE_PROMPTS[request.promptKey];
   const stylePrompt = databaseStyle?.prompt ?? compiledStyle?.prompt;
@@ -31,7 +33,8 @@ export async function buildPrompt(request: PromptBuildRequest): Promise<PromptBu
 
   const masterPrompt = getMasterPrompt();
   const stylePromptSource = databaseStyle
-    ? `database-v${databaseStyle.version}`
+    ? `database-v${databaseStyle.version}${request.promptVersion != null ? `-${databaseStyle.status.toLowerCase()}`
+      : ""}`
     : "compiled";
   const prompt = `${masterPrompt}\n\n------------------------------------------------------------\n\n# REQUESTED HAIRSTYLE\n\n${stylePrompt}`.trim();
 
