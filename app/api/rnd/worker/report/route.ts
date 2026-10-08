@@ -254,6 +254,7 @@ export async function POST(request: Request) {
     qa.hairOnly === "PASS" &&
     qa.artifacts === "NONE" &&
     imageIntegrity?.canvasMatch === true &&
+    imageIntegrity?.faceTexturePreservationPass === true &&
     finalVerification?.verdict === "PASS" &&
     finalVerification.overall >= 9.5 &&
     finalVerification.identity >= 9.5 &&
