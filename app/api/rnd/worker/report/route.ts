@@ -136,16 +136,38 @@ export async function POST(request: Request) {
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
 
   if (!succeeded) {
+    const retryableWorkerFailure =
+      errorCode === "WORKER_EXECUTION_ERROR" &&
+      /timed out waiting for a new generated image|generation timeout|gemini.*timeout/i.test(errorMessage ?? "");
+
     const result = await prisma.$transaction(async (tx) => {
       const attempt = await tx.rnDAttempt.update({
         where: { jobId_attemptNumber: { jobId, attemptNumber } },
         data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage },
       });
-      await tx.rnDJob.update({
-        where: { id: jobId },
-        data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
-      });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      if (retryableWorkerFailure) {
+        await tx.rnDJob.update({
+          where: { id: jobId },
+          data: {
+            status: "QUEUED",
+            attemptCount: attemptNumber,
+            nextEligibleAt: new Date(),
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            heartbeatAt: now,
+            completedAt: null,
+            failureCode: null,
+            failureMessage: null,
+          },
+        });
+        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+      } else {
+        await tx.rnDJob.update({
+          where: { id: jobId },
+          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
+        });
+        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      }
       return attempt;
     });
     await retainRndOutcome({
@@ -168,7 +190,13 @@ export async function POST(request: Request) {
       failureCode: errorCode,
       failureMessage: errorMessage,
     });
-    return NextResponse.json({ ok: true, jobId, attemptId: result.id, status: "FAILED" });
+    return NextResponse.json({
+      ok: true,
+      jobId,
+      attemptId: result.id,
+      status: retryableWorkerFailure ? "QUEUED" : "FAILED",
+      action: retryableWorkerFailure ? "RETRY_WORKER_TIMEOUT" : "FAILED",
+    });
   }
 
   if (!artifactId) return NextResponse.json({ error: "artifactId is required for a successful report" }, { status: 400 });
