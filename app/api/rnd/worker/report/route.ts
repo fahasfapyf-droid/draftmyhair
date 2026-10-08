@@ -252,9 +252,21 @@ export async function POST(request: Request) {
     Boolean(previousAttempt?.refinementReason) &&
     normalizeRefinement(rawRefinement) === normalizeRefinement(previousAttempt?.refinementReason);
 
+  const repeatedRefinementCount = rawRefinement
+    ? await prisma.rnDAttempt.count({
+        where: {
+          jobId,
+          attemptNumber: { lt: attemptNumber },
+          overallScore: { not: null },
+          refinementReason: rawRefinement,
+        },
+      })
+    : 0;
+
   const repeatedIneffectiveRefinement =
     sameRefinementAsPrevious &&
     (
+      repeatedRefinementCount >= 2 ||
       Number(qa.styleAccuracy) <= Number(scoreFromQaJson(previousAttempt?.qaJson, "styleAccuracy") ?? -1) ||
       Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
@@ -279,6 +291,7 @@ export async function POST(request: Request) {
     adaptiveRefinement: {
       previousAttemptNumber: previousAttempt?.attemptNumber ?? null,
       sameRefinementAsPrevious,
+      repeatedRefinementCount,
       repeatedIneffectiveRefinement,
       fallbackToAuthoritativePrompt: Boolean(repeatedIneffectiveRefinement),
     },
