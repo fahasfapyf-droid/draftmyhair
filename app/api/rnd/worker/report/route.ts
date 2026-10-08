@@ -35,6 +35,10 @@ function promptRevision(prompt: string) {
   return Math.abs(hash).toString(16).padStart(8, "0");
 }
 
+function normalizeRefinement(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
@@ -175,12 +179,43 @@ export async function POST(request: Request) {
     qa.artifacts === "NONE";
 
   const rawRefinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+
+  const previousAttempt = await prisma.rnDAttempt.findFirst({
+    where: { jobId, attemptNumber: { lt: attemptNumber } },
+    orderBy: { attemptNumber: "desc" },
+    select: {
+      attemptNumber: true,
+      overallScore: true,
+      styleAccuracy: true,
+      identityScore: true,
+      rootIntegration: true,
+      lightingConsistency: true,
+      refinementReason: true,
+    },
+  });
+
+  const sameRefinementAsPrevious =
+    Boolean(rawRefinement) &&
+    Boolean(previousAttempt?.refinementReason) &&
+    normalizeRefinement(rawRefinement) === normalizeRefinement(previousAttempt?.refinementReason);
+
+  const repeatedIneffectiveRefinement =
+    sameRefinementAsPrevious &&
+    (
+      Number(qa.styleAccuracy) <= Number(previousAttempt?.styleAccuracy ?? -1) ||
+      Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
+      (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
+    );
+
   const hindsightHistory = await recallRndHistory([
     `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
     `Target: ${job.target.targetKey}.`,
     `Current QA defect/refinement: ${rawRefinement ?? "no refinement requested"}.`,
+    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
+    `Repeated ineffective refinement detected: ${repeatedIneffectiveRefinement ? "yes" : "no"}.`,
     "Find prior successful or failed refinement strategies and recurring defects. Return historical evidence only; do not invent a new prompt.",
   ].join(" "));
+
   const qaWithMemory = {
     ...qa,
     hindsight: {
@@ -188,14 +223,25 @@ export async function POST(request: Request) {
       recalledCount: hindsightHistory.length,
       recalled: hindsightHistory,
     },
+    adaptiveRefinement: {
+      previousAttemptNumber: previousAttempt?.attemptNumber ?? null,
+      sameRefinementAsPrevious,
+      repeatedIneffectiveRefinement,
+      fallbackToAuthoritativePrompt: Boolean(repeatedIneffectiveRefinement),
+    },
   };
-  const refinementBuild = rawRefinement
-    ? await buildRndPrompt({ prompt, refinement: rawRefinement })
+
+  // Never apply the same refinement again when the previous application failed to
+  // improve the measured outcome. In that case, sample the immutable authoritative
+  // prompt again rather than spending another attempt on a known ineffective edit.
+  const refinementCandidate = repeatedIneffectiveRefinement ? null : rawRefinement;
+  const refinementBuild = refinementCandidate
+    ? await buildRndPrompt({ prompt, refinement: refinementCandidate })
     : null;
   const refinementApplied = refinementBuild
     ? "refinementApplied" in refinementBuild.diagnostics && refinementBuild.diagnostics.refinementApplied
     : false;
-  const refinement = refinementApplied ? rawRefinement : null;
+  const refinement = refinementApplied ? refinementCandidate : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
     await tx.rnDAttempt.update({
@@ -210,7 +256,7 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : refinement ? "REFINE" : "EXHAUSTED",
+        verdict: hardPass ? "HUMAN_APPROVAL" : refinement ? "REFINE" : "REGENERATE",
         refinementSlot: hardPass ? null : refinement ? "AUTO_" + attemptNumber : null,
         refinementReason: hardPass ? null : rawRefinement,
         errorCode: null,
@@ -292,7 +338,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa: qaWithMemory });
 }
-
 
 export async function GET(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
