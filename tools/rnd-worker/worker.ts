@@ -17,7 +17,7 @@ const OUTPUT_DIR = process.env.DMH_RND_OUTPUT_DIR
 const CHROME_PATH = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
-const GENERATION_TIMEOUT_MS = 180_000;
+const GENERATION_TIMEOUT_MS = 300_000;
 const STATUS_HEARTBEAT_MS = 15_000;
 const WORKER_VERSION = process.env.RND_WORKER_VERSION ?? "local-gemini-worker-v1";
 
