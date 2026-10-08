@@ -4,8 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
-const MAX_AUTONOMOUS_ATTEMPTS = 2;
-
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
   if (authResponse) return authResponse;
@@ -17,31 +15,7 @@ export async function POST(request: Request) {
   const claimed = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))) SELECT 1 AS locked FROM lock`;
 
-    // This is the isolated local R&D worker path. Generation throughput is
-    // controlled by the queue, per-job two-attempt ceiling, and worker lease;
-    // do not block controlled regression runs with the old global rate guard.
-
-    // Never claim jobs that have already consumed the autonomous attempt budget.
-    // Older queued/leased jobs can predate the current two-attempt policy; retire
-    // them here so they cannot be claimed as attempt 3+ and then rejected by report.
-    const overBudget = await tx.rnDJob.findMany({
-      where: {
-        attemptCount: { gte: MAX_AUTONOMOUS_ATTEMPTS },
-        OR: [
-          { status: "QUEUED" },
-          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
-        ],
-      },
-      select: { id: true, targetId: true },
-    });
-    if (overBudget.length > 0) {
-      const ids = overBudget.map((job) => job.id);
-      await tx.rnDJob.updateMany({
-        where: { id: { in: ids } },
-        data: { status: "EXHAUSTED", leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now },
-      });
-      await tx.rnDTarget.updateMany({ where: { id: { in: overBudget.map((job) => job.targetId) } }, data: { status: "EXHAUSTED" } });
-    }
+    // R&D generation is convergence-driven. Failed attempts may continue until automated QA reaches the hard-pass gate or no targeted refinement can be compiled.
 
     // Queue priority fix: queued regression work must win before lease recovery.
     // Always prefer genuinely QUEUED work over an expired PROCESSING lease.
