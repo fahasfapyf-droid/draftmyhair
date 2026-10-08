@@ -156,10 +156,6 @@ async function report(job: ClaimedJob, attemptNumber: number, payload: Record<st
   });
   if (!response.ok) {
     const body = await response.text();
-    if (response.status === 409 && body.includes("Maximum autonomous attempts exceeded")) {
-      console.error(`R&D report rejected because job ${job.id} is already over the autonomous attempt budget; continuing with the queue.`);
-      return null;
-    }
     throw new Error(`Report failed: HTTP ${response.status} ${body}`);
   }
   const result = await response.json();
