@@ -96,7 +96,12 @@ export async function POST(request: Request) {
     select: { id: true, submittedAt: true, artifactId: true, verdict: true },
   });
   if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
-  if (reservation.artifactId) return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+  if (reservation.artifactId) {
+    if (reservation.artifactId !== artifactId) {
+      return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
+    }
+    return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+  }
 
   const prompt = job.currentPrompt;
   const revision = promptRevision(prompt);
@@ -137,6 +142,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, jobId, attemptId: result.id, status: "FAILED" });
   }
+
+  if (!artifactId) return NextResponse.json({ error: "artifactId is required for a successful report" }, { status: 400 });
 
   const artifact = await prisma.rnDAsset.findUnique({
     where: { id: artifactId },
