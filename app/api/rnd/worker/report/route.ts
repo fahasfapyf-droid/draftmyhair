@@ -6,7 +6,6 @@ import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 
 export const runtime = "nodejs";
-const MAX_AUTONOMOUS_ATTEMPTS = 2;
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const QA_TIMEOUT_MS = 120_000;
 
@@ -61,7 +60,6 @@ export async function POST(request: Request) {
   if (!jobId || !attemptNumber || attemptNumber < 1 || !workerId) {
     return NextResponse.json({ error: "jobId, attemptNumber and x-rnd-worker-id are required" }, { status: 400 });
   }
-  if (attemptNumber > MAX_AUTONOMOUS_ATTEMPTS) return NextResponse.json({ error: "Maximum autonomous attempts exceeded" }, { status: 409 });
 
   const generationStartedAt = dateOrNull(body.generationStartedAt);
   const generationCompletedAt = dateOrNull(body.generationCompletedAt);
@@ -212,8 +210,8 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "REFINE" : "EXHAUSTED",
-        refinementSlot: hardPass ? null : attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement ? "AUTO_1" : null,
+        verdict: hardPass ? "HUMAN_APPROVAL" : refinement ? "REFINE" : "EXHAUSTED",
+        refinementSlot: hardPass ? null : refinement ? "AUTO_" + attemptNumber : null,
         refinementReason: hardPass ? null : rawRefinement,
         errorCode: null,
         errorMessage: null,
@@ -230,7 +228,7 @@ export async function POST(request: Request) {
       return { job: updatedJob, action: "HUMAN_APPROVAL" as const };
     }
 
-    if (attemptNumber < MAX_AUTONOMOUS_ATTEMPTS && refinement) {
+    if (refinement) {
       if (!refinementBuild) throw new Error("R&D refinement build is missing.");
       const rebuilt = refinementBuild;
       const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
