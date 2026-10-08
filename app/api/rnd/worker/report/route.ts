@@ -237,7 +237,7 @@ export async function POST(request: Request) {
   const rawRefinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
 
   const previousAttempt = await prisma.rnDAttempt.findFirst({
-    where: { jobId, attemptNumber: { lt: attemptNumber } },
+    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
     orderBy: { attemptNumber: "desc" },
     select: {
       attemptNumber: true,
