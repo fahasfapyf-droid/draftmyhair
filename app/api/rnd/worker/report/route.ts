@@ -171,7 +171,37 @@ export async function POST(request: Request) {
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
     ]);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Automated QA failed." }, { status: 503 });
+    const message = error instanceof Error ? error.message : "Automated QA failed.";
+    const retryableInfrastructureFailure = /(429|resource exhausted|quota|rate.?limit|too many requests)/i.test(message);
+    if (retryableInfrastructureFailure) {
+      const retryAt = new Date(Date.now() + 2 * 60 * 1000);
+      await prisma.$transaction(async (tx) => {
+        await tx.rnDJob.update({
+          where: { id: jobId },
+          data: {
+            status: "QUEUED",
+            attemptCount: attemptNumber - 1,
+            nextEligibleAt: retryAt,
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            heartbeatAt: now,
+            completedAt: null,
+            failureCode: null,
+            failureMessage: null,
+          },
+        });
+        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+      });
+      return NextResponse.json({
+        ok: true,
+        jobId,
+        attemptNumber,
+        status: "QUEUED",
+        action: "RETRY_QA_INFRASTRUCTURE",
+        nextEligibleAt: retryAt.toISOString(),
+      });
+    }
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 
   const hardPass =
