@@ -188,9 +188,6 @@ export async function GET(request: Request) {
   if (!sourceMime.startsWith("image/") || !sourceBuffer.length) return json({ error: "Invalid source image." }, 502);
 
   const enqueue = await invokeEnqueue(sourceBuffer, sourceMime);
-  if (new URL(request.url).searchParams.get("enqueueOnly") === "1") {
-    return json({ ok: true, enqueueOnly: true, enqueue });
-  }
   const attempts: unknown[] = [];
 
   for (let i = 0; i < MAX_ATTEMPTS; i += 1) {
