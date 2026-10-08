@@ -8,6 +8,8 @@ export type RndImageIntegrityResult = {
   generatedHeight: number;
   faceRegionDrift: number;
   faceRegionWarning: boolean;
+  faceTextureRatio: number;
+  faceTexturePreservationPass: boolean;
 };
 
 const FACE_REGION = {
@@ -47,7 +49,7 @@ export async function runRndImageIntegrityCheck(
     minimumGeneratedDimension >= 512 &&
     aspectRatioDelta <= 0.01;
 
-  const size = 256;
+  const size = 512;
   const sourceRaw = await sharp(sourceBuffer)
     .resize(size, size, { fit: "fill" })
     .grayscale()
@@ -78,6 +80,61 @@ export async function runRndImageIntegrityCheck(
 
   const faceRegionDrift = count ? total / count : 1;
 
+  // Deterministic texture-preservation check for the locked face region.
+  // A simple luminance-drift metric can miss smoothing of freckles/pores when
+  // the broad facial luminance remains similar. Measure high-frequency skin
+  // detail in a conservative inner-face crop that excludes most hair, ears,
+  // and the outer jaw boundary. The ratio is scale-invariant and therefore
+  // remains useful when Gemini returns the registered frame at lower resolution.
+  const textureSize = 512;
+  const sourceGray = await sharp(sourceBuffer)
+    .resize(textureSize, textureSize, { fit: "fill" })
+    .grayscale()
+    .blur(1.2)
+    .raw()
+    .toBuffer();
+  const generatedGray = await sharp(generatedBuffer)
+    .resize(textureSize, textureSize, { fit: "fill" })
+    .grayscale()
+    .blur(1.2)
+    .raw()
+    .toBuffer();
+  const sourceFine = await sharp(sourceBuffer)
+    .resize(textureSize, textureSize, { fit: "fill" })
+    .grayscale()
+    .raw()
+    .toBuffer();
+  const generatedFine = await sharp(generatedBuffer)
+    .resize(textureSize, textureSize, { fit: "fill" })
+    .grayscale()
+    .raw()
+    .toBuffer();
+
+  const skinLeft = Math.floor(textureSize * 0.30);
+  const skinTop = Math.floor(textureSize * 0.39);
+  const skinWidth = Math.floor(textureSize * 0.40);
+  const skinHeight = Math.floor(textureSize * 0.27);
+  let sourceTexture = 0;
+  let generatedTexture = 0;
+  let textureCount = 0;
+  for (let y = skinTop; y < skinTop + skinHeight; y += 1) {
+    for (let x = skinLeft; x < skinLeft + skinWidth; x += 1) {
+      const index = y * textureSize + x;
+      sourceTexture += Math.abs(sourceFine[index] - sourceGray[index]);
+      generatedTexture += Math.abs(generatedFine[index] - generatedGray[index]);
+      textureCount += 1;
+    }
+  }
+  const sourceTextureMean = textureCount ? sourceTexture / textureCount : 0;
+  const generatedTextureMean = textureCount ? generatedTexture / textureCount : 0;
+  const faceTextureRatio = sourceTextureMean > 0
+    ? generatedTextureMean / sourceTextureMean
+    : 1;
+  const faceTexturePreservationPass =
+    faceRegionDrift <= 0.08 &&
+    faceTextureRatio >= 0.75 &&
+    faceTextureRatio <= 1.30;
+
   return {
     canvasMatch,
     sourceWidth,
@@ -85,7 +142,8 @@ export async function runRndImageIntegrityCheck(
     generatedWidth,
     generatedHeight,
     faceRegionDrift,
-    // Advisory until calibrated against a representative corpus.
+    faceTextureRatio,
+    faceTexturePreservationPass,
     faceRegionWarning: faceRegionDrift > 0.12,
   };
 }
