@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
-import { runRndQa } from "@/lib/rnd/qa";
+import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 
@@ -180,6 +180,7 @@ export async function POST(request: Request) {
   if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
 
   let qa;
+  let finalVerification = null;
   try {
     const [source, generated] = await Promise.all([
       fetchPrivateArtifact(job.target.sourceAsset.blobUrl, job.target.sourceAsset.mimeType),
@@ -189,6 +190,23 @@ export async function POST(request: Request) {
       runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
     ]);
+
+    const firstGatePass =
+      qa.verdict === "APPROVE" &&
+      qa.overall >= 9.5 &&
+      qa.identity >= 9.5 &&
+      qa.styleAccuracy >= 9.5 &&
+      qa.rootIntegration >= 9.5 &&
+      qa.lightingConsistency >= 9.5 &&
+      qa.hairOnly === "PASS" &&
+      qa.artifacts === "NONE";
+
+    if (firstGatePass) {
+      finalVerification = await Promise.race([
+        runRndFinalVerification(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Final verification timed out.")), QA_TIMEOUT_MS)),
+      ]);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Automated QA failed.";
     const retryableInfrastructureFailure = /(429|resource exhausted|quota|rate.?limit|too many requests)/i.test(message);
@@ -231,9 +249,21 @@ export async function POST(request: Request) {
     qa.rootIntegration >= 9.5 &&
     qa.lightingConsistency >= 9.5 &&
     qa.hairOnly === "PASS" &&
-    qa.artifacts === "NONE";
+    qa.artifacts === "NONE" &&
+    finalVerification?.verdict === "PASS" &&
+    finalVerification.overall >= 9.5 &&
+    finalVerification.identity >= 9.5 &&
+    finalVerification.styleAccuracy >= 9.5 &&
+    finalVerification.rootIntegration >= 9.5 &&
+    finalVerification.lightingConsistency >= 9.5 &&
+    finalVerification.hairOnly === "PASS" &&
+    finalVerification.artifacts === "NONE";
 
-  const rawRefinement = !hardPass && qa.refinement.trim() ? qa.refinement.trim() : null;
+  const rawRefinement = !hardPass
+    ? (finalVerification?.verdict === "REJECT" && finalVerification.refinement.trim()
+        ? finalVerification.refinement.trim()
+        : qa.refinement.trim() || null)
+    : null;
 
   const previousAttempt = await prisma.rnDAttempt.findFirst({
     where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
@@ -282,6 +312,20 @@ export async function POST(request: Request) {
 
   const qaWithMemory = {
     ...qa,
+    finalVerification: finalVerification
+      ? {
+          verdict: finalVerification.verdict,
+          overall: finalVerification.overall,
+          identity: finalVerification.identity,
+          styleAccuracy: finalVerification.styleAccuracy,
+          rootIntegration: finalVerification.rootIntegration,
+          lightingConsistency: finalVerification.lightingConsistency,
+          hairOnly: finalVerification.hairOnly,
+          artifacts: finalVerification.artifacts,
+          reason: finalVerification.reason,
+          refinement: finalVerification.refinement,
+        }
+      : null,
     hindsight: {
       enabled: hindsightEnabled(),
       recalledCount: hindsightHistory.length,
