@@ -357,6 +357,34 @@ export async function captureGeneratedImage(page: Page, outputPath: string, sour
 
   const image = page.locator("img").nth(index);
   await image.scrollIntoViewIfNeeded();
+
+  // Gemini can expose the full-resolution asset as a blob while the rendered
+  // element itself is only a UI thumbnail. If blob fetch is blocked, extract
+  // the intrinsic bitmap through the image element instead of screenshotting
+  // the thumbnail.
+  try {
+    const dataUrl = await image.evaluate(async (element) => {
+      const img = element as HTMLImageElement;
+      if (!img.complete || img.naturalWidth < 512 || img.naturalHeight < 512) {
+        throw new Error("Intrinsic image resolution is too small.");
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas context unavailable.");
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png");
+    });
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) throw new Error("Invalid extracted image data.");
+    await writeFile(outputPath, Buffer.from(dataUrl.slice(comma + 1), "base64"));
+    console.log("Generated image extracted at intrinsic resolution.");
+    return;
+  } catch (error) {
+    console.log(`Intrinsic extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   await image.screenshot({ path: outputPath });
   console.log("Generated image captured from the exact rendered Gemini image element.");
 }
