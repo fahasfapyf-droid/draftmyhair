@@ -248,14 +248,14 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     captureStatus = "FAIL";
     captureLastError = message.slice(0, 2000);
     console.error(`Job ${job.id}: ${message}`);
+    const profileError = classifyProfileError(message);
     await report(job, attemptNumber, {
       submittedAt: generationStartedAt,
       generationStartedAt,
       generationCompletedAt: null,
-      errorCode: "WORKER_EXECUTION_ERROR",
+      errorCode: profileError === "EXHAUSTED" ? "GEMINI_PROFILE_EXHAUSTED" : "WORKER_EXECUTION_ERROR",
       errorMessage: message.slice(0, 2000),
     });
-    const profileError = classifyProfileError(message);
     if (profileError === "EXHAUSTED") {
       await markProfileExhausted(profile.id, message);
       console.error(`Gemini profile ${profile.id} marked EXHAUSTED; worker will rotate to another eligible profile.`);
@@ -317,7 +317,7 @@ async function launchGeminiSession(profile: GeminiProfile) {
     existingPage.on("pageerror", (error) => console.error(`DIAGNOSTIC: Existing Playwright page error: ${error.message}`));
   }
   console.log("Creating dedicated worker page...");
-  const page = await context.newPage({ timeout: 30_000 });
+  const page = await context.newPage();
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
   page.on("crash", () => console.error("DIAGNOSTIC: Worker Playwright page crashed."));
   page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Worker Playwright page error: ${error.message}`));

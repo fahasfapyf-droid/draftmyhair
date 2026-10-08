@@ -131,6 +131,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
   }
 
+  // Gemini profile quota exhaustion is a profile lifecycle event, not an R&D
+  // generation attempt. Discard the reserved attempt and immediately requeue
+  // the same attempt number so the worker can rotate to another authenticated
+  // profile without consuming convergence budget or marking the job FAILED.
+  if (errorCode === "GEMINI_PROFILE_EXHAUSTED") {
+    await prisma.$transaction(async (tx) => {
+      await tx.rnDAttempt.delete({ where: { jobId_attemptNumber: { jobId, attemptNumber } } });
+      await tx.rnDJob.update({
+        where: { id: jobId },
+        data: {
+          status: "QUEUED",
+          nextEligibleAt: now,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: now,
+          completedAt: null,
+          failureCode: null,
+          failureMessage: null,
+        },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+    });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "QUEUED", action: "ROTATE_GEMINI_PROFILE", attemptConsumed: false });
+  }
+
   const prompt = job.currentPrompt;
   const revision = promptRevision(prompt);
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
