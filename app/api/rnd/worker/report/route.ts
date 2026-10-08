@@ -259,7 +259,7 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : refinement ? "REFINE" : "REGENERATE",
+        verdict: hardPass ? "HUMAN_APPROVAL" : "REFINE",
         refinementSlot: hardPass ? null : refinement ? "AUTO_" + attemptNumber : null,
         refinementReason: hardPass ? null : rawRefinement,
         errorCode: null,
