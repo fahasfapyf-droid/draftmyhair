@@ -35,7 +35,17 @@ export async function runRndImageIntegrityCheck(
     throw new Error("R&D image integrity check could not determine image dimensions.");
   }
 
-  const canvasMatch = sourceWidth === generatedWidth && sourceHeight === generatedHeight;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const generatedAspect = generatedWidth / generatedHeight;
+  const aspectRatioDelta = Math.abs(sourceAspect - generatedAspect) / sourceAspect;
+  const minimumGeneratedDimension = Math.min(generatedWidth, generatedHeight);
+
+  // Gemini may return the same registered frame at a lower pixel resolution.
+  // Exact pixel dimensions are not a framing invariant; aspect ratio plus a
+  // minimum usable resolution is the conservative deterministic gate.
+  const canvasMatch =
+    minimumGeneratedDimension >= 512 &&
+    aspectRatioDelta <= 0.01;
 
   const size = 256;
   const sourceRaw = await sharp(sourceBuffer)
