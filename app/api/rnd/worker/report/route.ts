@@ -4,6 +4,7 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
+import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
@@ -181,11 +182,13 @@ export async function POST(request: Request) {
 
   let qa;
   let finalVerification = null;
+  let imageIntegrity = null;
   try {
     const [source, generated] = await Promise.all([
       fetchPrivateArtifact(job.target.sourceAsset.blobUrl, job.target.sourceAsset.mimeType),
       fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType),
     ]);
+    imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
     qa = await Promise.race([
       runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
@@ -250,6 +253,7 @@ export async function POST(request: Request) {
     qa.lightingConsistency >= 9.5 &&
     qa.hairOnly === "PASS" &&
     qa.artifacts === "NONE" &&
+    imageIntegrity?.canvasMatch === true &&
     finalVerification?.verdict === "PASS" &&
     finalVerification.overall >= 9.5 &&
     finalVerification.identity >= 9.5 &&
@@ -312,6 +316,7 @@ export async function POST(request: Request) {
 
   const qaWithMemory = {
     ...qa,
+    imageIntegrity,
     finalVerification: finalVerification
       ? {
           verdict: finalVerification.verdict,
