@@ -383,6 +383,50 @@ export async function POST(request: Request) {
     return { job: updatedJob, action: "REFINE" as const };
   });
 
+  const scoredAttempts = await prisma.rnDAttempt.findMany({
+    where: {
+      jobId,
+      overallScore: { not: null },
+      artifactId: { not: null },
+    },
+    orderBy: { overallScore: "desc" },
+    select: {
+      id: true,
+      attemptNumber: true,
+      overallScore: true,
+      qaJson: true,
+      artifactId: true,
+      generationCompletedAt: true,
+    },
+  });
+
+  const candidateAttempts = scoredAttempts.filter((attempt) => {
+    if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
+    const qaRecord = attempt.qaJson as Record<string, unknown>;
+    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE";
+  });
+
+  const bestAttempt = candidateAttempts
+    .slice()
+    .sort((a, b) => {
+      const score = (attempt: typeof a) => {
+        const qaRecord = attempt.qaJson as Record<string, unknown>;
+        return [
+          Number(attempt.overallScore ?? -1),
+          Number(qaRecord.styleAccuracy ?? -1),
+          Number(qaRecord.identity ?? -1),
+          Number(qaRecord.rootIntegration ?? -1),
+          Number(qaRecord.lightingConsistency ?? -1),
+        ];
+      };
+      const aScore = score(a);
+      const bScore = score(b);
+      for (let index = 0; index < aScore.length; index += 1) {
+        if (aScore[index] !== bScore[index]) return bScore[index] - aScore[index];
+      }
+      return b.attemptNumber - a.attemptNumber;
+    })[0] ?? null;
+
   const finalAttempt = await prisma.rnDAttempt.findUnique({
     where: { jobId_attemptNumber: { jobId, attemptNumber } },
     select: { id: true },
@@ -408,7 +452,27 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, job: finalResult.job, action: finalResult.action, qa: qaWithMemory });
+  return NextResponse.json({
+    ok: true,
+    job: finalResult.job,
+    action: finalResult.action,
+    qa: qaWithMemory,
+    bestCandidate: bestAttempt
+      ? {
+          attemptId: bestAttempt.id,
+          attemptNumber: bestAttempt.attemptNumber,
+          overall: Number(bestAttempt.overallScore),
+          identity: scoreFromQaJson(bestAttempt.qaJson, "identity"),
+          styleAccuracy: scoreFromQaJson(bestAttempt.qaJson, "styleAccuracy"),
+          rootIntegration: scoreFromQaJson(bestAttempt.qaJson, "rootIntegration"),
+          lightingConsistency: scoreFromQaJson(bestAttempt.qaJson, "lightingConsistency"),
+          hairOnly: scoreFromQaJson(bestAttempt.qaJson, "hairOnly"),
+          artifacts: scoreFromQaJson(bestAttempt.qaJson, "artifacts"),
+          artifactId: bestAttempt.artifactId,
+          generationCompletedAt: bestAttempt.generationCompletedAt,
+        }
+      : null,
+  });
 }
 
 export async function GET(request: Request) {
@@ -452,5 +516,51 @@ export async function GET(request: Request) {
   });
 
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  return NextResponse.json({ ok: true, job });
+
+  const eligibleAttempts = job.attempts.filter((attempt) => {
+    if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
+    const qaRecord = attempt.qaJson as Record<string, unknown>;
+    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null;
+  });
+
+  const bestCandidate = eligibleAttempts
+    .slice()
+    .sort((a, b) => {
+      const value = (attempt: typeof a) => {
+        const qaRecord = attempt.qaJson as Record<string, unknown>;
+        return [
+          Number(attempt.overallScore ?? -1),
+          Number(qaRecord.styleAccuracy ?? -1),
+          Number(qaRecord.identity ?? -1),
+          Number(qaRecord.rootIntegration ?? -1),
+          Number(qaRecord.lightingConsistency ?? -1),
+        ];
+      };
+      const aValue = value(a);
+      const bValue = value(b);
+      for (let index = 0; index < aValue.length; index += 1) {
+        if (aValue[index] !== bValue[index]) return bValue[index] - aValue[index];
+      }
+      return b.attemptNumber - a.attemptNumber;
+    })[0] ?? null;
+
+  return NextResponse.json({
+    ok: true,
+    job,
+    bestCandidate: bestCandidate
+      ? {
+          attemptId: bestCandidate.id,
+          attemptNumber: bestCandidate.attemptNumber,
+          overall: Number(bestCandidate.overallScore),
+          identity: scoreFromQaJson(bestCandidate.qaJson, "identity"),
+          styleAccuracy: scoreFromQaJson(bestCandidate.qaJson, "styleAccuracy"),
+          rootIntegration: scoreFromQaJson(bestCandidate.qaJson, "rootIntegration"),
+          lightingConsistency: scoreFromQaJson(bestCandidate.qaJson, "lightingConsistency"),
+          hairOnly: scoreFromQaJson(bestCandidate.qaJson, "hairOnly"),
+          artifacts: scoreFromQaJson(bestCandidate.qaJson, "artifacts"),
+          artifactId: bestCandidate.artifactId,
+          generationCompletedAt: bestCandidate.generationCompletedAt,
+        }
+      : null,
+  });
 }
