@@ -39,6 +39,12 @@ function normalizeRefinement(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function scoreFromQaJson(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const score = (value as Record<string, unknown>)[key];
+  return typeof score === "number" ? score : typeof score === "string" ? Number(score) : null;
+}
+
 async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
@@ -186,10 +192,7 @@ export async function POST(request: Request) {
     select: {
       attemptNumber: true,
       overallScore: true,
-      styleAccuracy: true,
-      identityScore: true,
-      rootIntegration: true,
-      lightingConsistency: true,
+      qaJson: true,
       refinementReason: true,
     },
   });
@@ -202,7 +205,7 @@ export async function POST(request: Request) {
   const repeatedIneffectiveRefinement =
     sameRefinementAsPrevious &&
     (
-      Number(qa.styleAccuracy) <= Number(previousAttempt?.styleAccuracy ?? -1) ||
+      Number(qa.styleAccuracy) <= Number(scoreFromQaJson(previousAttempt?.qaJson, "styleAccuracy") ?? -1) ||
       Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
     );
