@@ -6,7 +6,6 @@ import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 
 export const runtime = "nodejs";
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const QA_TIMEOUT_MS = 120_000;
 
 type ReportBody = {
@@ -301,6 +300,7 @@ export async function POST(request: Request) {
   // improve the measured outcome. In that case, sample the immutable authoritative
   // prompt again rather than spending another attempt on a known ineffective edit.
   const refinementCandidate = repeatedIneffectiveRefinement ? null : rawRefinement;
+  const authoritativePromptBuild = await buildRndPrompt({ prompt });
   const refinementBuild = refinementCandidate
     ? await buildRndPrompt({ prompt, refinement: refinementCandidate })
     : null;
@@ -343,7 +343,9 @@ export async function POST(request: Request) {
     if (refinement) {
       if (!refinementBuild) throw new Error("R&D refinement build is missing.");
       const rebuilt = refinementBuild;
-      const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
+      // Do not impose a fixed convergence delay. The local worker's profile
+      // manager remains the rate/quota gate for the next generation.
+      const nextEligibleAt = new Date();
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
         data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
@@ -357,11 +359,15 @@ export async function POST(request: Request) {
     // a safe targeted refinement, keep sampling the authoritative prompt instead of
     // declaring the job exhausted. A successful hard-pass remains the only autonomous
     // exit; human approval remains mandatory before promotion.
-    const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
+    // No safe refinement: immediately resample the immutable authoritative
+    // prompt. Profile cooldowns and hourly limits are enforced by the worker.
+    const nextEligibleAt = new Date();
     const updatedJob = await tx.rnDJob.update({
       where: { id: jobId },
       data: {
         status: "QUEUED",
+        currentPrompt: authoritativePromptBuild.prompt,
+        promptVersionNumber: attemptNumber + 1,
         attemptCount: attemptNumber,
         nextEligibleAt,
         leaseOwner: null,
