@@ -99,6 +99,15 @@ function styleFeatureIntroduced(refinement: string, authoritativePrompt: string)
   });
 }
 
+function authoritativeBasePrompt(prompt: string) {
+  // Refinements are derived from the immutable prompt, never from a prior
+  // refinement-expanded prompt. This prevents historical refinement blocks
+  // from accumulating across autonomous convergence attempts.
+  const marker = /\n-+\n\n# TARGETED REFINEMENT\n/i;
+  const match = prompt.search(marker);
+  return match >= 0 ? prompt.slice(0, match).trim() : prompt.trim();
+}
+
 export function refinementAllowed(authoritativePrompt: string, refinement: string) {
   if (protectedModificationDetected(refinement)) return false;
   if (styleFeatureIntroduced(refinement, authoritativePrompt)) return false;
@@ -112,7 +121,13 @@ export async function buildRndPrompt(input: {
   refinement?: string | null;
 }) {
   const base = input.prompt
-    ? { prompt: input.prompt, diagnostics: { promptSource: "existing-attempt" as const } }
+    ? {
+        prompt: authoritativeBasePrompt(input.prompt),
+        diagnostics: {
+          promptSource: "existing-attempt" as const,
+          historicalRefinementsStripped: authoritativeBasePrompt(input.prompt) !== input.prompt.trim(),
+        },
+      }
     : input.promptKey
       ? await buildPrompt({ promptKey: input.promptKey, promptVersion: input.promptVersion })
       : (() => { throw new Error("prompt or promptKey is required"); })();
