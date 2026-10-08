@@ -35,7 +35,8 @@ const FINAL_VERIFICATION_PROMPT = [
   "Judge hairstyle accuracy against the authoritative prompt, not against a creative reinterpretation.",
   "This is an acceptance test, not a creative critique. Be conservative: when a hard requirement is not clearly satisfied, reject.",
   "Return one JSON object matching the supplied schema. Do not include markdown.",
-  "PASS requires overall >= 9.5, identity >= 9.5, styleAccuracy >= 9.5, rootIntegration >= 9.5, lightingConsistency >= 9.5, hairOnly PASS, and artifacts NONE.",
+  "Overall is a server-derived score: the server will calculate it as the arithmetic mean of identity, styleAccuracy, rootIntegration, and lightingConsistency, rounded to one decimal place. Do not use overall as an independent judgment.",
+  "PASS requires the server-derived overall >= 9.5, identity >= 9.5, styleAccuracy >= 9.5, rootIntegration >= 9.5, lightingConsistency >= 9.5, hairOnly PASS, and artifacts NONE.",
   "If any hard gate fails, verdict must be REJECT.",
   "If rejected, refinement must contain exactly one targeted correction grounded in the authoritative hairstyle requirements or an observed unwanted characteristic. Never propose changes to the face or any protected non-hair region.",
 ].join("\n");
@@ -58,11 +59,23 @@ const FINAL_VERIFICATION_SCHEMA = {
   propertyOrdering: ["overall","identity","hairOnly","styleAccuracy","rootIntegration","lightingConsistency","artifacts","verdict","reason","refinement"],
 } as const;
 
+function calculateOverall(result: Pick<RndFinalVerificationResult, "identity" | "styleAccuracy" | "rootIntegration" | "lightingConsistency">): number {
+  const mean = (
+    result.identity +
+    result.styleAccuracy +
+    result.rootIntegration +
+    result.lightingConsistency
+  ) / 4;
+  return Math.round(mean * 10) / 10;
+}
+
 function parseFinalVerification(text: string): RndFinalVerificationResult {
   const value = JSON.parse(text) as RndFinalVerificationResult;
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("Final verification returned an invalid score.");
   }
+  value.overall = calculateOverall(value);
+
   if (!["PASS","REJECT"].includes(value.verdict) ||
       !["PASS","FAIL"].includes(value.hairOnly) ||
       !["NONE","FOUND"].includes(value.artifacts) ||
@@ -120,7 +133,8 @@ const QA_PROMPT = [
   "Never invent a new hairstyle characteristic as a proposed correction. A refinement may correct an existing authoritative requirement, improve execution of that requirement, or remove an observed unwanted characteristic.",
   "Never use refinement to change identity, facial features, skin, expression, ears, head/skull geometry, pose, framing, camera perspective, lighting, background, or any other non-hair region.",
   "Return one JSON object matching the supplied schema. Do not include markdown.",
-  "APPROVE requires overall >= 9.5, identity >= 9.5, styleAccuracy >= 9.5, rootIntegration >= 9.5, lightingConsistency >= 9.5, hairOnly PASS, and artifacts NONE.",
+  "Overall is a server-derived score: the server will calculate it as the arithmetic mean of identity, styleAccuracy, rootIntegration, and lightingConsistency, rounded to one decimal place. Do not use overall as an independent judgment.",
+  "APPROVE requires the server-derived overall >= 9.5, identity >= 9.5, styleAccuracy >= 9.5, rootIntegration >= 9.5, lightingConsistency >= 9.5, hairOnly PASS, and artifacts NONE.",
   "If any hard gate fails, verdict must be REGENERATE.",
   "If regenerating, refinement must contain exactly one targeted correction: either improve an existing authoritative requirement or explicitly remove/suppress one observed unwanted characteristic.",
   "If no safe targeted correction can be stated without changing the authoritative hairstyle definition or a universal protected region, return an empty refinement string rather than inventing a correction.",
@@ -159,6 +173,8 @@ function parseQa(text: string): RndQaResult {
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("QA returned an invalid score.");
   }
+  value.overall = calculateOverall(value);
+
   if (!["PASS","FAIL"].includes(value.hairOnly) ||
       !["NONE","FOUND"].includes(value.artifacts) ||
       !["APPROVE","REGENERATE"].includes(value.verdict) ||
