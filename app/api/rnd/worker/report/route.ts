@@ -241,13 +241,28 @@ export async function POST(request: Request) {
       return { job: updatedJob, action: "REFINE" as const };
     }
 
+    // R&D is convergence-driven, not attempt-count-driven. If QA does not produce
+    // a safe targeted refinement, keep sampling the authoritative prompt instead of
+    // declaring the job exhausted. A successful hard-pass remains the only autonomous
+    // exit; human approval remains mandatory before promotion.
+    const nextEligibleAt = new Date(Date.now() + FIVE_MINUTES_MS);
     const updatedJob = await tx.rnDJob.update({
       where: { id: jobId },
-      data: { status: "EXHAUSTED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now },
-      select: { id: true, status: true, attemptCount: true },
+      data: {
+        status: "QUEUED",
+        attemptCount: attemptNumber,
+        nextEligibleAt,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: now,
+        completedAt: null,
+        failureCode: null,
+        failureMessage: null,
+      },
+      select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
     });
-    await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
-    return { job: updatedJob, action: "EXHAUSTED" as const };
+    await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+    return { job: updatedJob, action: "REFINE" as const };
   });
 
   const finalAttempt = await prisma.rnDAttempt.findUnique({
