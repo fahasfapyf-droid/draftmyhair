@@ -176,6 +176,28 @@ function promptRevision(prompt: string) {
   return createHash("sha256").update(prompt, "utf8").digest("hex").slice(0, 16);
 }
 
+async function logAttemptChecksum(jobId: string, attemptNumber: number, outputPath: string) {
+  const output = await readFile(outputPath);
+  const checksum = createHash("sha256").update(output).digest("hex");
+  console.log(`Job ${jobId} attempt ${attemptNumber}: output SHA-256 ${checksum}.`);
+
+  if (attemptNumber <= 1) return;
+  const previousPath = path.join(OUTPUT_DIR, `${jobId}-attempt-${attemptNumber - 1}.png`);
+  try {
+    const previous = await readFile(previousPath);
+    const previousChecksum = createHash("sha256").update(previous).digest("hex");
+    if (checksum === previousChecksum) {
+      console.error(
+        `DIAGNOSTIC: attempt ${attemptNumber} is byte-identical to attempt ${attemptNumber - 1} ` +
+        `(SHA-256 ${checksum}). Preserve both artifacts and investigate capture/generation; do not infer QA success.`,
+      );
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    console.log(`Prior local artifact unavailable for checksum comparison: attempt ${attemptNumber - 1}.`);
+  }
+}
+
 async function downloadSource(asset: SourceAsset, jobId: string) {
   const response = await api(`/api/rnd/worker/source?assetId=${encodeURIComponent(asset.id)}`);
   if (!response.ok) throw new Error(`Source download failed: HTTP ${response.status} ${await response.text()}`);
@@ -231,6 +253,7 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     const generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
     await captureGeneratedImage(page, outputPath, generatedSource, before);
+    await logAttemptChecksum(job.id, attemptNumber, outputPath);
     captureStatus = "PASS";
     captureLastSuccessAt = new Date().toISOString();
     captureLastError = null;

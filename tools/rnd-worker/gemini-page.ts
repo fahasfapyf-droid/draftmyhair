@@ -44,14 +44,20 @@ export async function assertReady(page: Page) {
 
 export async function freshChat(page: Page) {
   await openGemini(page);
-  try {
-    const button = await firstVisible([
-      page.getByRole("button", { name: /new chat|new conversation/i }),
-      page.locator('[aria-label*="New chat" i]'),
-    ]);
-    await button.click();
-    await page.waitForTimeout(1_200);
-  } catch {}
+  const button = await firstVisible([
+    page.getByRole("button", { name: /new chat|new conversation/i }),
+    page.locator('[aria-label*="New chat" i]'),
+  ]);
+  await button.click();
+  await page.waitForTimeout(1_200);
+
+  // Fail closed: never submit a new attempt if we cannot confirm the composer
+  // is available after explicitly activating New chat.
+  await firstVisible([
+    page.locator("textarea"),
+    page.locator('[contenteditable="true"][role="textbox"]'),
+    page.locator('[contenteditable="true"]'),
+  ]);
 }
 
 export async function openImageGenerationMode(page: Page) {
