@@ -65,7 +65,8 @@ export function assertFreshChatTransition(beforeUrl: string, afterUrl: string) {
 }
 
 export async function freshChat(page: Page) {
-  await openGemini(page);
+  // The caller must open Gemini and confirm authentication before this step.
+  // Navigating to /app here would erase the pre-click route evidence we need.
   const beforeUrl = page.url();
   const button = await firstVisible([
     page.getByRole("button", { name: /new chat|new conversation/i }),
@@ -75,12 +76,19 @@ export async function freshChat(page: Page) {
   await page.waitForTimeout(1_200);
   assertFreshChatTransition(beforeUrl, page.url());
 
-  // A changed route alone is insufficient if the composer is unavailable.
+  // Require both a usable composer and no recognizable user-message nodes.
+  // If Gemini's UI still exposes prior user messages, fail closed.
   await firstVisible([
     page.locator("textarea"),
     page.locator('[contenteditable="true"][role="textbox"]'),
     page.locator('[contenteditable="true"]'),
   ]);
+  const priorUserMessages = page.locator(
+    'user-query, [data-test-id*="user-query" i], [data-message-author-role="user"]',
+  );
+  if (await priorUserMessages.count() > 0) {
+    throw new Error("Gemini fresh-chat verification failed: prior user-message elements remain after New chat.");
+  }
 }
 
 export async function openImageGenerationMode(page: Page) {

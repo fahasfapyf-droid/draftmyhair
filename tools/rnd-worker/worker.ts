@@ -1,6 +1,7 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
 import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
+import { attemptArtifactFilename, sha256Hex } from "./artifact-integrity.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -178,14 +179,14 @@ function promptRevision(prompt: string) {
 
 async function logAttemptChecksum(jobId: string, attemptNumber: number, outputPath: string) {
   const output = await readFile(outputPath);
-  const checksum = createHash("sha256").update(output).digest("hex");
+  const checksum = sha256Hex(output);
   console.log(`Job ${jobId} attempt ${attemptNumber}: output SHA-256 ${checksum}.`);
 
   if (attemptNumber <= 1) return;
-  const previousPath = path.join(OUTPUT_DIR, `${jobId}-attempt-${attemptNumber - 1}.png`);
+  const previousPath = path.join(OUTPUT_DIR, attemptArtifactFilename(jobId, attemptNumber - 1));
   try {
     const previous = await readFile(previousPath);
-    const previousChecksum = createHash("sha256").update(previous).digest("hex");
+    const previousChecksum = sha256Hex(previous);
     if (checksum === previousChecksum) {
       console.error(
         `DIAGNOSTIC: attempt ${attemptNumber} is byte-identical to attempt ${attemptNumber - 1} ` +
@@ -251,7 +252,7 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     await markGenerationStarted(profile.id);
     await submitPrompt(page, job.currentPrompt);
     const generatedSource = await waitForGeneratedImage(page, before);
-    const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
+    const outputPath = path.join(OUTPUT_DIR, attemptArtifactFilename(job.id, attemptNumber));
     await captureGeneratedImage(page, outputPath, generatedSource, before);
     await logAttemptChecksum(job.id, attemptNumber, outputPath);
     captureStatus = "PASS";
@@ -340,7 +341,7 @@ async function launchGeminiSession(profile: GeminiProfile) {
     existingPage.on("pageerror", (error) => console.error(`DIAGNOSTIC: Existing Playwright page error: ${error.message}`));
   }
   console.log("Creating dedicated worker page...");
-  const page = await context.newPage({ timeout: 30_000 });
+  const page = await context.newPage();
   page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
   page.on("crash", () => console.error("DIAGNOSTIC: Worker Playwright page crashed."));
   page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Worker Playwright page error: ${error.message}`));

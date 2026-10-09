@@ -5,11 +5,15 @@
   "scripts": {
     "start": "node --env-file=.env --import ./vercel-bypass.ts --import tsx worker.ts",
     "check": "tsc --noEmit",
-    "test:fresh-chat": "node --import tsx --test fresh-chat.test.mjs"
+    "test:fresh-chat": "node --import tsx --test fresh-chat.test.mjs",
+    "test:capture-integrity": "node --import tsx --test capture-integrity.test.mjs"
   },
   "dependencies": {
     "playwright": "^1.55.0",
     "tsx": "^4.23.1",
     "typescript": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43"
   }
 }
