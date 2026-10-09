@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env --import ./vercel-bypass.ts --import tsx worker.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test:fresh-chat": "node --import tsx --test fresh-chat.test.mjs"
   },
   "dependencies": {
     "playwright": "^1.55.0",

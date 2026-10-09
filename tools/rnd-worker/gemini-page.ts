@@ -42,17 +42,40 @@ export async function assertReady(page: Page) {
   ]);
 }
 
+export function assertFreshChatTransition(beforeUrl: string, afterUrl: string) {
+  const before = new URL(beforeUrl);
+  const after = new URL(afterUrl);
+  if (before.origin !== after.origin || after.origin !== new URL(GEMINI_URL).origin) {
+    throw new Error("Gemini fresh-chat verification failed: origin changed unexpectedly.");
+  }
+
+  // Gemini conversation URLs normally include an ID after /app/. Requiring
+  // the route to change prevents a visible-but-stale composer from being
+  // mistaken for a new conversation. Fail closed when the UI gives no proof.
+  const beforeRoute = before.pathname + before.search;
+  const afterRoute = after.pathname + after.search;
+  if (beforeRoute === afterRoute) {
+    throw new Error(
+      `Gemini fresh-chat verification failed: route did not change after New chat (${afterRoute}).`,
+    );
+  }
+  if (!after.pathname.startsWith("/app")) {
+    throw new Error(`Gemini fresh-chat verification failed: unexpected route ${after.pathname}.`);
+  }
+}
+
 export async function freshChat(page: Page) {
   await openGemini(page);
+  const beforeUrl = page.url();
   const button = await firstVisible([
     page.getByRole("button", { name: /new chat|new conversation/i }),
     page.locator('[aria-label*="New chat" i]'),
   ]);
   await button.click();
   await page.waitForTimeout(1_200);
+  assertFreshChatTransition(beforeUrl, page.url());
 
-  // Fail closed: never submit a new attempt if we cannot confirm the composer
-  // is available after explicitly activating New chat.
+  // A changed route alone is insufficient if the composer is unavailable.
   await firstVisible([
     page.locator("textarea"),
     page.locator('[contenteditable="true"][role="textbox"]'),
