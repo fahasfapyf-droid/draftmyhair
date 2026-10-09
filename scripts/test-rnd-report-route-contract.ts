@@ -27,3 +27,14 @@ test("convergence transition uses a conditional job-state update before side eff
   assert.match(predicate, /leaseOwner: workerId/);
   assert.match(predicate, /attemptCount: \{ gte: MAX_RND_ATTEMPTS \}/);
 });
+
+test("preview E2E harness preserves enqueue-only mode before generation", () => {
+  const e2e = readFileSync(resolve(process.cwd(), "app/api/rnd/e2e-test/route.ts"), "utf8");
+  const enqueue = e2e.indexOf("const enqueue = await invokeEnqueue(sourceBuffer, sourceMime);");
+  const enqueueOnly = e2e.indexOf('searchParams.get("enqueueOnly") === "1"');
+  const generationLoop = e2e.indexOf("for (let i = 0; i < MAX_ATTEMPTS; i += 1)");
+  assert.notEqual(enqueue, -1);
+  assert.notEqual(enqueueOnly, -1);
+  assert.notEqual(generationLoop, -1);
+  assert.ok(enqueue < enqueueOnly && enqueueOnly < generationLoop, "enqueue-only mode must return before any generation attempt");
+});
