@@ -8,6 +8,7 @@ import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
+const MAX_RND_ATTEMPTS = 40;
 
 type ReportBody = {
   jobId?: unknown;
@@ -117,6 +118,15 @@ export async function POST(request: Request) {
   }
   if (attemptNumber !== job.attemptCount + 1) {
     return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
+  }
+  if (attemptNumber > MAX_RND_ATTEMPTS) {
+    const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
+    await prisma.$transaction(async (tx) => {
+      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
+      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+    });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
   }
 
   const reservation = await prisma.rnDAttempt.findUnique({
@@ -500,13 +510,23 @@ export async function POST(request: Request) {
       qaJson: true,
       artifactId: true,
       generationCompletedAt: true,
+      aiGatePassed: true,
+      publicationTierPassed: true,
     },
   });
 
   const candidateAttempts = scoredAttempts.filter((attempt) => {
     if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
     const qaRecord = attempt.qaJson as Record<string, unknown>;
-    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE";
+    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
+    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
+    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
+      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" &&
+      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
+      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
+      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
+      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
   });
 
   const bestAttempt = candidateAttempts
@@ -606,6 +626,8 @@ export async function GET(request: Request) {
           aiGatePassed: true,
           publicationTierPassed: true,
           qaJson: true,
+          aiGatePassed: true,
+          publicationTierPassed: true,
           refinementSlot: true,
           refinementReason: true,
           errorCode: true,
@@ -623,7 +645,15 @@ export async function GET(request: Request) {
   const eligibleAttempts = job.attempts.filter((attempt) => {
     if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
     const qaRecord = attempt.qaJson as Record<string, unknown>;
-    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null;
+    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
+    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
+    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
+      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null &&
+      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
+      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
+      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
+      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
   });
 
   const bestCandidate = eligibleAttempts
