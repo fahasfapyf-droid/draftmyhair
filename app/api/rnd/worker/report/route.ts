@@ -626,8 +626,6 @@ export async function GET(request: Request) {
           aiGatePassed: true,
           publicationTierPassed: true,
           qaJson: true,
-          aiGatePassed: true,
-          publicationTierPassed: true,
           refinementSlot: true,
           refinementReason: true,
           errorCode: true,
