@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
+import { isEligibleRndCandidate } from "@/lib/rnd/candidate-eligibility";
+import { isRndAttemptAllowed, MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
-const MAX_RND_ATTEMPTS = 40;
 
 type ReportBody = {
   jobId?: unknown;
@@ -116,17 +117,20 @@ export async function POST(request: Request) {
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
-  if (attemptNumber !== job.attemptCount + 1) {
-    return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
-  }
-  if (attemptNumber > MAX_RND_ATTEMPTS) {
+  if (!isRndAttemptAllowed(attemptNumber)) {
     const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
     await prisma.$transaction(async (tx) => {
-      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
-      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      await tx.rnDAttempt.updateMany({ where: { jobId, attemptNumber }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
+      const stopped = await tx.rnDJob.updateMany({
+        where: { id: jobId, status: "PROCESSING", leaseOwner: workerId },
+        data: { status: "FAILED", attemptCount: Math.max(job.attemptCount, MAX_RND_ATTEMPTS), leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message },
+      });
+      if (stopped.count === 1) await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
     });
     return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
+  }
+  if (attemptNumber !== job.attemptCount + 1) {
+    return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
   }
 
   const reservation = await prisma.rnDAttempt.findUnique({
@@ -515,19 +519,9 @@ export async function POST(request: Request) {
     },
   });
 
-  const candidateAttempts = scoredAttempts.filter((attempt) => {
-    if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
-    const qaRecord = attempt.qaJson as Record<string, unknown>;
-    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
-    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
-    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
-      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
-      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
-      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
-      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
-      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
-  });
+  const candidateAttempts = scoredAttempts.filter((attempt) =>
+    isEligibleRndCandidate({ artifactId: attempt.artifactId, qaJson: attempt.qaJson, overallScore: attempt.overallScore === null ? null : Number(attempt.overallScore), aiGatePassed: attempt.aiGatePassed, publicationTierPassed: attempt.publicationTierPassed })
+  );
 
   const bestAttempt = candidateAttempts
     .slice()
@@ -640,19 +634,9 @@ export async function GET(request: Request) {
 
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-  const eligibleAttempts = job.attempts.filter((attempt) => {
-    if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
-    const qaRecord = attempt.qaJson as Record<string, unknown>;
-    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
-    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
-    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
-      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
-      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
-      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
-      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
-      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
-  });
+  const eligibleAttempts = job.attempts.filter((attempt) =>
+    isEligibleRndCandidate({ artifactId: attempt.artifactId, qaJson: attempt.qaJson, overallScore: attempt.overallScore === null ? null : Number(attempt.overallScore), aiGatePassed: attempt.aiGatePassed, publicationTierPassed: attempt.publicationTierPassed })
+  );
 
   const bestCandidate = eligibleAttempts
     .slice()

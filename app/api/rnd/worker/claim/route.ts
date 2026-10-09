@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
+import { MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
 
 export const runtime = "nodejs";
-const MAX_RND_ATTEMPTS = 40;
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
   if (authResponse) return authResponse;
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       select: { id: true, targetId: true },
     });
     for (const overLimit of overLimitJobs) {
-      await tx.rnDJob.updateMany({
+      const stopped = await tx.rnDJob.updateMany({
         where: { id: overLimit.id, status: { in: ["QUEUED", "PROCESSING"] }, attemptCount: { gte: MAX_RND_ATTEMPTS } },
         data: {
           status: "FAILED",
@@ -34,7 +34,9 @@ export async function POST(request: Request) {
           failureMessage: `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`,
         },
       });
-      await tx.rnDTarget.update({ where: { id: overLimit.targetId }, data: { status: "FAILED" } });
+      if (stopped.count === 1) {
+        await tx.rnDTarget.update({ where: { id: overLimit.targetId }, data: { status: "FAILED" } });
+      }
     }
 
     // R&D generation is convergence-driven. Failed attempts may continue until automated QA reaches the hard-pass gate or no targeted refinement can be compiled.
