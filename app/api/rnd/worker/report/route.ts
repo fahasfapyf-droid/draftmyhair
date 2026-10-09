@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { isEligibleRndCandidate } from "@/lib/rnd/candidate-eligibility";
-import { isRndAttemptAllowed, MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
+import { isExpectedRndAttempt, isRndAttemptAllowed, MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
@@ -117,20 +117,23 @@ export async function POST(request: Request) {
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
+  if (!isExpectedRndAttempt(attemptNumber, job.attemptCount)) {
+    return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
+  }
   if (!isRndAttemptAllowed(attemptNumber)) {
     const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
-    await prisma.$transaction(async (tx) => {
-      await tx.rnDAttempt.updateMany({ where: { jobId, attemptNumber }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
-      const stopped = await tx.rnDJob.updateMany({
-        where: { id: jobId, status: "PROCESSING", leaseOwner: workerId },
+    const stopped = await prisma.$transaction(async (tx) => {
+      const jobTransition = await tx.rnDJob.updateMany({
+        where: { id: jobId, status: "PROCESSING", leaseOwner: workerId, attemptCount: { gte: MAX_RND_ATTEMPTS } },
         data: { status: "FAILED", attemptCount: Math.max(job.attemptCount, MAX_RND_ATTEMPTS), leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message },
       });
-      if (stopped.count === 1) await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      if (jobTransition.count !== 1) return false;
+      await tx.rnDAttempt.updateMany({ where: { jobId, attemptNumber }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      return true;
     });
+    if (!stopped) return NextResponse.json({ error: "Job lease or attempt state changed" }, { status: 409 });
     return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
-  }
-  if (attemptNumber !== job.attemptCount + 1) {
-    return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
   }
 
   const reservation = await prisma.rnDAttempt.findUnique({
