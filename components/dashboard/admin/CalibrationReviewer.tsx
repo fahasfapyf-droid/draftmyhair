@@ -8,6 +8,19 @@ type Sample = {
   instruction: string;
 };
 
+type ApiResponse = {
+  error?: string;
+  available?: boolean;
+  attemptId?: string;
+  imageUrl?: string;
+  instruction?: string;
+  ok?: boolean;
+};
+
+async function readResponse(response: Response): Promise<ApiResponse> {
+  return response.json().catch(() => ({})) as Promise<ApiResponse>;
+}
+
 export function CalibrationReviewer() {
   const [reviewerKey, setReviewerKey] = useState(() =>
     typeof window === "undefined" ? "" : sessionStorage.getItem("rnd-calibration-reviewer") ?? "",
@@ -16,7 +29,7 @@ export function CalibrationReviewer() {
   const [overall, setOverall] = useState("");
   const [hairstyle, setHairstyle] = useState("");
   const [notes, setNotes] = useState("");
-  const [status, setStatus] = useState("Loading…");
+  const [status, setStatus] = useState("Enter a reviewer key to load blind samples.");
   const [saving, setSaving] = useState(false);
 
   async function loadSample(key = reviewerKey.trim()) {
@@ -24,31 +37,42 @@ export function CalibrationReviewer() {
       setStatus("Enter a reviewer key to load blind samples.");
       return;
     }
-    setStatus("Loading next blind sample…");
-    const response = await fetch(
-      `/api/rnd/qa-calibration/review?reviewerKey=${encodeURIComponent(key)}`,
 
-      { cache: "no-store" },
-    );
-    const body = await response.json();
-    if (!response.ok) {
-      setStatus(body?.error ?? "Unable to load sample.");
-      return;
+    setStatus("Loading next blind sample…");
+    try {
+      const response = await fetch(
+        `/api/rnd/qa-calibration/review?reviewerKey=${encodeURIComponent(key)}`,
+        { cache: "no-store" },
+      );
+      const body = await readResponse(response);
+
+      if (!response.ok) {
+        setStatus(body.error ?? `Unable to load sample (HTTP ${response.status}).`);
+        return;
+      }
+      if (!body.available) {
+        setSample(null);
+        setStatus("No eligible HUMAN_APPROVAL samples are currently available.");
+        return;
+      }
+      if (!body.attemptId || !body.imageUrl || !body.instruction) {
+        setSample(null);
+        setStatus("The server returned an incomplete sample. Please retry.");
+        return;
+      }
+
+      setSample({
+        attemptId: body.attemptId,
+        imageUrl: body.imageUrl,
+        instruction: body.instruction,
+      });
+      setOverall("");
+      setHairstyle("");
+      setNotes("");
+      setStatus("");
+    } catch {
+      setStatus("Unable to reach the calibration API. Check the connection and retry.");
     }
-    if (!body.available) {
-      setSample(null);
-      setStatus("No eligible HUMAN_APPROVAL samples are currently available.");
-      return;
-    }
-    setSample({
-      attemptId: body.attemptId,
-      imageUrl: body.imageUrl,
-      instruction: body.instruction,
-    });
-    setOverall("");
-    setHairstyle("");
-    setNotes("");
-    setStatus("");
   }
 
   async function submit() {
@@ -72,29 +96,32 @@ export function CalibrationReviewer() {
 
     setSaving(true);
     setStatus("Saving blind rating…");
+    try {
+      const response = await fetch("/api/rnd/qa-calibration/review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          attemptId: sample.attemptId,
+          reviewerKey: reviewerKey.trim(),
+          humanOverallScore,
+          humanHairstyleScore,
+          notes: notes.trim() || null,
+        }),
+      });
+      const body = await readResponse(response);
 
-    const response = await fetch("/api/rnd/qa-calibration/review", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        attemptId: sample.attemptId,
-        reviewerKey: reviewerKey.trim(),
-        humanOverallScore,
-        humanHairstyleScore,
-        notes: notes.trim() || null,
-      }),
-    });
-    const body = await response.json();
+      if (!response.ok) {
+        setStatus(body.error ?? `Unable to save rating (HTTP ${response.status}).`);
+        return;
+      }
 
-    if (!response.ok) {
-      setStatus(body?.error ?? "Unable to save rating.");
+      sessionStorage.setItem("rnd-calibration-reviewer", reviewerKey.trim());
+      await loadSample(reviewerKey.trim());
+    } catch {
+      setStatus("Unable to reach the calibration API while saving. Retry when the connection is restored.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    sessionStorage.setItem("rnd-calibration-reviewer", reviewerKey.trim());
-    setSaving(false);
-    await loadSample(reviewerKey.trim());
   }
 
   return (
@@ -191,7 +218,7 @@ export function CalibrationReviewer() {
         </div>
       ) : null}
 
-      <div className="text-sm text-muted-foreground">{status}</div>
+      <div className="text-sm text-muted-foreground" role="status" aria-live="polite">{status}</div>
     </div>
   );
 }
