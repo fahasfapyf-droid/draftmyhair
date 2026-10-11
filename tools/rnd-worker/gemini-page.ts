@@ -264,12 +264,24 @@ export async function largeImages(page: Page): Promise<string[]> {
     .map((item) => item.src));
 }
 
+const GEMINI_QUOTA_MESSAGE = "I can create more images as soon as your limit resets. Check your usage in Settings.";
+
+async function detectGeminiProfileExhaustion(page: Page): Promise<boolean> {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  const normalized = bodyText.replace(/\s+/g, " ").trim().toLowerCase();
+  if (normalized.includes(GEMINI_QUOTA_MESSAGE.toLowerCase())) return true;
+  return /(?:usage limit|limit reached|too many requests|rate limit|resource exhausted|quota exceeded)/i.test(normalized);
+}
+
 export async function waitForGeneratedImage(page: Page, before: Set<string>): Promise<string> {
   await pause(3_500, "Gemini is processing the request");
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + 300_000;
   let lastLog = 0;
 
   while (Date.now() < deadline) {
+    if (await detectGeminiProfileExhaustion(page)) {
+      throw new Error("GEMINI_PROFILE_EXHAUSTED: Gemini image-generation quota is exhausted for the active profile.");
+    }
     const sources = await largeImages(page);
     const generatedSource = sources
       .map((value) => typeof value === "string" ? value : (value as { src?: string }).src ?? "")
