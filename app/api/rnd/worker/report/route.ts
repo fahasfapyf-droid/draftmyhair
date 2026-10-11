@@ -5,6 +5,7 @@ import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { isExpectedRndAttempt, isRndAttemptAllowed, isRndJobAtAttemptLimit, MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
@@ -115,8 +116,36 @@ export async function POST(request: Request) {
   if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
-  if (attemptNumber !== job.attemptCount + 1) {
+  if (!isExpectedRndAttempt(attemptNumber, job.attemptCount)) {
     return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
+  }
+
+if (!isRndAttemptAllowed(attemptNumber)) {
+    const message = "R&D stopped after " + MAX_RND_ATTEMPTS + " attempts without satisfying every hard-pass gate.";
+    const exhausted = await prisma.$transaction(async (tx) => {
+      const transitioned = await tx.rnDJob.updateMany({
+        where: { id: jobId, status: "PROCESSING", leaseOwner: workerId, attemptCount: { gte: MAX_RND_ATTEMPTS } },
+        data: {
+          status: "EXHAUSTED",
+          attemptCount: Math.max(job.attemptCount, MAX_RND_ATTEMPTS),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: now,
+          completedAt: now,
+          failureCode: "RND_CONVERGENCE_LIMIT",
+          failureMessage: message,
+        },
+      });
+      if (transitioned.count !== 1) return false;
+      await tx.rnDAttempt.updateMany({
+        where: { jobId, attemptNumber },
+        data: { verdict: "EXHAUSTED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
+      return true;
+    });
+    if (!exhausted) return NextResponse.json({ error: "Job lease or attempt state changed" }, { status: 409 });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "EXHAUSTED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
   }
 
   const reservation = await prisma.rnDAttempt.findUnique({
@@ -400,8 +429,8 @@ export async function POST(request: Request) {
         overallScore: qa.overall,
         aiGatePassed: hardPass,
         publicationTierPassed: hardPass,
-        verdict: hardPass ? "HUMAN_APPROVAL" : "REFINE",
-        refinementSlot: hardPass ? null : refinement ? "AUTO_" + attemptNumber : null,
+        verdict: hardPass ? "HUMAN_APPROVAL" : isRndJobAtAttemptLimit(attemptNumber) ? "EXHAUSTED" : "REFINE",
+        refinementSlot: hardPass || isRndJobAtAttemptLimit(attemptNumber) ? null : refinement ? "AUTO_" + attemptNumber : null,
         refinementReason: hardPass ? null : rawRefinement,
         errorCode: null,
         errorMessage: null,
@@ -416,6 +445,26 @@ export async function POST(request: Request) {
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
       return { job: updatedJob, action: "HUMAN_APPROVAL" as const };
+    }
+
+    if (isRndJobAtAttemptLimit(attemptNumber)) {
+      const message = "R&D stopped after " + MAX_RND_ATTEMPTS + " attempts without satisfying every hard-pass gate.";
+      const updatedJob = await tx.rnDJob.update({
+        where: { id: jobId },
+        data: {
+          status: "EXHAUSTED",
+          attemptCount: attemptNumber,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: now,
+          completedAt: now,
+          failureCode: "RND_CONVERGENCE_LIMIT",
+          failureMessage: message,
+        },
+        select: { id: true, status: true, attemptCount: true },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "EXHAUSTED" } });
+      return { job: updatedJob, action: "EXHAUSTED" as const };
     }
 
     if (refinement) {

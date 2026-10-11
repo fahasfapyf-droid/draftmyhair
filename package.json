@@ -9,6 +9,7 @@
     "prebuild": "npm run compile:prompts",
     "build": "prisma generate && next build",
     "db:migrate:deploy": "prisma migrate deploy",
+    "test:rnd-safety": "node --import tsx --test tests/rnd-attempt-limit.test.ts",
     "start": "next start",
     "lint": "eslint .",
     "postinstall": "prisma generate"

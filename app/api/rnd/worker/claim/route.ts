@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
+import { MAX_RND_ATTEMPTS } from "@/lib/rnd/attempt-limit";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -17,6 +18,38 @@ export async function POST(request: Request) {
 
     // R&D generation is convergence-driven. Failed attempts may continue until automated QA reaches the hard-pass gate or no targeted refinement can be compiled.
 
+    // Recover legacy/stale queue rows that already consumed the attempt budget.
+    // Expired PROCESSING leases are eligible; live leases must not be disturbed.
+    const atLimitJobs = await tx.rnDJob.findMany({
+      where: {
+        attemptCount: { gte: MAX_RND_ATTEMPTS },
+        OR: [
+          { status: "QUEUED" },
+          { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
+        ],
+      },
+      select: { id: true, targetId: true, status: true },
+    });
+    for (const exhausted of atLimitJobs) {
+      const transitioned = await tx.rnDJob.updateMany({
+        where: exhausted.status === "QUEUED"
+          ? { id: exhausted.id, status: "QUEUED", attemptCount: { gte: MAX_RND_ATTEMPTS } }
+          : { id: exhausted.id, status: "PROCESSING", attemptCount: { gte: MAX_RND_ATTEMPTS }, OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
+        data: {
+          status: "EXHAUSTED",
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          heartbeatAt: now,
+          completedAt: now,
+          failureCode: "RND_CONVERGENCE_LIMIT",
+          failureMessage: "R&D stopped after " + MAX_RND_ATTEMPTS + " attempts without satisfying every hard-pass gate.",
+        },
+      });
+      if (transitioned.count === 1) {
+        await tx.rnDTarget.update({ where: { id: exhausted.targetId }, data: { status: "EXHAUSTED" } });
+      }
+    }
+
     // Queue priority fix: queued regression work must win before lease recovery.
     // Always prefer genuinely QUEUED work over an expired PROCESSING lease.
     // An expired job may have a recently refreshed queuedAt after a retry and
@@ -24,6 +57,7 @@ export async function POST(request: Request) {
     const queuedCandidate = await tx.rnDJob.findFirst({
       where: {
         status: "QUEUED",
+        attemptCount: { lt: MAX_RND_ATTEMPTS },
         OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
       orderBy: { queuedAt: "desc" },
@@ -35,6 +69,7 @@ export async function POST(request: Request) {
       (await tx.rnDJob.findFirst({
         where: {
           status: "PROCESSING",
+          attemptCount: { lt: MAX_RND_ATTEMPTS },
           OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
         },
         orderBy: { queuedAt: "desc" },
