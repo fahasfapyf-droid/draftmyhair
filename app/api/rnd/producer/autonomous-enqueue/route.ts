@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
   const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
-  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
+  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: image.type });
 
   let built;
   try {
