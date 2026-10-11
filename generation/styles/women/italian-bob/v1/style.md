@@ -102,6 +102,8 @@ Maintain a true jaw-length bob.
 
 The primary perimeter should finish approximately at the jawline, with only minor anatomical variation toward the upper neck where required by the subject's proportions.
 
+HARD LENGTH FLOOR: the front and side perimeter must visibly reach jawline level. Do not terminate at cheekbone, mid-cheek, ear height, or above-jaw length. The rear perimeter may curve into the upper-neck region, but it must not make the overall haircut shorter than jaw length.
+
 The finished hairstyle must remain clearly above shoulder length.
 
 Front sections may fall only slightly longer through natural movement, but must remain within the compact bob silhouette.
