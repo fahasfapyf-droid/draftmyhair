@@ -56,7 +56,10 @@ export async function POST(request: Request) {
           },
         });
         await tx.rnDTarget.updateMany({
-          where: { id: job.targetId, status: { notIn: ["APPROVED", "REJECTED"] } },
+          where: {
+            id: job.targetId,
+            status: { notIn: ["APPROVED", "REJECTED", "EXHAUSTED", "HUMAN_APPROVAL", "QA"] },
+          },
           data: { status: "EXHAUSTED" },
         });
         return { kind: "exhausted" as const, attemptCount: job.attemptCount };
@@ -65,6 +68,18 @@ export async function POST(request: Request) {
       // Human-review and terminal states must never be overwritten by a retry.
       if (["APPROVED", "REJECTED", "EXHAUSTED", "HUMAN_APPROVAL", "QA"].includes(job.target.status)) {
         return { kind: "target_locked" as const, targetStatus: job.target.status };
+      }
+
+      // Conditionally move the target first so a concurrent QA/review transition is not overwritten.
+      const targetUpdated = await tx.rnDTarget.updateMany({
+        where: {
+          id: job.targetId,
+          status: { notIn: ["APPROVED", "REJECTED", "EXHAUSTED", "HUMAN_APPROVAL", "QA"] },
+        },
+        data: { status: "QUEUED" },
+      });
+      if (targetUpdated.count !== 1) {
+        return { kind: "target_locked" as const, targetStatus: "CHANGED_CONCURRENTLY" };
       }
 
       const updated = await tx.rnDJob.updateMany({
@@ -82,9 +97,9 @@ export async function POST(request: Request) {
           failureMessage: null,
         },
       });
-      if (updated.count !== 1) return { kind: "not_requeued" as const, status: "CHANGED_CONCURRENTLY" };
+      if (updated.count !== 1) throw new Error("RND_REQUEUE_CONCURRENT_CHANGE");
 
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+
       return {
         kind: "requeued" as const,
         job: { id: job.id, status: "QUEUED", attemptCount: job.attemptCount, nextEligibleAt: retryAt },
