@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION_V3 = "c43a4f30b93b";
+export const PROMPT_VERSION_V3 = "d7f42a4e659a";
 
 export const MASTER_PROMPT_V3 = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -85,9 +85,45 @@ The face is not editable.
 
 The body is not editable.
 
+The clothing is not editable.
+
 The background is not editable.
 
 Only the hairstyle is editable.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NON-HAIR REGION — IMMUTABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Treat every region outside the existing hair as source pixels that must be reused, not regenerated.
+
+Preserve the original clothing exactly, including:
+
+• garment shape
+
+• collar
+
+• seams
+
+• buttons
+
+• pockets
+
+• logos and graphics
+
+• fabric texture
+
+• wrinkles and folds
+
+• shadows and highlights on the clothing
+
+Do not redesign, restyle, recolor, replace, repaint, or reconstruct any garment.
+
+Do not alter any visible skin, ears, neck, shoulders, body, background, or environmental detail.
+
+When removing or shortening existing hair exposes an area near the shoulders, neck, collar, or clothing, reveal and preserve the corresponding source photograph beneath it. Do not invent replacement clothing or body pixels.
+
+Hair may overlap the locked regions naturally, but the locked regions themselves must remain unchanged.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EDITABLE REGION
@@ -122,6 +158,14 @@ SELF CHECK
 ✓ Edit remained local
 
 ✓ Only hairstyle changed
+
+✓ Clothing unchanged
+
+✓ Skin unchanged
+
+✓ Body unchanged
+
+✓ Background unchanged
 
 ✓ No surrounding regions modified
 
@@ -169,11 +213,30 @@ Framing is locked.
 
 Perspective is locked.
 
-Only surface hair may change.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PHOTOGRAPHIC FRAME LOCK — ABSOLUTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Hair follows the existing head geometry.
+Treat the source image as a fixed photographic frame, not as a reference
+for recreating the subject.
 
-Head geometry never adapts to the hairstyle.
+The camera viewpoint, perspective, subject-to-camera distance, head scale,
+face scale, head position within the canvas, vertical and horizontal
+placement, crop boundaries, shoulder placement, and visible clothing
+boundaries are immutable.
+
+Do not recompose, recenter, zoom, pull back, push in, crop, uncrop, or
+change the apparent camera distance.
+
+The generated image must occupy the same frame composition as the source
+except where hair itself physically changes.
+
+The face must remain at the identical scale and position relative to the
+canvas. The shoulders, neckline, jacket, and torso must remain at their
+original scale and position.
+
+The source photograph is the geometric authority. Do not reinterpret its
+composition.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SELF CHECK
@@ -198,6 +261,12 @@ SELF CHECK
 ✓ Zoom unchanged
 
 ✓ Perspective unchanged
+
+✓ Photographic frame preserved
+
+✓ Subject scale preserved
+
+✓ Clothing placement preserved
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IDENTITY LOCK — ABSOLUTE
@@ -458,72 +527,58 @@ SELF CHECK
 ✓ Image scale unchanged
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HAIR COLOR LOCK
+PHYSICAL HAIRCUT REALISM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Read the photographed hair color.
+Treat the transformation as a real haircut performed on the subject's existing hair.
 
-Read color only from the hair roots.
+The existing hair is the physical source material for the new hairstyle.
 
-Ignore:
+Reshape and cut that hair into the requested hairstyle while preserving its natural texture, density, strand behavior, root structure, and intrinsic characteristics.
 
-• background
+The new haircut must have physically continuous roots-to-lengths construction, believable weight distribution, natural strand grouping, and realistic interaction between overlapping sections.
 
-• lighting
+Hair must emerge naturally from the existing scalp and hairline and follow the actual shape and orientation of the subject's head.
 
-• clothing
+The finished hairstyle must look physically achievable as a real haircut performed on this person.
 
-• reflections
-
-• environment
-
-Do not estimate hair color.
-
-Do not invent hair color.
+Do not construct the hairstyle as a separate wig, pasted hair asset, or generic hairstyle template.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COLOR REPRODUCTION
+COLOR DISTRIBUTION LOCK
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Preserve the photographed color.
+Unless a specific hair-color transformation is explicitly requested, preserve the source hair's intrinsic color.
 
-Preserve:
+Determine the underlying/base hair color from the natural root zone, including the hairline, temples, part, and visible scalp-adjacent strands.
 
-• root color
+Also analyze the full visible hair length for its existing natural color variation.
 
-• natural variation
+Preserve the source hair's actual:
+
+• base color
+
+• undertones
+
+• lighter and darker sections
 
 • highlights
 
 • lowlights
 
-• color depth
+• warm/cool variation
 
-Do not increase saturation.
+• sun-lightened or naturally lighter lengths
 
-Do not decrease saturation.
+• relative distribution of these variations
 
-Do not warm the color.
+Transfer this existing color distribution onto the new hairstyle geometry.
 
-Do not cool the color.
+Changing the haircut must not simplify, homogenize, darken, lighten, or otherwise reinterpret the source hair color.
 
-Do not brighten the color.
+Do not replace the photographed color with a stereotypical color associated with the requested hairstyle.
 
-Do not darken the color.
-
-Only change hair color when explicitly requested.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SELF CHECK
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-✓ Root color preserved
-
-✓ Natural variation preserved
-
-✓ No color contamination
-
-✓ No unintended color shift
+The new hairstyle must retain the same underlying color identity and visible color variation of the source hair.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HAIR EDIT
@@ -676,90 +731,77 @@ SELF CHECK
 ✓ No AI artifacts
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL VALIDATION
+NON-HAIR REGION LOCK — ABSOLUTE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Before returning the edited photograph:
+The uploaded photograph outside the hairstyle is fixed.
 
-Verify every lock.
+Do not regenerate, redesign, reinterpret, recolor, or modify any
+non-hair region.
 
-Verify every preserved region.
+LOCKED:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VERIFY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• face
+• skin
+• ears
+• neck
+• shoulders
+• body
+• clothing
+• garments
+• neckline
+• jewelry
+• accessories
+• background
+• environment
+• lighting
+• shadows
+• exposure
+• white balance
+• colour balance
+• camera rendering
+• photographic grain
+• depth of field
 
-✓ Local edit preserved
+The original clothing must remain the exact same clothing.
 
-✓ Uploaded photograph preserved
+Do not change:
 
-✓ Same photographed person
+• garment type
+• garment shape
+• garment colour
+• garment texture
+• neckline
+• seams
+• buttons
+• folds
+• logos
+• visible graphics
+• accessories
 
-✓ Same facial identity
+The original intrinsic hair colour is also fixed.
 
-✓ Same facial structure
+Do not recolour the hair.
 
-✓ Same skin
+Do not darken it.
 
-✓ Same expression
+Do not lighten it.
 
-✓ Same pose
+Do not warm it.
 
-✓ Same head geometry
+Do not cool it.
 
-✓ Same camera
+Do not increase saturation.
 
-✓ Same framing
+Do not introduce new highlights or lowlights.
 
-✓ Same crop
+Only the hairstyle geometry, length, density, texture, and arrangement
+may change.
 
-✓ Same zoom
+Everything else must remain visually consistent with the uploaded
+photograph.
 
-✓ Same perspective
+The hairstyle must adapt to the photograph.
 
-✓ Same lighting
-
-✓ Same background
-
-✓ Hair color preserved unless instructed otherwise
-
-✓ Requested hairstyle successfully applied
-
-✓ Hair integrates naturally
-
-✓ Result looks like a real photograph
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FAILURE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-If any verification fails:
-
-Discard the edit.
-
-Restart from the uploaded photograph.
-
-Do not return the failed result.
-
-If any non-hair region has been regenerated:
-
-Discard the edit immediately.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL RULE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Return the edited photograph only if:
-
-• The hairstyle is the only edited region.
-
-• Every non-hair pixel matches the uploaded photograph.
-
-• The uploaded photograph has been preserved.
-
-Otherwise:
-
-Discard the edit.
-
-Restart from the uploaded photograph.
+The photograph must not adapt to the hairstyle.
 `;

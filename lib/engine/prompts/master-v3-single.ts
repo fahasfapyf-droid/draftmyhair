@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-export const PROMPT_VERSION_V3_SINGLE = "2ded8b35d7a8";
+export const PROMPT_VERSION_V3_SINGLE = "937986cd16c9";
 
 export const MASTER_PROMPT_V3_SINGLE = `
 TASK
@@ -118,6 +118,24 @@ Do not:
 • correct the posture
 • shift the shoulders
 • change the pose
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+FRAME REGISTRATION — ABSOLUTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Treat the source image as a locked photographic frame, not as a reference for generating a new portrait.
+
+Preserve the exact original subject scale, head placement, face placement, shoulder placement, crop boundaries, and visible clothing boundaries.
+
+Do not recenter the person. Do not tighten or loosen the framing. Do not alter the amount of background visible around the head or shoulders.
+
+Do not change the apparent camera distance, lens perspective, or portrait composition.
+
+The generated image must occupy the same photographic composition as the uploaded image. The only intentional visual change is the requested hairstyle.
+
+If the hairstyle would normally require a different framing or head presentation, do not change the framing or head presentation. Adapt the hairstyle to the existing photograph instead.
+
+FRAME FIDELITY OVERRIDES HAIRSTYLE AESTHETICS.
 
 Pose fidelity overrides hairstyle aesthetics.
 
