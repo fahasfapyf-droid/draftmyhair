@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Serialize with claim/requeue operations so two callers cannot requeue the same job.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))`;
+      await tx.$queryRaw`WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('draftmyhair-rnd-generation'))) SELECT 1 AS locked FROM lock`;
 
       const job = await tx.rnDJob.findUnique({
         where: { id: jobId },
@@ -109,4 +109,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Unable to requeue job" }, { status: 500 });
   }
 }
-
