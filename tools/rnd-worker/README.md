@@ -65,7 +65,7 @@ On startup the worker performs the `/api/rnd/worker/hello` handshake, then polls
 
 A claimed job receives a 120-second server lease. The worker renews the lease every 40 seconds while Gemini is running.
 
-Every generation attempt is reported to `/report`. The server remains authoritative for attempt count and the two-attempt autonomous ceiling.
+Every generation attempt is reported to `/report`. The deployed server-side convergence ceiling is 40 attempts (MAX_RND_ATTEMPTS in the claim and report routes). This is separate from supervised single-run mode. Set RND_WORKER_ONCE=1 in the worker environment to make one process claim at most one job attempt; if no eligible job exists, it exits without polling. After reporting that attempt (including a failed execution report), it stops before another claim. Keep this flag enabled for the controlled supervised test; do not start a normal polling worker for that test.
 
 ## Deployment Protection note
 
