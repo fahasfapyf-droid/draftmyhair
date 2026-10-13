@@ -3,7 +3,7 @@
     {
       "id": "gemini-1",
       "label": "Gemini Profile 1",
-      "directory": "C:\\Users\\IC\\draftmyhair-rnd\\tools\\gemini-web-agent\\chrome-profile",
+      "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-1",
       "status": "ACTIVE",
       "hourlyLimit": 30,
       "minIntervalMs": 120000
@@ -12,7 +12,7 @@
       "id": "gemini-2",
       "label": "Gemini Profile 2",
       "directory": "%LOCALAPPDATA%\\DraftMyHair\\GeminiProfiles\\Profile-2",
-      "status": "PAUSED",
+      "status": "ACTIVE",
       "hourlyLimit": 30,
       "minIntervalMs": 120000
     }
