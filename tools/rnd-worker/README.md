@@ -36,8 +36,9 @@ A quota/rate-limit error marks the current profile EXHAUSTED for the cooldown pe
 Set these environment variables in the worker process:
 
 ```text
-RND_API_BASE_URL=https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app
+RND_API_BASE_URL=https://draftmyhair-git-rnd-qa-gate-clean-integration-draftmyhair.vercel.app
 RND_WORKER_TOKEN=<Preview R&D worker token>
+RND_WORKER_ONCE=1
 CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
