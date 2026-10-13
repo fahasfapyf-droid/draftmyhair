@@ -11,6 +11,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "start": "next start",
     "lint": "eslint .",
+    "test:rnd-image-integrity": "tsx scripts/test-rnd-image-integrity.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
