@@ -73,5 +73,9 @@ assert.match(reportRoute, /verdict: hardPass \? "HUMAN_APPROVAL" : "REFINE"/,
   "attempt verdict must derive from the combined hard gate");
 assert.match(reportRoute, /if \(hardPass\) \{[\s\S]{0,300}status: "HUMAN_APPROVAL"/,
   "job transition to HUMAN_APPROVAL must be guarded by hardPass");
+assert.doesNotMatch(reportRoute, /faceTexturePreservationPass\s*===\s*true/,
+  "uncalibrated texture diagnostics must not veto best-candidate selection");
+assert.equal((reportRoute.match(/passesRndHardIntegrityGate\(\{ canvasMatch: integrity\.canvasMatch \}\)/g) ?? []).length, 2,
+  "POST and GET candidate selection must use the deterministic hard-integrity gate");
 
 console.log("R&D combined QA hard-gate tests passed, including approval-transition guard.");

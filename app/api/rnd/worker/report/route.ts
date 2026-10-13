@@ -4,7 +4,7 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
-import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
 
 export const runtime = "nodejs";
@@ -509,7 +509,8 @@ export async function POST(request: Request) {
     const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
     return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
       qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch }) &&
       verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
       Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
       Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
@@ -634,7 +635,8 @@ export async function GET(request: Request) {
     const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
     return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
       qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch }) &&
       verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
       Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
       Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
