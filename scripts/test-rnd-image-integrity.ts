@@ -31,7 +31,7 @@ async function main() {
   assert.equal(passesRndHardIntegrityGate({ canvasMatch: false }), false, "canvas mismatch must still fail the deterministic gate");
   assert.ok(diagnosticOnlyFailures > 0, "regression set should exercise cases that previously failed the uncalibrated texture gate");
   const report = await readFile(path.join(root, "app/api/rnd/worker/report/route.ts"), "utf8");
-  assert.match(report, /passesRndHardIntegrityGate\(imageIntegrity\)/, "report route must use calibrated hard-gate helper");
+  assert.match(report, /passesRndCombinedHardGate\(/, "report route must use the combined hard-gate helper");
   assert.doesNotMatch(report, /imageIntegrity\?\.faceTexturePreservationPass\s*===\s*true/, "uncalibrated texture diagnostic must not veto approval");
   console.log(`RESULT: ${cases.length} image-pair regressions passed; ${diagnosticOnlyFailures} would have been rejected by the old uncalibrated texture gate; canvas mismatch remains blocking.`);
 }

@@ -1,0 +1,77 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { passesRndCombinedHardGate } from "../lib/rnd/qa-hard-gate";
+
+const goodQa = {
+  verdict: "APPROVE",
+  overall: 9.8,
+  identity: 9.8,
+  styleAccuracy: 9.7,
+  rootIntegration: 9.8,
+  lightingConsistency: 9.7,
+  hairOnly: "PASS",
+  artifacts: "NONE",
+};
+const goodFinal = { ...goodQa, verdict: "PASS" };
+const goodIntegrity = { canvasMatch: true };
+const pass = () => passesRndCombinedHardGate({
+  qa: { ...goodQa },
+  imageIntegrity: { ...goodIntegrity },
+  finalVerification: { ...goodFinal },
+});
+
+assert.equal(pass(), true, "all gates passing must approve");
+
+assert.equal(passesRndCombinedHardGate({
+  qa: { ...goodQa }, imageIntegrity: { ...goodIntegrity }, finalVerification: null,
+}), false, "first evaluator alone must not approve");
+
+assert.equal(passesRndCombinedHardGate({
+  qa: { ...goodQa }, imageIntegrity: { ...goodIntegrity },
+  finalVerification: { ...goodFinal, verdict: "REJECT" },
+}), false, "second evaluator rejection must block approval");
+
+for (const evaluator of ["qa", "finalVerification"] as const) {
+  for (const score of ["overall", "identity", "styleAccuracy", "rootIntegration", "lightingConsistency"] as const) {
+    const input = {
+      qa: { ...goodQa },
+      imageIntegrity: { ...goodIntegrity },
+      finalVerification: { ...goodFinal },
+    };
+    input[evaluator][score] = 9.49;
+    assert.equal(passesRndCombinedHardGate(input), false, evaluator + "." + score + " below 9.5 must block approval");
+  }
+}
+
+for (const evaluator of ["qa", "finalVerification"] as const) {
+  for (const field of ["hairOnly", "artifacts"] as const) {
+    const input = {
+      qa: { ...goodQa },
+      imageIntegrity: { ...goodIntegrity },
+      finalVerification: { ...goodFinal },
+    };
+    if (field === "hairOnly") input[evaluator].hairOnly = "FAIL";
+    else input[evaluator].artifacts = "PRESENT";
+    assert.equal(passesRndCombinedHardGate(input), false, evaluator + "." + field + " failure must block approval");
+  }
+}
+
+assert.equal(passesRndCombinedHardGate({
+  qa: { ...goodQa }, imageIntegrity: null, finalVerification: { ...goodFinal },
+}), false, "missing integrity result must block approval");
+assert.equal(passesRndCombinedHardGate({
+  qa: { ...goodQa }, imageIntegrity: { canvasMatch: false }, finalVerification: { ...goodFinal },
+}), false, "canvas integrity failure must block approval");
+
+assert.equal(passesRndCombinedHardGate({
+  qa: { ...goodQa, verdict: "REJECT" }, imageIntegrity: { ...goodIntegrity },
+  finalVerification: { ...goodFinal },
+}), false, "first evaluator rejection must block approval");
+
+const reportRoute = readFileSync("app/api/rnd/worker/report/route.ts", "utf8");
+assert.match(reportRoute, /verdict: hardPass \? "HUMAN_APPROVAL" : "REFINE"/,
+  "attempt verdict must derive from the combined hard gate");
+assert.match(reportRoute, /if \(hardPass\) \{[\s\S]{0,300}status: "HUMAN_APPROVAL"/,
+  "job transition to HUMAN_APPROVAL must be guarded by hardPass");
+
+console.log("R&D combined QA hard-gate tests passed, including approval-transition guard.");

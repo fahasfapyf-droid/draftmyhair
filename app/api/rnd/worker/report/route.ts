@@ -4,7 +4,8 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
-import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
@@ -297,25 +298,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  const hardPass =
-    qa.verdict === "APPROVE" &&
-    qa.overall >= 9.5 &&
-    qa.identity >= 9.5 &&
-    qa.styleAccuracy >= 9.5 &&
-    qa.rootIntegration >= 9.5 &&
-    qa.lightingConsistency >= 9.5 &&
-    qa.hairOnly === "PASS" &&
-    qa.artifacts === "NONE" &&
-    imageIntegrity !== null &&
-    passesRndHardIntegrityGate(imageIntegrity) &&
-    finalVerification?.verdict === "PASS" &&
-    finalVerification.overall >= 9.5 &&
-    finalVerification.identity >= 9.5 &&
-    finalVerification.styleAccuracy >= 9.5 &&
-    finalVerification.rootIntegration >= 9.5 &&
-    finalVerification.lightingConsistency >= 9.5 &&
-    finalVerification.hairOnly === "PASS" &&
-    finalVerification.artifacts === "NONE";
+  const hardPass = passesRndCombinedHardGate({
+    qa,
+    imageIntegrity,
+    finalVerification,
+  });
 
   const rawRefinement = !hardPass
     ? (finalVerification?.verdict === "REJECT" && finalVerification.refinement.trim()
