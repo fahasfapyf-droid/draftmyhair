@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyProfileError, getGeminiProfileStatusSnapshot, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
-const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
+const API_BASE = (process.env.RND_API_BASE_URL?.trim() || "https://draftmyhair-git-rnd-qa-gate-clean-integration-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
