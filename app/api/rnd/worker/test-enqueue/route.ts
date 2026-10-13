@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
@@ -59,14 +59,9 @@ export async function POST(request: Request) {
 
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp";
-  const storageKey = "rnd/sources/" + checksum + "." + extension;
-  const existingSource = await prisma.rnDAsset.findUnique({
-    where: { storageKey },
-    select: { id: true, blobUrl: true, mimeType: true, fileSize: true, checksum: true },
-  });
-  const blob = !existingSource || !existingSource.blobUrl
-    ? await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType })
-    : null;
+  // Give each test enqueue a unique key so a previous interrupted test cannot block it on an orphaned Blob.
+  const storageKey = "rnd/sources/" + checksum + "-" + randomUUID() + "." + extension;
+  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType });
   const built = await buildRndPrompt({ promptKey });
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || "rnd-worker";
 
@@ -79,7 +74,7 @@ export async function POST(request: Request) {
       create: {
         kind: "SOURCE",
         storageKey,
-        blobUrl: blob?.url ?? existingSource?.blobUrl ?? "",
+        blobUrl: blob.url,
         originalFilename: parsed.pathname.split("/").pop() || "test-source",
         mimeType,
         fileSize: buffer.length,
