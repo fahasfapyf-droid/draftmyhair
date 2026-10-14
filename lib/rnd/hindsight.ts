@@ -1,4 +1,4 @@
-const DEFAULT_BANK_ID = "draftmyhair-rnd";
+﻿const DEFAULT_BANK_ID = "draftmyhair-rnd";
 const REQUEST_TIMEOUT_MS = 2_500;
 
 type HindsightResult = {
@@ -115,6 +115,25 @@ export async function recallRndHistory(query: string) {
     }));
 }
 
+export async function probeRndHindsight(): Promise<{ ok: boolean; enabled: boolean; httpStatus: number | null; recordCount: number | null }> {
+  const current = config();
+  if (!current) return { ok: false, enabled: false, httpStatus: null, recordCount: null };
+  try {
+    const response = await fetch(`${current.baseUrl}/v1/default/banks/${encodeURIComponent(current.bankId)}/memories/recall`, {
+      method: "POST",
+      headers: headers(current.apiKey),
+      body: JSON.stringify({ query: "Draft My Hair R&D integration health check: retrieve historical hairstyle experiment outcomes.", max_tokens: 300, budget: "low", types: ["experience", "observation"] }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return { ok: false, enabled: true, httpStatus: response.status, recordCount: null };
+    const payload = await response.json() as HindsightRecallResponse;
+    const count = Array.isArray(payload.results) ? payload.results.filter((item) => typeof item.text === "string" && item.text.trim()).length : 0;
+    return { ok: true, enabled: true, httpStatus: response.status, recordCount: count };
+  } catch {
+    return { ok: false, enabled: true, httpStatus: null, recordCount: null };
+  }
+}
 export async function retainRndOutcome(input: {
   jobId: string;
   attemptId: string;
