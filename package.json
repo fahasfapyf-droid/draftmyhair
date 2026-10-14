@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "test:rnd-image-integrity": "tsx scripts/test-rnd-image-integrity.ts",
     "test:rnd-qa-hard-gate": "tsx scripts/test-rnd-qa-hard-gate.ts",
+    "test:rnd-hindsight-refinement": "tsx scripts/test-rnd-hindsight-refinement.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -244,6 +244,28 @@ export async function POST(request: Request) {
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
 
+  const previousAttempt = await prisma.rnDAttempt.findFirst({
+    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
+    orderBy: { attemptNumber: "desc" },
+    select: {
+      attemptNumber: true,
+      overallScore: true,
+      qaJson: true,
+      refinementReason: true,
+    },
+  });
+
+  // Recall relevant historical evidence before QA chooses the next refinement.
+  // Hindsight is advisory only; the authoritative prompt and protected-region
+  // rules remain the source of truth.
+  const hindsightHistory = await recallRndHistory([
+    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
+    `Target: ${job.target.targetKey}.`,
+    `Current authoritative prompt: ${prompt.slice(0, 1800)}`,
+    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
+    "Find relevant successful or failed outcomes and refinement strategies that did or did not improve scores. Return historical evidence only; do not invent a new prompt.",
+  ].join(" "));
+
   let qa;
   let finalVerification = null;
   let imageIntegrity = null;
@@ -254,7 +276,7 @@ export async function POST(request: Request) {
     ]);
     imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
     qa = await Promise.race([
-      runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+      runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt, hindsightHistory),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
     ]);
 
@@ -270,7 +292,7 @@ export async function POST(request: Request) {
 
     if (firstGatePass) {
       finalVerification = await Promise.race([
-        runRndFinalVerification(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+        runRndFinalVerification(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt, hindsightHistory),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Final verification timed out.")), QA_TIMEOUT_MS)),
       ]);
     }
@@ -320,17 +342,6 @@ export async function POST(request: Request) {
         : qa.refinement.trim() || null)
     : null;
 
-  const previousAttempt = await prisma.rnDAttempt.findFirst({
-    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
-    orderBy: { attemptNumber: "desc" },
-    select: {
-      attemptNumber: true,
-      overallScore: true,
-      qaJson: true,
-      refinementReason: true,
-    },
-  });
-
   const sameRefinementAsPrevious =
     Boolean(rawRefinement) &&
     Boolean(previousAttempt?.refinementReason) &&
@@ -355,15 +366,6 @@ export async function POST(request: Request) {
       Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
     );
-
-  const hindsightHistory = await recallRndHistory([
-    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
-    `Target: ${job.target.targetKey}.`,
-    `Current QA defect/refinement: ${rawRefinement ?? "no refinement requested"}.`,
-    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
-    `Repeated ineffective refinement detected: ${repeatedIneffectiveRefinement ? "yes" : "no"}.`,
-    "Find prior successful or failed refinement strategies and recurring defects. Return historical evidence only; do not invent a new prompt.",
-  ].join(" "));
 
   const qaWithMemory = {
     ...qa,
