@@ -19,6 +19,12 @@ const FACE_REGION = {
   height: 0.48,
 };
 
+export function passesRndHardIntegrityGate(result: Pick<RndImageIntegrityResult, "canvasMatch">): boolean {
+  // Hard deterministic scope is limited to usable resolution and registered aspect ratio.
+  // Face drift/texture are retained as diagnostics, not uncalibrated approval vetoes.
+  return result.canvasMatch;
+}
+
 export async function runRndImageIntegrityCheck(
   sourceBuffer: Buffer,
   generatedBuffer: Buffer,
@@ -80,12 +86,10 @@ export async function runRndImageIntegrityCheck(
 
   const faceRegionDrift = count ? total / count : 1;
 
-  // Deterministic texture-preservation check for the locked face region.
-  // A simple luminance-drift metric can miss smoothing of freckles/pores when
-  // the broad facial luminance remains similar. Measure high-frequency skin
-  // detail in a conservative inner-face crop that excludes most hair, ears,
-  // and the outer jaw boundary. The ratio is scale-invariant and therefore
-  // remains useful when Gemini returns the registered frame at lower resolution.
+  // Diagnostic only: these fixed normalized crops are not face-segmented and
+  // overlap hairstyle-dependent pixels across poses and styles. Until calibrated
+  // against labeled true/false examples, texture/drift metrics must not veto
+  // the independent visual verifier.
   const textureSize = 512;
   const sourceGray = await sharp(sourceBuffer)
     .resize(textureSize, textureSize, { fit: "fill" })

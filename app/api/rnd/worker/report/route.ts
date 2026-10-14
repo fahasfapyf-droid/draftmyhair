@@ -4,7 +4,8 @@ import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
-import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
@@ -243,6 +244,28 @@ export async function POST(request: Request) {
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
 
+  const previousAttempt = await prisma.rnDAttempt.findFirst({
+    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
+    orderBy: { attemptNumber: "desc" },
+    select: {
+      attemptNumber: true,
+      overallScore: true,
+      qaJson: true,
+      refinementReason: true,
+    },
+  });
+
+  // Recall relevant historical evidence before QA chooses the next refinement.
+  // Hindsight is advisory only; the authoritative prompt and protected-region
+  // rules remain the source of truth.
+  const hindsightHistory = await recallRndHistory([
+    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
+    `Target: ${job.target.targetKey}.`,
+    `Current authoritative prompt: ${prompt.slice(0, 1800)}`,
+    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
+    "Find relevant successful or failed outcomes and refinement strategies that did or did not improve scores. Return historical evidence only; do not invent a new prompt.",
+  ].join(" "));
+
   let qa;
   let finalVerification = null;
   let imageIntegrity = null;
@@ -253,7 +276,7 @@ export async function POST(request: Request) {
     ]);
     imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
     qa = await Promise.race([
-      runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+      runRndQa(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt, hindsightHistory),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Automated QA timed out.")), QA_TIMEOUT_MS)),
     ]);
 
@@ -269,7 +292,7 @@ export async function POST(request: Request) {
 
     if (firstGatePass) {
       finalVerification = await Promise.race([
-        runRndFinalVerification(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt),
+        runRndFinalVerification(source.buffer, source.mimeType, generated.buffer, generated.mimeType, prompt, hindsightHistory),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Final verification timed out.")), QA_TIMEOUT_MS)),
       ]);
     }
@@ -307,42 +330,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  const hardPass =
-    qa.verdict === "APPROVE" &&
-    qa.overall >= 9.5 &&
-    qa.identity >= 9.5 &&
-    qa.styleAccuracy >= 9.5 &&
-    qa.rootIntegration >= 9.5 &&
-    qa.lightingConsistency >= 9.5 &&
-    qa.hairOnly === "PASS" &&
-    qa.artifacts === "NONE" &&
-    imageIntegrity?.canvasMatch === true &&
-    imageIntegrity?.faceTexturePreservationPass === true &&
-    finalVerification?.verdict === "PASS" &&
-    finalVerification.overall >= 9.5 &&
-    finalVerification.identity >= 9.5 &&
-    finalVerification.styleAccuracy >= 9.5 &&
-    finalVerification.rootIntegration >= 9.5 &&
-    finalVerification.lightingConsistency >= 9.5 &&
-    finalVerification.hairOnly === "PASS" &&
-    finalVerification.artifacts === "NONE";
+  const hardPass = passesRndCombinedHardGate({
+    qa,
+    imageIntegrity,
+    finalVerification,
+  });
 
   const rawRefinement = !hardPass
     ? (finalVerification?.verdict === "REJECT" && finalVerification.refinement.trim()
         ? finalVerification.refinement.trim()
         : qa.refinement.trim() || null)
     : null;
-
-  const previousAttempt = await prisma.rnDAttempt.findFirst({
-    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
-    orderBy: { attemptNumber: "desc" },
-    select: {
-      attemptNumber: true,
-      overallScore: true,
-      qaJson: true,
-      refinementReason: true,
-    },
-  });
 
   const sameRefinementAsPrevious =
     Boolean(rawRefinement) &&
@@ -368,15 +366,6 @@ export async function POST(request: Request) {
       Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
     );
-
-  const hindsightHistory = await recallRndHistory([
-    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
-    `Target: ${job.target.targetKey}.`,
-    `Current QA defect/refinement: ${rawRefinement ?? "no refinement requested"}.`,
-    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
-    `Repeated ineffective refinement detected: ${repeatedIneffectiveRefinement ? "yes" : "no"}.`,
-    "Find prior successful or failed refinement strategies and recurring defects. Return historical evidence only; do not invent a new prompt.",
-  ].join(" "));
 
   const qaWithMemory = {
     ...qa,
@@ -522,7 +511,8 @@ export async function POST(request: Request) {
     const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
     return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
       qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch }) &&
       verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
       Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
       Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
@@ -647,7 +637,8 @@ export async function GET(request: Request) {
     const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
     return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
       qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null &&
-      integrity?.canvasMatch === true && integrity?.faceTexturePreservationPass === true &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch }) &&
       verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
       Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
       Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&

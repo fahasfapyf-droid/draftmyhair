@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { formatRndHindsightEvidence, type RndHindsightEvidence } from "@/lib/rnd/hindsight";
 
 export type RndQaResult = {
   overall: number;
@@ -40,6 +41,20 @@ const FINAL_VERIFICATION_PROMPT = [
   "If any hard gate fails, verdict must be REJECT.",
   "If rejected, refinement must contain exactly one targeted correction grounded in the authoritative hairstyle requirements or an observed unwanted characteristic. Never propose changes to the face or any protected non-hair region.",
 ].join("\n");
+
+export function buildRndQaInstruction(prompt: string, hindsightHistory: RndHindsightEvidence[] = []) {
+  const hindsightContext = formatRndHindsightEvidence(hindsightHistory);
+  return QA_PROMPT + "\n\nREQUESTED STYLE PROMPT:\n" + prompt +
+    (hindsightContext ? "\n\n" + hindsightContext : "") +
+    "\n\nIMAGE ORDER: SOURCE, then GENERATED.";
+}
+
+export function buildRndFinalVerificationInstruction(prompt: string, hindsightHistory: RndHindsightEvidence[] = []) {
+  const hindsightContext = formatRndHindsightEvidence(hindsightHistory);
+  return FINAL_VERIFICATION_PROMPT + "\n\nAUTHORITATIVE STYLE PROMPT:\n" + prompt +
+    (hindsightContext ? "\n\n" + hindsightContext : "") +
+    "\n\nIMAGE ORDER: SOURCE, then GENERATED.";
+}
 
 const FINAL_VERIFICATION_SCHEMA = {
   type: "OBJECT",
@@ -98,6 +113,7 @@ export async function runRndFinalVerification(
   generatedBuffer: Buffer,
   generatedMimeType: string,
   prompt: string,
+  hindsightHistory: RndHindsightEvidence[] = [],
 ) {
   const ai = getClient();
   const response = await ai.models.generateContent({
@@ -105,7 +121,7 @@ export async function runRndFinalVerification(
     contents: [{
       role: "user",
       parts: [
-        { text: FINAL_VERIFICATION_PROMPT + "\n\nAUTHORITATIVE STYLE PROMPT:\n" + prompt + "\n\nIMAGE ORDER: SOURCE, then GENERATED." },
+        { text: buildRndFinalVerificationInstruction(prompt, hindsightHistory) },
         { inlineData: { mimeType: sourceMimeType, data: sourceBuffer.toString("base64") } },
         { inlineData: { mimeType: generatedMimeType, data: generatedBuffer.toString("base64") } },
       ],
@@ -196,6 +212,7 @@ export async function runRndQa(
   generatedBuffer: Buffer,
   generatedMimeType: string,
   prompt: string,
+  hindsightHistory: RndHindsightEvidence[] = [],
 ) {
   const ai = getClient();
   const response = await ai.models.generateContent({
@@ -203,7 +220,7 @@ export async function runRndQa(
     contents: [{
       role: "user",
       parts: [
-        { text: QA_PROMPT + "\n\nREQUESTED STYLE PROMPT:\n" + prompt + "\n\nIMAGE ORDER: SOURCE, then GENERATED." },
+        { text: buildRndQaInstruction(prompt, hindsightHistory) },
         { inlineData: { mimeType: sourceMimeType, data: sourceBuffer.toString("base64") } },
         { inlineData: { mimeType: generatedMimeType, data: generatedBuffer.toString("base64") } },
       ],

@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyProfileError, getGeminiProfileStatusSnapshot, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
-const API_BASE = (process.env.RND_API_BASE_URL ?? "https://draftmyhair-git-rnd-local-gemini-worker-v1-draftmyhair.vercel.app").replace(/\/$/, "");
+const API_BASE = (process.env.RND_API_BASE_URL?.trim() || "https://draftmyhair-git-rnd-qa-gate-clean-integration-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
@@ -19,6 +19,7 @@ const POLL_MS = 10_000;
 const LEASE_HEARTBEAT_MS = 40_000;
 const GENERATION_TIMEOUT_MS = 300_000;
 const STATUS_HEARTBEAT_MS = 15_000;
+const RUN_ONCE = /^(1|true|yes)$/i.test(process.env.RND_WORKER_ONCE ?? "");
 const WORKER_VERSION = process.env.RND_WORKER_VERSION ?? "local-gemini-worker-v1";
 
 if (!WORKER_TOKEN) throw new Error("RND_WORKER_TOKEN is required.");
@@ -349,6 +350,13 @@ async function main() {
   while (true) {
     const result = await claim();
     if (!result.job) {
+      if (RUN_ONCE) {
+        clearInterval(statusTimer);
+        await reportWorkerStatus("STOPPED");
+        await context.close().catch(() => undefined);
+        console.log("RND_WORKER_ONCE enabled; no eligible job was claimed, so the worker is exiting without waiting.");
+        return;
+      }
       console.log("No queued R&D job available; waiting 10s.");
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
       continue;
@@ -359,6 +367,13 @@ async function main() {
       ({ context, page } = await launchGeminiSession(geminiProfile));
     }
     const action = await processJob(page, result.job, geminiProfile);
+    if (RUN_ONCE) {
+      clearInterval(statusTimer);
+      await reportWorkerStatus("STOPPED");
+      await context.close().catch(() => undefined);
+      console.log("RND_WORKER_ONCE enabled; exactly one claimed attempt was reported. Worker will not claim another job.");
+      return;
+    }
     if (action === "STOP") {
       await context.close().catch(() => undefined);
       console.error("R&D worker stopped because the active Gemini profile was classified as RESTRICTED. No automatic bypass was attempted.");
