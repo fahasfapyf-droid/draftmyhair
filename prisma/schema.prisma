@@ -728,6 +728,7 @@ model RnDJob {
   promptVersionNumber Int          @default(1)
   currentPrompt       String       @db.Text
   attemptCount        Int          @default(0)
+  refinementCount     Int          @default(0)
   leaseOwner          String?
   leaseExpiresAt      DateTime?
   heartbeatAt         DateTime?
@@ -754,6 +755,7 @@ model RnDAttempt {
   prompt                String            @db.Text
   promptRevision        String
   submittedAt           DateTime
+  infrastructureRetryCount Int             @default(0)
   generationStartedAt   DateTime?
   generationCompletedAt DateTime?
   artifactId            String?

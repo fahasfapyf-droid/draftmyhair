@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { passesRndCombinedHardGate } from "../lib/rnd/qa-hard-gate";
+import { parseFinalVerification, parseQa } from "../lib/rnd/qa";
 
 const goodQa = {
   verdict: "APPROVE",
@@ -19,6 +20,23 @@ const pass = () => passesRndCombinedHardGate({
   imageIntegrity: { ...goodIntegrity },
   finalVerification: { ...goodFinal },
 });
+
+const inconsistentQa = parseQa(JSON.stringify({
+  overall: 9.9, identity: 9.4, styleAccuracy: 9.9, rootIntegration: 9.9,
+  lightingConsistency: 9.9, hairOnly: "PASS", artifacts: "NONE",
+  verdict: "APPROVE", reason: "model reason", refinement: "correct hair shape",
+}));
+assert.equal(inconsistentQa.verdict, "REGENERATE", "an inconsistent APPROVE must downgrade, never throw or pass");
+assert.match(inconsistentQa.reason, /downgraded an inconsistent APPROVE/i);
+
+const inconsistentFinal = parseFinalVerification(JSON.stringify({
+  overall: 9.9, identity: 9.4, styleAccuracy: 9.9, rootIntegration: 9.9,
+  lightingConsistency: 9.9, hairOnly: "PASS", artifacts: "NONE",
+  verdict: "PASS", reason: "model reason", refinement: "correct hair shape",
+}));
+assert.equal(inconsistentFinal.verdict, "REJECT", "an inconsistent final PASS must downgrade, never throw or pass");
+assert.match(inconsistentFinal.reason, /downgraded an inconsistent PASS/i);
+assert.throws(() => parseQa(""), "empty evaluator JSON must remain a classified parse failure");
 
 assert.equal(pass(), true, "all gates passing must approve");
 

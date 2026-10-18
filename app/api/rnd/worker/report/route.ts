@@ -6,10 +6,13 @@ import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
 import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
+import { fenceRndReportLease, hasValidRndLeaseExpiry, validateRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
 const MAX_RND_ATTEMPTS = 40;
+// Bound infrastructure-only retries separately from actual generation attempts.
+const MAX_RND_INFRASTRUCTURE_RETRIES = 3;
 
 type ReportBody = {
   jobId?: unknown;
@@ -19,6 +22,7 @@ type ReportBody = {
   submittedAt?: unknown;
   generationStartedAt?: unknown;
   generationCompletedAt?: unknown;
+  claimGeneration?: unknown;
   artifactId?: unknown;
   errorCode?: unknown;
   errorMessage?: unknown;
@@ -90,6 +94,7 @@ export async function POST(request: Request) {
       status: true,
       leaseOwner: true,
       leaseExpiresAt: true,
+      startedAt: true,
       currentPrompt: true,
       target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
     },
@@ -114,27 +119,45 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, jobId, status: updated?.status ?? "FAILED", requeued: Boolean(updated), nextEligibleAt: updated?.nextEligibleAt?.toISOString() ?? null });
   }
-  if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
+  const submittedGeneration = validateRndClaimGeneration(body.claimGeneration, job.startedAt);
+  if (submittedGeneration.status === "invalid") {
+    return NextResponse.json({ error: "A valid claimGeneration is required" }, { status: 400 });
+  }
+  if (submittedGeneration.status === "stale") {
+    return NextResponse.json({ error: "Job claim generation is no longer current" }, { status: 409 });
+  }
+  const leaseValidationTime = new Date();
+  if (job.leaseOwner !== workerId || !hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
   if (attemptNumber !== job.attemptCount + 1) {
     return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
   }
-  if (attemptNumber > MAX_RND_ATTEMPTS) {
-    const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
-    await prisma.$transaction(async (tx) => {
-      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
-      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
-    });
-    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
-  }
-
   const reservation = await prisma.rnDAttempt.findUnique({
     where: { jobId_attemptNumber: { jobId, attemptNumber } },
     select: { id: true, submittedAt: true, artifactId: true, verdict: true },
   });
   if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
+  const reportFence = {
+    jobId,
+    workerId,
+    claimStartedAt: submittedGeneration.generation,
+    expectedAttemptCount: attemptNumber - 1,
+    attemptId: reservation.id,
+    attemptNumber,
+  };
+  if (attemptNumber > MAX_RND_ATTEMPTS) {
+    const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return false;
+      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
+      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      return true;
+    });
+    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
+  }
   if (reservation.artifactId) {
     if (reservation.artifactId !== artifactId) {
       return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
@@ -147,7 +170,8 @@ export async function POST(request: Request) {
   // the same attempt number so the worker can rotate to another authenticated
   // profile without consuming convergence budget or marking the job FAILED.
   if (errorCode === "GEMINI_PROFILE_EXHAUSTED") {
-    await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return false;
       await tx.rnDAttempt.delete({ where: { jobId_attemptNumber: { jobId, attemptNumber } } });
       await tx.rnDJob.update({
         where: { id: jobId },
@@ -156,14 +180,15 @@ export async function POST(request: Request) {
           nextEligibleAt: now,
           leaseOwner: null,
           leaseExpiresAt: null,
-          heartbeatAt: now,
           completedAt: null,
           failureCode: null,
           failureMessage: null,
         },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+      return true;
     });
+    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
     return NextResponse.json({ ok: true, jobId, attemptNumber, status: "QUEUED", action: "ROTATE_GEMINI_PROFILE", attemptConsumed: false });
   }
 
@@ -177,6 +202,7 @@ export async function POST(request: Request) {
       /timed out waiting for a new generated image|generation timeout|gemini.*timeout/i.test(errorMessage ?? "");
 
     const result = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return null;
       const attempt = await tx.rnDAttempt.update({
         where: { jobId_attemptNumber: { jobId, attemptNumber } },
         data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage },
@@ -190,7 +216,6 @@ export async function POST(request: Request) {
             nextEligibleAt: new Date(),
             leaseOwner: null,
             leaseExpiresAt: null,
-            heartbeatAt: now,
             completedAt: null,
             failureCode: null,
             failureMessage: null,
@@ -200,12 +225,13 @@ export async function POST(request: Request) {
       } else {
         await tx.rnDJob.update({
           where: { id: jobId },
-          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
+          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
         });
         await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
       }
       return attempt;
     });
+    if (!result) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
     await retainRndOutcome({
       jobId,
       attemptId: result.id,
@@ -239,9 +265,12 @@ export async function POST(request: Request) {
 
   const artifact = await prisma.rnDAsset.findUnique({
     where: { id: artifactId },
-    select: { id: true, blobUrl: true, mimeType: true },
+    select: { id: true, kind: true, storageKey: true, blobUrl: true, mimeType: true },
   });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+  if (artifact.kind !== "GENERATED" || !artifact.storageKey.startsWith(`rnd/attempts/${jobId}/${attemptNumber}-`)) {
+    return NextResponse.json({ error: "Artifact is not a generated asset for this job and attempt" }, { status: 409 });
+  }
   if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
 
   const previousAttempt = await prisma.rnDAttempt.findFirst({
@@ -301,7 +330,51 @@ export async function POST(request: Request) {
     const retryableInfrastructureFailure = /(429|resource exhausted|quota|rate.?limit|too many requests)/i.test(message);
     if (retryableInfrastructureFailure) {
       const retryAt = new Date(Date.now() + 2 * 60 * 1000);
-      await prisma.$transaction(async (tx) => {
+      const committed = await prisma.$transaction(async (tx) => {
+        if (!(await fenceRndReportLease(tx, reportFence))) return null;
+
+        // The isolated database has this column, but the checked-in Prisma
+        // model does not. Increment it with parameterized SQL inside the same
+        // fenced transaction so a stale report cannot consume retry budget.
+        const retryRows = await tx.$queryRaw<Array<{ infrastructureRetryCount: number }>>`
+          UPDATE "RnDAttempt"
+          SET "infrastructureRetryCount" = "infrastructureRetryCount" + 1
+          WHERE "id" = ${reservation.id}
+            AND "jobId" = ${jobId}
+            AND "attemptNumber" = ${attemptNumber}
+          RETURNING "infrastructureRetryCount"
+        `;
+        if (retryRows.length !== 1) {
+          throw new Error("Could not increment the infrastructure retry counter for the fenced attempt.");
+        }
+
+        const infrastructureRetryCount = Number(retryRows[0].infrastructureRetryCount);
+        if (infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+          const message = `R&D stopped after ${MAX_RND_INFRASTRUCTURE_RETRIES} infrastructure retries for automated QA.`;
+          await tx.rnDAttempt.update({
+            where: { id: reservation.id },
+            data: {
+              verdict: "FAILED",
+              errorCode: "RND_INFRASTRUCTURE_RETRY_LIMIT",
+              errorMessage: message,
+            },
+          });
+          await tx.rnDJob.update({
+            where: { id: jobId },
+            data: {
+              status: "FAILED",
+              attemptCount: attemptNumber,
+              leaseOwner: null,
+              leaseExpiresAt: null,
+              completedAt: now,
+              failureCode: "RND_INFRASTRUCTURE_RETRY_LIMIT",
+              failureMessage: message,
+            },
+          });
+          await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+          return { infrastructureRetryCount, exhausted: true as const };
+        }
+
         await tx.rnDJob.update({
           where: { id: jobId },
           data: {
@@ -310,20 +383,34 @@ export async function POST(request: Request) {
             nextEligibleAt: retryAt,
             leaseOwner: null,
             leaseExpiresAt: null,
-            heartbeatAt: now,
             completedAt: null,
             failureCode: null,
             failureMessage: null,
           },
         });
         await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+        return { infrastructureRetryCount, exhausted: false as const };
       });
+      if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+      if (committed.exhausted) {
+        return NextResponse.json({
+          ok: true,
+          jobId,
+          attemptNumber,
+          status: "FAILED",
+          action: "INFRASTRUCTURE_RETRY_LIMIT_REACHED",
+          infrastructureRetryCount: committed.infrastructureRetryCount,
+          maxInfrastructureRetries: MAX_RND_INFRASTRUCTURE_RETRIES,
+        });
+      }
       return NextResponse.json({
         ok: true,
         jobId,
         attemptNumber,
         status: "QUEUED",
         action: "RETRY_QA_INFRASTRUCTURE",
+        infrastructureRetryCount: committed.infrastructureRetryCount,
+        maxInfrastructureRetries: MAX_RND_INFRASTRUCTURE_RETRIES,
         nextEligibleAt: retryAt.toISOString(),
       });
     }
@@ -412,6 +499,7 @@ export async function POST(request: Request) {
   const refinement = refinementApplied ? refinementCandidate : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
+    if (!(await fenceRndReportLease(tx, reportFence))) return null;
     await tx.rnDAttempt.update({
       where: { jobId_attemptNumber: { jobId, attemptNumber } },
       data: {
@@ -435,7 +523,7 @@ export async function POST(request: Request) {
     if (hardPass) {
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
+        data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: null, failureCode: null, failureMessage: null },
         select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
@@ -450,7 +538,7 @@ export async function POST(request: Request) {
       const nextEligibleAt = new Date();
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, completedAt: null },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
@@ -474,7 +562,6 @@ export async function POST(request: Request) {
         nextEligibleAt,
         leaseOwner: null,
         leaseExpiresAt: null,
-        heartbeatAt: now,
         completedAt: null,
         failureCode: null,
         failureMessage: null,
@@ -484,6 +571,7 @@ export async function POST(request: Request) {
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
     return { job: updatedJob, action: "REFINE" as const };
   });
+  if (!finalResult) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
 
   const scoredAttempts = await prisma.rnDAttempt.findMany({
     where: {

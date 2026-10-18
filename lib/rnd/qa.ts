@@ -84,7 +84,7 @@ function calculateOverall(result: Pick<RndFinalVerificationResult, "identity" | 
   return Math.round(mean * 10) / 10;
 }
 
-function parseFinalVerification(text: string): RndFinalVerificationResult {
+export function parseFinalVerification(text: string): RndFinalVerificationResult {
   const value = JSON.parse(text) as RndFinalVerificationResult;
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("Final verification returned an invalid score.");
@@ -102,7 +102,8 @@ function parseFinalVerification(text: string): RndFinalVerificationResult {
       (value.overall < 9.5 || value.identity < 9.5 || value.styleAccuracy < 9.5 ||
        value.rootIntegration < 9.5 || value.lightingConsistency < 9.5 ||
        value.hairOnly !== "PASS" || value.artifacts !== "NONE")) {
-    throw new Error("Final verification returned an inconsistent PASS verdict.");
+    value.verdict = "REJECT";
+    value.reason = `Server downgraded an inconsistent PASS verdict because one or more hard gates failed. ${value.reason}`.trim();
   }
   return value;
 }
@@ -184,7 +185,7 @@ function getClient() {
   return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
 }
 
-function parseQa(text: string): RndQaResult {
+export function parseQa(text: string): RndQaResult {
   const value = JSON.parse(text) as RndQaResult;
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("QA returned an invalid score.");
@@ -201,7 +202,8 @@ function parseQa(text: string): RndQaResult {
       (value.overall < 9.5 || value.identity < 9.5 || value.styleAccuracy < 9.5 ||
        value.rootIntegration < 9.5 || value.lightingConsistency < 9.5 ||
        value.hairOnly !== "PASS" || value.artifacts !== "NONE")) {
-    throw new Error("QA returned an inconsistent APPROVE verdict.");
+    value.verdict = "REGENERATE";
+    value.reason = `Server downgraded an inconsistent APPROVE verdict because one or more hard gates failed. ${value.reason}`.trim();
   }
   return value;
 }
