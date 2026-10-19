@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { hasValidRndLeaseExpiry } from "@/lib/rnd/report-lease-fence";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const now = new Date();
   const job = await prisma.rnDJob.findUnique({ where: { id: jobId }, select: { id: true, leaseOwner: true, leaseExpiresAt: true, status: true } });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  if (job.status !== "PROCESSING" || job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now)) return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
+  if (job.status !== "PROCESSING" || job.leaseOwner !== workerId || !hasValidRndLeaseExpiry(job.leaseExpiresAt, now)) return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const checksum = createHash("sha256").update(buffer).digest("hex");

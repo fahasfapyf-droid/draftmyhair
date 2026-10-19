@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
       orderBy: { queuedAt: "desc" },
-      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true },
+      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true },
     });
 
     const candidate =
@@ -62,11 +62,12 @@ export async function POST(request: Request) {
           OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
         },
         orderBy: { queuedAt: "desc" },
-        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true },
+        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true },
       }));
 
     if (!candidate) return null;
 
+    const claimStartedAt = new Date(Math.max(now.getTime(), (candidate.startedAt?.getTime() ?? 0) + 1));
     const updated = await tx.rnDJob.updateMany({
       where: {
         id: candidate.id,
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
           { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
         ],
       },
-      data: { status: "PROCESSING", leaseOwner: workerId, leaseExpiresAt, heartbeatAt: now, startedAt: now },
+      data: { status: "PROCESSING", leaseOwner: workerId, leaseExpiresAt, heartbeatAt: now, startedAt: claimStartedAt },
     });
     if (updated.count !== 1) return null;
 
@@ -117,6 +118,7 @@ export async function POST(request: Request) {
       id: claimed.id,
       targetId: claimed.targetId,
       status: claimed.status,
+      claimGeneration: claimed.startedAt?.toISOString() ?? null,
       promptVersionNumber: claimed.promptVersionNumber,
       currentPrompt: claimed.currentPrompt,
       attemptCount: claimed.attemptCount,

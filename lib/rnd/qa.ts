@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { formatRndHindsightEvidence, type RndHindsightEvidence } from "@/lib/rnd/hindsight";
 
 export type RndQaResult = {
   overall: number;
@@ -41,6 +42,20 @@ const FINAL_VERIFICATION_PROMPT = [
   "If rejected, refinement must contain exactly one targeted correction grounded in the authoritative hairstyle requirements or an observed unwanted characteristic. Never propose changes to the face or any protected non-hair region.",
 ].join("\n");
 
+export function buildRndQaInstruction(prompt: string, hindsightHistory: RndHindsightEvidence[] = []) {
+  const hindsightContext = formatRndHindsightEvidence(hindsightHistory);
+  return QA_PROMPT + "\n\nREQUESTED STYLE PROMPT:\n" + prompt +
+    (hindsightContext ? "\n\n" + hindsightContext : "") +
+    "\n\nIMAGE ORDER: SOURCE, then GENERATED.";
+}
+
+export function buildRndFinalVerificationInstruction(prompt: string, hindsightHistory: RndHindsightEvidence[] = []) {
+  const hindsightContext = formatRndHindsightEvidence(hindsightHistory);
+  return FINAL_VERIFICATION_PROMPT + "\n\nAUTHORITATIVE STYLE PROMPT:\n" + prompt +
+    (hindsightContext ? "\n\n" + hindsightContext : "") +
+    "\n\nIMAGE ORDER: SOURCE, then GENERATED.";
+}
+
 const FINAL_VERIFICATION_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -69,7 +84,7 @@ function calculateOverall(result: Pick<RndFinalVerificationResult, "identity" | 
   return Math.round(mean * 10) / 10;
 }
 
-function parseFinalVerification(text: string): RndFinalVerificationResult {
+export function parseFinalVerification(text: string): RndFinalVerificationResult {
   const value = JSON.parse(text) as RndFinalVerificationResult;
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("Final verification returned an invalid score.");
@@ -87,7 +102,8 @@ function parseFinalVerification(text: string): RndFinalVerificationResult {
       (value.overall < 9.5 || value.identity < 9.5 || value.styleAccuracy < 9.5 ||
        value.rootIntegration < 9.5 || value.lightingConsistency < 9.5 ||
        value.hairOnly !== "PASS" || value.artifacts !== "NONE")) {
-    throw new Error("Final verification returned an inconsistent PASS verdict.");
+    value.verdict = "REJECT";
+    value.reason = `Server downgraded an inconsistent PASS verdict because one or more hard gates failed. ${value.reason}`.trim();
   }
   return value;
 }
@@ -98,6 +114,7 @@ export async function runRndFinalVerification(
   generatedBuffer: Buffer,
   generatedMimeType: string,
   prompt: string,
+  hindsightHistory: RndHindsightEvidence[] = [],
 ) {
   const ai = getClient();
   const response = await ai.models.generateContent({
@@ -105,7 +122,7 @@ export async function runRndFinalVerification(
     contents: [{
       role: "user",
       parts: [
-        { text: FINAL_VERIFICATION_PROMPT + "\n\nAUTHORITATIVE STYLE PROMPT:\n" + prompt + "\n\nIMAGE ORDER: SOURCE, then GENERATED." },
+        { text: buildRndFinalVerificationInstruction(prompt, hindsightHistory) },
         { inlineData: { mimeType: sourceMimeType, data: sourceBuffer.toString("base64") } },
         { inlineData: { mimeType: generatedMimeType, data: generatedBuffer.toString("base64") } },
       ],
@@ -168,7 +185,7 @@ function getClient() {
   return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
 }
 
-function parseQa(text: string): RndQaResult {
+export function parseQa(text: string): RndQaResult {
   const value = JSON.parse(text) as RndQaResult;
   for (const key of ["overall","identity","styleAccuracy","rootIntegration","lightingConsistency"] as const) {
     if (typeof value[key] !== "number" || value[key] < 0 || value[key] > 10) throw new Error("QA returned an invalid score.");
@@ -185,7 +202,8 @@ function parseQa(text: string): RndQaResult {
       (value.overall < 9.5 || value.identity < 9.5 || value.styleAccuracy < 9.5 ||
        value.rootIntegration < 9.5 || value.lightingConsistency < 9.5 ||
        value.hairOnly !== "PASS" || value.artifacts !== "NONE")) {
-    throw new Error("QA returned an inconsistent APPROVE verdict.");
+    value.verdict = "REGENERATE";
+    value.reason = `Server downgraded an inconsistent APPROVE verdict because one or more hard gates failed. ${value.reason}`.trim();
   }
   return value;
 }
@@ -196,6 +214,7 @@ export async function runRndQa(
   generatedBuffer: Buffer,
   generatedMimeType: string,
   prompt: string,
+  hindsightHistory: RndHindsightEvidence[] = [],
 ) {
   const ai = getClient();
   const response = await ai.models.generateContent({
@@ -203,7 +222,7 @@ export async function runRndQa(
     contents: [{
       role: "user",
       parts: [
-        { text: QA_PROMPT + "\n\nREQUESTED STYLE PROMPT:\n" + prompt + "\n\nIMAGE ORDER: SOURCE, then GENERATED." },
+        { text: buildRndQaInstruction(prompt, hindsightHistory) },
         { inlineData: { mimeType: sourceMimeType, data: sourceBuffer.toString("base64") } },
         { inlineData: { mimeType: generatedMimeType, data: generatedBuffer.toString("base64") } },
       ],

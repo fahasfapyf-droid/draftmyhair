@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { parseRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
 
 export const runtime = "nodejs";
 
@@ -10,15 +11,27 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
+  const claimGeneration = parseRndClaimGeneration(body?.claimGeneration);
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || null;
-  if (!jobId || !workerId) return NextResponse.json({ error: "jobId and x-rnd-worker-id are required" }, { status: 400 });
+  if (!jobId || !workerId || !claimGeneration) {
+    return NextResponse.json({ error: "jobId, x-rnd-worker-id and a valid claimGeneration are required" }, { status: 400 });
+  }
 
   const result = await prisma.$transaction(async (tx) => {
-    const job = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { id: true, targetId: true, status: true, leaseOwner: true } });
-    if (!job) return { kind: "missing" as const };
-    if (job.status !== "PROCESSING" || job.leaseOwner !== workerId) return { kind: "lease" as const };
-    const updated = await tx.rnDJob.updateMany({ where: { id: jobId, status: "PROCESSING", leaseOwner: workerId }, data: { status: "QUEUED", leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null } });
-    if (updated.count !== 1) return { kind: "lease" as const };
+    const exists = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { id: true } });
+    if (!exists) return { kind: "missing" as const };
+    const released = await tx.$queryRaw<Array<{ id: string; targetId: string }>>`
+      UPDATE "RnDJob" AS job
+      SET "status" = 'QUEUED', "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "heartbeatAt" = NULL
+      WHERE job."id" = ${jobId}
+        AND job."status" = 'PROCESSING'
+        AND job."leaseOwner" = ${workerId}
+        AND job."startedAt" = ${claimGeneration}
+        AND job."leaseExpiresAt" > clock_timestamp()
+      RETURNING job."id", job."targetId"
+    `;
+    const job = released[0];
+    if (released.length !== 1 || !job) return { kind: "lease" as const };
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED", currentJobId: job.id } });
     return { kind: "ok" as const };
   });
