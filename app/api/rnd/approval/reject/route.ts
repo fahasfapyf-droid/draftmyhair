@@ -6,19 +6,44 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
   const reason = typeof body?.reason === "string" ? body.reason.trim().slice(0, 2000) : "";
   if (!jobId) return NextResponse.json({ error: "jobId is required" }, { status: 400 });
 
   const result = await prisma.$transaction(async (tx) => {
-    const job = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { id: true, targetId: true, status: true } });
+    const job = await tx.rnDJob.findUnique({
+      where: { id: jobId },
+      select: { id: true, targetId: true, status: true },
+    });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
-    await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", completedAt: new Date(), failureCode: "HUMAN_REJECTED", failureMessage: reason || "Rejected during human approval." } });
+
+    // Compare-and-set prevents concurrent approval/rejection requests from
+    // both transitioning the same job after reading HUMAN_APPROVAL.
+    const claimed = await tx.rnDJob.updateMany({
+      where: { id: jobId, status: "HUMAN_APPROVAL" },
+      data: {
+        status: "FAILED",
+        completedAt: new Date(),
+        failureCode: "HUMAN_REJECTED",
+        failureMessage: reason || "Rejected during human approval.",
+      },
+    });
+    if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
+
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "REJECTED" } });
-    await tx.rnDAttempt.updateMany({ where: { jobId, verdict: "HUMAN_APPROVAL" }, data: { verdict: "FAILED", refinementReason: reason || "Rejected during human approval." } });
+    await tx.rnDAttempt.updateMany({
+      where: { jobId, verdict: "HUMAN_APPROVAL" },
+      data: {
+        verdict: "FAILED",
+        refinementReason: reason || "Rejected during human approval.",
+      },
+    });
     return { kind: "ok" as const };
   });
 

@@ -6,7 +6,10 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
   if (!jobId) return NextResponse.json({ error: "jobId is required" }, { status: 400 });
@@ -29,6 +32,14 @@ export async function POST(request: Request) {
     });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
+
+    // Compare-and-set the approval state before any side effects. A concurrent
+    // approve/reject request can win this transition only once.
+    const claimed = await tx.rnDJob.updateMany({
+      where: { id: jobId, status: "HUMAN_APPROVAL" },
+      data: { status: "COMPLETED", completedAt: new Date() },
+    });
+    if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
 
     const approvedAttempt = job.attempts[0] ?? null;
 
@@ -66,7 +77,6 @@ export async function POST(request: Request) {
       }
     }
 
-    await tx.rnDJob.update({ where: { id: jobId }, data: { status: "COMPLETED", completedAt: new Date() } });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
     await tx.rnDAttempt.updateMany({ where: { jobId, verdict: "HUMAN_APPROVAL" }, data: { verdict: "APPROVED" } });
     return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt) };
