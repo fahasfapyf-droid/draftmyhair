@@ -148,12 +148,14 @@ function rejectsInvalidLeaseBeforeQa(leaseExpiresAt: unknown, now: Date) {
 async function main() {
   const reportSource = readFileSync("app/api/rnd/worker/report/route.ts", "utf8");
   const artifactSource = readFileSync("app/api/rnd/worker/artifacts/route.ts", "utf8");
+  const agentArtifactSource = readFileSync("app/api/rnd/agent/artifact/route.ts", "utf8");
   const heartbeatSource = readFileSync("app/api/rnd/worker/heartbeat/route.ts", "utf8");
   const earlyLeaseCheck = reportSource.indexOf("!hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime)");
   const hindsightRecall = reportSource.indexOf("const hindsightHistory = await recallRndHistory");
   assert.ok(earlyLeaseCheck >= 0, "report route must reject missing, invalid, and expired leases in its early validation");
   assert.ok(hindsightRecall > earlyLeaseCheck, "lease validation must happen before Hindsight recall and QA processing");
-  assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "artifact route must reject missing, invalid, and expired leases before upload");
+  assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "worker artifact route must reject missing, invalid, and expired leases before upload");
+  assert.ok(agentArtifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "agent artifact route must reject missing, invalid, and expired leases before upload");
   assert.ok(heartbeatSource.includes("leaseExpiresAt: { gt: now }"), "heartbeat must only renew a strictly unexpired lease");
   assert.ok(!heartbeatSource.includes("leaseExpiresAt: null"), "heartbeat must not renew a missing lease expiry");
 

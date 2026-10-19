@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { hasValidRndLeaseExpiry } from "@/lib/rnd/report-lease-fence";
 
 export const runtime = "nodejs";
 const MAX_ARTIFACT_BYTES = 15 * 1024 * 1024;
@@ -26,12 +27,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "artifact image size is outside the allowed range" }, { status: 413 });
   }
 
+  const now = new Date();
   const job = await prisma.rnDJob.findUnique({
     where: { id: jobId },
     select: { id: true, targetId: true, status: true, leaseOwner: true, leaseExpiresAt: true },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  if (job.status !== "PROCESSING" || job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < new Date())) {
+  if (job.status !== "PROCESSING" || job.leaseOwner !== workerId || !hasValidRndLeaseExpiry(job.leaseExpiresAt, now)) {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
 
