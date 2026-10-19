@@ -1,4 +1,4 @@
-import { GenerationStatus } from "@prisma/client";
+import { GenerationStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +13,11 @@ type CreateQueuedGenerationInput = GenerationMetadata & {
   userId: string;
   hairstyleId: string;
   promptKey: string;
+  /**
+   * Internal optimizer provenance (experimentId, internal: true, ...).
+   * Stored on the Generation.metadata JSON column for auditability.
+   */
+  metadata?: Prisma.InputJsonValue;
 };
 
 export async function createQueuedGeneration({

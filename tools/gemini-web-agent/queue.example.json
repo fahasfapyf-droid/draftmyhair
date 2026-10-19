@@ -1,0 +1,10 @@
+[
+  {
+    "id": "italian-bob-001",
+    "imagePath": "C:\\Users\\IC\\Downloads\\buzz-cut-test.jpg",
+    "styleKey": "italian-bob",
+    "prompt": "PASTE THE APPROVED INTERNAL TEST PROMPT HERE",
+    "status": "QUEUED",
+    "attempts": 0
+  }
+]
