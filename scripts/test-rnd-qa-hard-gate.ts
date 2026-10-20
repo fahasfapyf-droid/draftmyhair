@@ -38,6 +38,34 @@ assert.equal(inconsistentFinal.verdict, "REJECT", "an inconsistent final PASS mu
 assert.match(inconsistentFinal.reason, /downgraded an inconsistent PASS/i);
 assert.throws(() => parseQa(""), "empty evaluator JSON must remain a classified parse failure");
 
+// Raw JSON may be syntactically valid while its shape or numeric fields are not.
+for (const parse of [parseQa, parseFinalVerification]) {
+  for (const raw of ["null", "[]", "42", '"text"', "{}", '{"overall":9.5}']) {
+    assert.throws(() => parse(raw), `malformed evaluator object ${raw} must fail closed`);
+  }
+  const baseline = {
+    ...goodQa,
+    verdict: parse === parseQa ? "APPROVE" : "PASS",
+    reason: "evidence-based test",
+    refinement: "",
+  };
+  assert.equal(parse(JSON.stringify(baseline)).verdict, baseline.verdict, "valid complete evaluator response must pass parsing");
+  for (const field of ["overall", "identity", "styleAccuracy", "rootIntegration", "lightingConsistency"] as const) {
+    for (const invalid of [null, "9.9", -1, 11, false]) {
+      assert.throws(() => parse(JSON.stringify({ ...baseline, [field]: invalid })), `${field}=${String(invalid)} must fail closed`);
+    }
+    const missing = { ...baseline } as Record<string, unknown>;
+    delete missing[field];
+    assert.throws(() => parse(JSON.stringify(missing)), `missing ${field} must fail closed`);
+  }
+  for (const field of ["hairOnly", "artifacts", "verdict", "reason", "refinement"] as const) {
+    const missing = { ...baseline } as Record<string, unknown>;
+    delete missing[field];
+    assert.throws(() => parse(JSON.stringify(missing)), `missing ${field} must fail closed`);
+  }
+}
+
+
 assert.equal(pass(), true, "all gates passing must approve");
 
 assert.equal(passesRndCombinedHardGate({

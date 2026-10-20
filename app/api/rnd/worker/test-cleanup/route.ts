@@ -24,13 +24,12 @@ export async function POST(request: Request) {
   }
 
   const assetIds = new Set<string>();
-  const blobUrls: string[] = [];
+  const deletedBlobUrls: string[] = [];
   for (const target of fixture.targets) {
     assetIds.add(target.sourceAssetId);
     for (const job of target.jobs) for (const attempt of job.attempts) if (attempt.artifactId) assetIds.add(attempt.artifactId);
   }
   const assets = await prisma.rnDAsset.findMany({ where: { id: { in: [...assetIds] } }, select: { id: true, blobUrl: true } });
-  blobUrls.push(...assets.map((asset) => asset.blobUrl));
 
   await prisma.$transaction(async (tx) => {
     const jobIds = fixture.targets.flatMap((target) => target.jobs.map((job) => job.id));
@@ -43,10 +42,13 @@ export async function POST(request: Request) {
         tx.rnDTarget.count({ where: { sourceAssetId: asset.id } }),
         tx.rnDAttempt.count({ where: { artifactId: asset.id } }),
       ]);
-      if (targetUse === 0 && attemptUse === 0) await tx.rnDAsset.delete({ where: { id: asset.id } });
+      if (targetUse === 0 && attemptUse === 0) {
+        await tx.rnDAsset.delete({ where: { id: asset.id } });
+        deletedBlobUrls.push(asset.blobUrl);
+      }
     }
   });
 
-  const blobResults = await Promise.allSettled(blobUrls.map((url) => del(url)));
+  const blobResults = await Promise.allSettled(deletedBlobUrls.map((url) => del(url)));
   return NextResponse.json({ ok: true, deleted: true, databaseRecordsDeleted: true, blobDeletesSucceeded: blobResults.filter((result) => result.status === "fulfilled").length, blobDeleteFailures: blobResults.filter((result) => result.status === "rejected").length });
 }

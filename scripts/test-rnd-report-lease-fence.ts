@@ -156,6 +156,17 @@ async function main() {
   assert.ok(hindsightRecall > earlyLeaseCheck, "lease validation must happen before Hindsight recall and QA processing");
   assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "worker artifact route must reject missing, invalid, and expired leases before upload");
   assert.ok(agentArtifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "agent artifact route must reject missing, invalid, and expired leases before upload");
+  const workerSource = readFileSync("tools/rnd-worker/worker.ts", "utf8");
+  assert.ok(workerSource.includes('form.append("claimGeneration", job.claimGeneration)'), "worker must submit its captured claim generation when uploading");
+  assert.ok(artifactSource.includes('parseRndClaimGeneration(formData?.get("claimGeneration"))'), "worker artifact route requires a canonical claim generation");
+  assert.ok(agentArtifactSource.includes('parseRndClaimGeneration(form?.get("claimGeneration"))'), "agent artifact route requires a canonical claim generation");
+  for (const [routeName, route] of [["worker", artifactSource], ["agent", agentArtifactSource]] as const) {
+    assert.ok(route.includes('job.startedAt?.getTime() !== claimGeneration.getTime()'), `${routeName} artifact route must reject stale generations before upload`);
+    assert.ok(route.includes('fenceRndReportLease(tx,'), `${routeName} artifact route must fence the database commit`);
+    assert.ok(route.indexOf('fenceRndReportLease(tx,') > route.indexOf('await put('), `${routeName} artifact commit must revalidate after blob upload`);
+    assert.ok(route.includes('randomUUID()'), `${routeName} artifact uploads must not overwrite an existing object key`);
+    assert.ok(route.includes('await del(blob.url).catch(() => undefined)'), `${routeName} artifact route must try to clean up a rejected blob upload`);
+  }
   assert.ok(heartbeatSource.includes("leaseExpiresAt: { gt: now }"), "heartbeat must only renew a strictly unexpired lease");
   assert.ok(!heartbeatSource.includes("leaseExpiresAt: null"), "heartbeat must not renew a missing lease expiry");
 

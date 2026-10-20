@@ -229,6 +229,7 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   const bytes = await readFile(filePath);
   form.append("jobId", job.id);
   form.append("attemptNumber", String(attemptNumber));
+  form.append("claimGeneration", job.claimGeneration);
   const mimeType = filePath.toLowerCase().endsWith(".jpg") || filePath.toLowerCase().endsWith(".jpeg")
     ? "image/jpeg"
     : filePath.toLowerCase().endsWith(".webp")

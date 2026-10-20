@@ -101,23 +101,11 @@ export async function POST(request: Request) {
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+  // Failed jobs require a separately authorized administrative recovery path.
+  // Worker credentials alone must never turn a terminal job back into QUEUED,
+  // even when a stale worker knows the job ID.
   if (body.requeueFailed === true) {
-    if (job.status !== "FAILED") {
-      return NextResponse.json({ ok: true, jobId, status: job.status, requeued: false });
-    }
-    const retryAt = new Date(Date.now() + 60_000);
-    const updated = await prisma.$transaction(async (tx) => {
-      const current = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { status: true, targetId: true } });
-      if (!current || current.status !== "FAILED") return null;
-      const next = await tx.rnDJob.update({
-        where: { id: jobId },
-        data: { status: "QUEUED", nextEligibleAt: retryAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
-        select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
-      });
-      await tx.rnDTarget.update({ where: { id: current.targetId }, data: { status: "QUEUED" } });
-      return next;
-    });
-    return NextResponse.json({ ok: true, jobId, status: updated?.status ?? "FAILED", requeued: Boolean(updated), nextEligibleAt: updated?.nextEligibleAt?.toISOString() ?? null });
+    return NextResponse.json({ error: "Failed-job recovery requires administrative authorization" }, { status: 409 });
   }
   const submittedGeneration = validateRndClaimGeneration(body.claimGeneration, job.startedAt);
   if (submittedGeneration.status === "invalid") {

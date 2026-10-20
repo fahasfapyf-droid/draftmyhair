@@ -26,12 +26,19 @@ export async function POST(request: Request) {
           where: { verdict: "HUMAN_APPROVAL" },
           orderBy: { attemptNumber: "desc" },
           take: 1,
-          select: { id: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true },
+          select: { id: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true, aiGatePassed: true, publicationTierPassed: true },
         },
       },
     });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
+    const approvedAttempt = job.attempts[0] ?? null;
+    const approvedScore = approvedAttempt?.overallScore == null ? NaN : Number(approvedAttempt.overallScore);
+    if (!approvedAttempt || !approvedAttempt.artifactId ||
+        !approvedAttempt.aiGatePassed || !approvedAttempt.publicationTierPassed ||
+        !Number.isFinite(approvedScore) || approvedScore < 9.5) {
+      return { kind: "gate" as const };
+    }
 
     // Compare-and-set the approval state before any side effects. A concurrent
     // approve/reject request can win this transition only once.
@@ -41,9 +48,7 @@ export async function POST(request: Request) {
     });
     if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
 
-    const approvedAttempt = job.attempts[0] ?? null;
-
-    if (job.target.hairstyleId && approvedAttempt) {
+    if (job.target.hairstyleId) {
       const existingPrompt = await tx.promptVersion.findUnique({
         where: { sourceRnDAttemptId: approvedAttempt.id },
         select: { id: true },
@@ -83,6 +88,7 @@ export async function POST(request: Request) {
   });
 
   if (result.kind === "missing") return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  if (result.kind === "gate") return NextResponse.json({ error: "Approved attempt is missing or has not passed QA gates" }, { status: 409 });
   if (result.kind === "state") return NextResponse.json({ error: "Job is not awaiting human approval", status: result.status }, { status: 409 });
   return NextResponse.json({ ok: true, promptImported: result.importedPrompt });
 }

@@ -16,7 +16,8 @@
     "test:rnd-hindsight-refinement": "tsx scripts/test-rnd-hindsight-refinement.ts",
     "test:rnd-approval-guard": "tsx scripts/test-rnd-approval-guard.ts",
     "postinstall": "prisma generate",
-    "test:rnd-fixture-isolation": "tsx scripts/test-rnd-fixture-isolation.ts"
+    "test:rnd-fixture-isolation": "tsx scripts/test-rnd-fixture-isolation.ts",
+    "test:rnd-task3-route-mocks": "tsx scripts/test-rnd-task3-routes.mock.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

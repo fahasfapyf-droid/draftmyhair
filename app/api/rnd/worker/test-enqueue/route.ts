@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
@@ -34,12 +35,40 @@ export async function POST(request: Request) {
   }
   if (!STYLE_PROMPTS[promptKey]) return NextResponse.json({ error: "Unknown hairstyle prompt key" }, { status: 404 });
 
-  const response = await fetch(parsed.toString(), { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  // Do not follow redirects from an approved image host to an unapproved destination.
+  const response = await fetch(parsed.toString(), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!response.ok) return NextResponse.json({ error: "Test source image could not be fetched" }, { status: 502 });
-  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/webp";
-  if (!mimeType.startsWith("image/")) return NextResponse.json({ error: "Test source is not an image" }, { status: 415 });
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length || buffer.length > MAX_SOURCE_BYTES) return NextResponse.json({ error: "Test source image size is outside the allowed range" }, { status: 413 });
+  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+  if (!["image/png", "image/jpeg", "image/webp"].includes(mimeType)) {
+    return NextResponse.json({ error: "Test source is not a supported image" }, { status: 415 });
+  }
+  const declaredSize = Number(response.headers.get("content-length"));
+  if (declaredSize > MAX_SOURCE_BYTES) {
+    return NextResponse.json({ error: "Test source image size is outside the allowed range" }, { status: 413 });
+  }
+  if (!response.body) return NextResponse.json({ error: "Test source image has no body" }, { status: 502 });
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_SOURCE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return NextResponse.json({ error: "Test source image size is outside the allowed range" }, { status: 413 });
+    }
+    chunks.push(Buffer.from(value));
+  }
+  if (totalBytes === 0) return NextResponse.json({ error: "Test source image is empty" }, { status: 413 });
+  const buffer = Buffer.concat(chunks);
+  const metadata = await sharp(buffer).metadata().catch(() => null);
+  if (!metadata || !["png", "jpeg", "webp"].includes(metadata.format || "") ||
+      (metadata.format === "png" && mimeType !== "image/png") ||
+      (metadata.format === "jpeg" && mimeType !== "image/jpeg") ||
+      (metadata.format === "webp" && mimeType !== "image/webp")) {
+    return NextResponse.json({ error: "Test source image content does not match its type" }, { status: 415 });
+  }
 
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp";

@@ -7,6 +7,13 @@ const launcher = readFileSync("scripts/create-rnd-italian-bob-regression.ts", "u
 
 assert.match(enqueue, /requireRndWorker\(request\.headers\.get\("authorization"\)\)/);
 assert.match(enqueue, /suppliedTargetKey\.startsWith\(TEST_TARGET_PREFIX\)/);
+assert.match(enqueue, /parsed\.protocol !== "https:"/);
+assert.match(enqueue, /ALLOWED_SOURCE_HOSTS\.has\(parsed\.hostname\)/);
+assert.match(enqueue, /redirect: "error"/, "source fetch must not follow a redirect to an unapproved host");
+assert.match(enqueue, /totalBytes > MAX_SOURCE_BYTES/, "source size must be bounded while streaming");
+assert.match(enqueue, /sharp\(buffer\)\.metadata\(\)/, "image bytes must be validated, not just Content-Type");
+assert.match(cleanup, /deletedBlobUrls\.push\(asset\.blobUrl\)/, "cleanup may delete only blobs of actually removed assets");
+assert.doesNotMatch(cleanup, /blobUrls\.push\(\.\.\.assets\.map/, "cleanup must not delete shared referenced asset blobs");
 assert.match(enqueue, /status: "DRAFT", autoAdvanceEnabled: false, createdByUserId: "task3-regression-fixture"/);
 assert.match(enqueue, /status: "HUMAN_APPROVAL"/);
 assert.match(enqueue, /hairstyleId: null/);
