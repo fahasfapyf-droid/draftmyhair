@@ -29,7 +29,7 @@ async function main() {
     body: JSON.stringify({
       sourceUrl: "https://www.draftmyhair.com/portfolio/bob/french-bob-before.webp",
       promptKey: "italian-bob",
-      targetKey: `regression-italian-bob-universal-refinement-${Date.now()}`,
+      targetKey: `task3-approval-fence-fixture-${Date.now()}`,
     }),
   });
 

@@ -15,7 +15,8 @@
     "test:rnd-qa-hard-gate": "tsx scripts/test-rnd-qa-hard-gate.ts",
     "test:rnd-hindsight-refinement": "tsx scripts/test-rnd-hindsight-refinement.ts",
     "test:rnd-approval-guard": "tsx scripts/test-rnd-approval-guard.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:rnd-fixture-isolation": "tsx scripts/test-rnd-fixture-isolation.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
