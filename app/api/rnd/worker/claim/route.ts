@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
-const MAX_RND_ATTEMPTS = 40;
+const MAX_RND_ATTEMPTS = 5;
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
   if (authResponse) return authResponse;

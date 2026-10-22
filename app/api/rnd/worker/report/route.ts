@@ -10,7 +10,7 @@ import { fenceRndReportLease, hasValidRndLeaseExpiry, validateRndClaimGeneration
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
-const MAX_RND_ATTEMPTS = 40;
+const MAX_RND_ATTEMPTS = 5;
 // Bound infrastructure-only retries separately from actual generation attempts.
 const MAX_RND_INFRASTRUCTURE_RETRIES = 3;
 
