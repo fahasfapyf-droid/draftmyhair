@@ -48,7 +48,22 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ status: result.status });
-  } catch {
+  } catch (error: unknown) {
+    // Log only non-sensitive diagnostic fields. Never log request bodies,
+    // credentials, user identifiers, or raw exception messages.
+    const errorName =
+      error instanceof Error ? error.name : "UnknownError";
+    const errorCode =
+      typeof error === "object" && error !== null && "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : undefined;
+
+    console.error("[login-check] Login request failed", {
+      errorName,
+      ...(errorCode ? { errorCode } : {}),
+    });
+
     return NextResponse.json(
       { status: "ERROR" },
       { status: 500 }
