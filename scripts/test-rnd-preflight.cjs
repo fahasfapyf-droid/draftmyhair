@@ -1,0 +1,15 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const route = fs.readFileSync("app/api/dashboard/admin/rnd/preflight/route.ts", "utf8");
+assert.match(route, /export async function GET\(\)/);
+assert.match(route, /session\.user\.role !== "ADMIN"/);
+assert.match(route, /prisma\.rnDJob\.groupBy\(\{ by: \["status"\]/);
+assert.match(route, /where: \{ status: "QUEUED" \}/);
+assert.match(route, /where: \{ status: "PROCESSING" \}/);
+assert.match(route, /attemptCount: \{ gte: MAX_RND_ATTEMPTS \}/);
+assert.match(route, /onlineHeartbeatWindowMs: ONLINE_WINDOW_MS/);
+assert.match(route, /verdict: blockers\.length === 0 \? "SAFE" : "BLOCKED"/);
+assert.match(route, /Cache-Control/);
+assert.doesNotMatch(route, /export async function POST/);
+assert.doesNotMatch(route, /\.create\(|\.update\(|\.delete\(/);
+console.log("PASS: R&D preflight is admin-gated, read-only, counts all jobs, and blocks active queue/worker states.");

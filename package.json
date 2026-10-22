@@ -18,7 +18,8 @@
     "postinstall": "prisma generate",
     "test:rnd-fixture-isolation": "tsx scripts/test-rnd-fixture-isolation.ts",
     "test:rnd-task3-route-mocks": "tsx scripts/test-rnd-task3-routes.mock.ts",
-    "test:rnd-attempt-limit": "node scripts/test-rnd-attempt-limit.cjs"
+    "test:rnd-attempt-limit": "node scripts/test-rnd-attempt-limit.cjs",
+    "test:rnd-preflight": "node scripts/test-rnd-preflight.cjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
