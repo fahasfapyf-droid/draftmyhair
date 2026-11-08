@@ -1,3 +1,4 @@
+import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
 
   const artifact = await prisma.rnDAsset.findUnique({
     where: { id: artifactId },
-    select: { id: true, kind: true, blobUrl: true, mimeType: true, fileSize: true },
+    select: { id: true, kind: true, storageKey: true, mimeType: true, fileSize: true },
   });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
 
@@ -50,23 +51,28 @@ export async function GET(request: Request) {
     if (!isTask3Fixture) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   }
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return NextResponse.json({ error: "Blob storage is not configured" }, { status: 503 });
+  // Private Vercel Blob objects must be read through the Blob SDK. Fetching
+  // blobUrl directly with the storage token as a Bearer header is not the
+  // private-blob retrieval contract and returns an upstream failure.
+  try {
+    const stored = await get(artifact.storageKey, { access: "private" });
+    if (!stored) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
 
-  const upstream = await fetch(artifact.blobUrl, {
-    headers: { Authorization: "Bearer " + token },
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!upstream.ok) return NextResponse.json({ error: "Artifact could not be retrieved" }, { status: 502 });
-
-  return new Response(await upstream.arrayBuffer(), {
-    status: 200,
-    headers: {
-      "Content-Type": artifact.mimeType,
-      "Content-Length": String(artifact.fileSize),
-      "Cache-Control": "private, no-store",
-      "Content-Disposition": `inline; filename="rnd-${artifact.id}"`,
-    },
-  });
+    return new Response(stored.stream, {
+      status: 200,
+      headers: {
+        "Content-Type": stored.blob.contentType ?? artifact.mimeType,
+        "Content-Length": String(stored.blob.size ?? artifact.fileSize),
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": `inline; filename="rnd-${artifact.id}"`,
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("[rnd-approval-artifact] private Blob retrieval failed", {
+      artifactId: artifact.id,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    return NextResponse.json({ error: "Artifact could not be retrieved" }, { status: 502 });
+  }
 }
