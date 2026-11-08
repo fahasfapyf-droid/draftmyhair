@@ -17,7 +17,38 @@ export async function GET(request: Request) {
     where: { id: artifactId },
     select: { id: true, kind: true, blobUrl: true, mimeType: true, fileSize: true },
   });
-  if (!artifact || artifact.kind !== "GENERATED") return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+  if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+
+  // Real approval artifacts must remain GENERATED. The sole exception is the
+  // explicitly marked Task 3 regression fixture, which previews its SOURCE
+  // image so the approval UI can be exercised without running a worker.
+  if (artifact.kind !== "GENERATED") {
+    const fixtureAttempt = artifact.kind === "SOURCE"
+      ? await prisma.rnDAttempt.findFirst({
+          where: {
+            artifactId,
+            verdict: "HUMAN_APPROVAL",
+            job: {
+              target: {
+                targetKey: { startsWith: "task3-approval-fence-fixture-" },
+                campaign: {
+                  name: "R&D Task 3 approval-fence regression fixture",
+                  createdByUserId: "task3-regression-fixture",
+                },
+              },
+            },
+          },
+          select: { qaJson: true },
+        })
+      : null;
+
+    const qa = fixtureAttempt?.qaJson;
+    const isTask3Fixture = Boolean(
+      qa && typeof qa === "object" && !Array.isArray(qa) &&
+      (qa as Record<string, unknown>).fixture === true,
+    );
+    if (!isTask3Fixture) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+  }
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return NextResponse.json({ error: "Blob storage is not configured" }, { status: 503 });
