@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { AdminSidebar } from "@/components/dashboard/admin/AdminSidebar";
 import { RndConsole } from "@/components/dashboard/admin/RndConsole";
 import { RndRunBuilder } from "@/components/dashboard/admin/RndRunBuilder";
+import { RndAssetMigration } from "@/components/dashboard/admin/RndAssetMigration";
 
 export default async function RndAdminPage() {
   const session = await auth();
@@ -19,6 +20,7 @@ export default async function RndAdminPage() {
       sidebar={<AdminSidebar />}
     >
       <div className="space-y-8">
+        <RndAssetMigration />
         <RndRunBuilder />
         <RndConsole />
       </div>
