@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ ok: true, asset });
   } catch (error) {
-    await del(blob.url).catch(() => undefined);
+    await del(blob.url, { token: requireRndBlobToken() }).catch(() => undefined);
     throw error;
   }
 }

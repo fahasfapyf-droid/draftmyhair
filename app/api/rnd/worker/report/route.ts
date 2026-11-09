@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
@@ -53,7 +54,7 @@ function scoreFromQaJson(value: unknown, key: string) {
 }
 
 async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = requireRndBlobToken();
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
   const response = await fetch(blobUrl, {
     headers: { Authorization: "Bearer " + token },
