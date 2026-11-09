@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   const storageKey = "rnd/sources/" + checksum + "." + extension;
   const existing = await prisma.rnDAsset.findUnique({ where: { storageKey } });
   if (existing) return NextResponse.json({ ok: true, source: existing, reused: true });
-  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
+  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type, token: requireRndBlobToken() });
   const source = await prisma.rnDAsset.create({
     data: {
       kind: "SOURCE", storageKey, blobUrl: blob.url, originalFilename: image.name || null, mimeType: image.type,
