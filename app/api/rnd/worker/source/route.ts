@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 
@@ -14,8 +15,7 @@ export async function GET(request: Request) {
   if (!asset) return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   if (asset.kind !== "SOURCE") return NextResponse.json({ error: "Asset is not a source" }, { status: 409 });
 
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!blobToken) return NextResponse.json({ error: "Blob storage is not configured" }, { status: 503 });
+  const blobToken = requireRndBlobToken();
   const upstream = await fetch(asset.blobUrl, { headers: { Authorization: `Bearer ${blobToken}` }, cache: "no-store" });
   if (!upstream.ok || !upstream.body) return NextResponse.json({ error: "Source asset could not be retrieved" }, { status: 502 });
 
