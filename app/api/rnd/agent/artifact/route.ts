@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { put, del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { fenceRndReportLease, hasValidRndLeaseExpiry, parseRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
 
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
   const bytes = Buffer.from(await image.arrayBuffer());
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = `rnd/generated/${jobId}/attempt-${attemptNumber}-${randomUUID()}.${extension}`;
-  const blob = await put(storageKey, bytes, { access: "private", addRandomSuffix: false, contentType: image.type });
+  const blob = await put(storageKey, bytes, { access: "private", addRandomSuffix: false, contentType: image.type, token: requireRndBlobToken() });
 
   try {
     const artifact = await prisma.$transaction(async (tx) => {
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       return { id: created.id, reused: false };
     });
     if (!artifact || artifact.reused) {
-      await del(blob.url).catch(() => undefined);
+      await del(blob.url, { token: requireRndBlobToken() }).catch(() => undefined);
       if (!artifact) return NextResponse.json({ error: "Job lease or claim generation changed before upload commit" }, { status: 409 });
       return NextResponse.json({ ok: true, artifactId: artifact.id, idempotent: true });
     }
