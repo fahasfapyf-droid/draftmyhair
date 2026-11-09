@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 
@@ -42,10 +43,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
 
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!blobToken) {
-    return NextResponse.json({ error: "Blob storage credentials are not configured" }, { status: 500 });
-  }
+  const blobToken = requireRndBlobToken();
 
   const source = await fetch(job.target.sourceAsset.blobUrl, {
     headers: { Authorization: "Bearer " + blobToken },
