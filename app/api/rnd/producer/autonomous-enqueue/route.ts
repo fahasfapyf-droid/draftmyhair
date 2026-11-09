@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndProducer } from "@/lib/rnd/producer-auth";
 import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
   const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
-  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
+  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type, token: requireRndBlobToken() });
 
   let built;
   try {
