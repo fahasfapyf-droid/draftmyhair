@@ -23,8 +23,8 @@ export async function GET() {
     try {
       const result = await list({ limit: 1000, ...(prefix ? { prefix } : {}), token });
       return { configured: true, accepted: true, count: result.blobs.length, hasMore: result.hasMore };
-    } catch {
-      return { configured: true, accepted: false, count: 0 };
+    } catch (error) {
+      return { configured: true, accepted: false, count: 0, errorName: error instanceof Error ? error.name : "UnknownError" };
     }
   }
 
@@ -35,31 +35,47 @@ export async function GET() {
 
   const assets = await prisma.rnDAsset.findMany({
     orderBy: { createdAt: "asc" },
-    select: { id: true, blobUrl: true, fileSize: true, checksum: true },
+    select: { id: true, storageKey: true, blobUrl: true, fileSize: true, checksum: true },
   });
 
   const sourceObjectChecks = [];
   if (sourceToken && assets.length === 3) {
     for (const asset of assets) {
-      try {
-        const object = await get(asset.blobUrl, { access: "private", token: sourceToken });
-        if (!object || object.statusCode !== 200) {
-          sourceObjectChecks.push({ assetId: asset.id, readable: false, checksumMatches: false, sizeMatches: false });
-          continue;
+      let urlResult: { readable: boolean; checksumMatches: boolean; sizeMatches: boolean; size?: number; failure?: string } =
+        { readable: false, checksumMatches: false, sizeMatches: false, failure: "not-attempted" };
+      let pathResult: { readable: boolean; checksumMatches: boolean; sizeMatches: boolean; size?: number; failure?: string } =
+        { readable: false, checksumMatches: false, sizeMatches: false, failure: "not-attempted" };
+
+      async function checkObject(locator: string) {
+        try {
+          const object = await get(locator, { access: "private", token: sourceToken });
+          if (!object || object.statusCode !== 200) {
+            return { readable: false, checksumMatches: false, sizeMatches: false, failure: object ? `status-${object.statusCode}` : "not-found" };
+          }
+          const bytes = Buffer.from(await new Response(object.stream).arrayBuffer());
+          const checksum = createHash("sha256").update(bytes).digest("hex");
+          return {
+            readable: true,
+            checksumMatches: checksum === asset.checksum,
+            sizeMatches: bytes.length === asset.fileSize,
+            size: bytes.length,
+          };
+        } catch (error) {
+          return { readable: false, checksumMatches: false, sizeMatches: false, failure: error instanceof Error ? error.name : "UnknownError" };
         }
-        const bytes = Buffer.from(await new Response(object.stream).arrayBuffer());
-        const checksum = createHash("sha256").update(bytes).digest("hex");
-        sourceObjectChecks.push({
-          assetId: asset.id,
-          readable: true,
-          checksumMatches: checksum === asset.checksum,
-          sizeMatches: bytes.length === asset.fileSize,
-          size: bytes.length,
-          sourceHost: new URL(asset.blobUrl).hostname,
-        });
-      } catch {
-        sourceObjectChecks.push({ assetId: asset.id, readable: false, checksumMatches: false, sizeMatches: false });
       }
+
+      urlResult = await checkObject(asset.blobUrl);
+      if (!urlResult.readable) pathResult = await checkObject(asset.storageKey);
+      sourceObjectChecks.push({
+        assetId: asset.id,
+        urlLookup: urlResult,
+        pathnameLookup: pathResult,
+        readable: urlResult.readable || pathResult.readable,
+        checksumMatches: urlResult.checksumMatches || pathResult.checksumMatches,
+        sizeMatches: urlResult.sizeMatches || pathResult.sizeMatches,
+        sourceHost: new URL(asset.blobUrl).hostname,
+      });
     }
   }
 
