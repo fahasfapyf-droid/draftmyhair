@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 const TEST_TARGET_PREFIX = "task3-approval-fence-fixture-";
@@ -49,6 +50,6 @@ export async function POST(request: Request) {
     }
   });
 
-  const blobResults = await Promise.allSettled(deletedBlobUrls.map((url) => del(url)));
+  const blobResults = await Promise.allSettled(deletedBlobUrls.map((url) => del(url, { token: requireRndBlobToken() })));
   return NextResponse.json({ ok: true, deleted: true, databaseRecordsDeleted: true, blobDeletesSucceeded: blobResults.filter((result) => result.status === "fulfilled").length, blobDeleteFailures: blobResults.filter((result) => result.status === "rejected").length });
 }
