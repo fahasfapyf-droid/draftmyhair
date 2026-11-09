@@ -2,6 +2,7 @@ import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
   // blobUrl directly with the storage token as a Bearer header is not the
   // private-blob retrieval contract and returns an upstream failure.
   try {
-    const stored = await get(artifact.storageKey, { access: "private" });
+    const stored = await get(artifact.storageKey, { access: "private", token: requireRndBlobToken() });
     if (!stored) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
 
     return new Response(stored.stream, {
