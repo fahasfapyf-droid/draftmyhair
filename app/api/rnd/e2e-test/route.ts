@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeImage } from "@/lib/image/normalize";
 import { generateWithVertex } from "@/lib/engine/providers/vertex";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { POST as autonomousEnqueue } from "@/app/api/rnd/producer/autonomous-enqueue/route";
 import { POST as claimWorker } from "@/app/api/rnd/worker/claim/route";
 import { POST as reportWorker } from "@/app/api/rnd/worker/report/route";
@@ -25,8 +26,7 @@ function json(value: unknown, status = 200) {
 }
 
 async function privateBlob(url: string, mimeType: string) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not configured.");
+  const token = requireRndBlobToken();
   const response = await fetch(url, {
     headers: { Authorization: "Bearer " + token },
     cache: "no-store",
@@ -101,6 +101,7 @@ async function generateAndReport(claimed: any) {
     access: "private",
     addRandomSuffix: false,
     contentType: generated.mimeType,
+    token: requireRndBlobToken(),
   });
 
   const artifact = await prisma.rnDAsset.create({
