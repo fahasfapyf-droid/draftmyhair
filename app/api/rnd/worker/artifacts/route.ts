@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import { put, del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { fenceRndReportLease, hasValidRndLeaseExpiry, parseRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
   // Unique object key prevents a stale upload from overwriting an earlier artifact.
   const storageKey = `rnd/attempts/${jobId}/${attemptNumber}-${checksum}-${randomUUID()}.${extension}`;
-  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: file.type });
+  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: file.type, token: requireRndBlobToken() });
 
   try {
     const asset = await prisma.$transaction(async (tx) => {
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
       });
     });
     if (!asset) {
-      await del(blob.url).catch(() => undefined);
+      await del(blob.url, { token: requireRndBlobToken() }).catch(() => undefined);
       return NextResponse.json({ error: "Job lease or claim generation changed before upload commit" }, { status: 409 });
     }
     return NextResponse.json({ ok: true, asset });
