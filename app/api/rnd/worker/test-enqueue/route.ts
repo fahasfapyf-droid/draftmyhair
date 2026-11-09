@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
 
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp";
   const storageKey = "rnd/sources/" + checksum + "-" + randomUUID() + "." + extension;
-  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType });
+  const blob = await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: mimeType, token: requireRndBlobToken() });
   const built = await buildRndPrompt({ promptKey });
 
   try {
