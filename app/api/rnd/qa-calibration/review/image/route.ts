@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 
 export const runtime = "nodejs";
 
@@ -26,8 +27,7 @@ export async function GET(request: Request) {
 
   if (!attempt?.artifact?.blobUrl) return new Response("Image not found", { status: 404 });
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return new Response("Blob storage is not configured", { status: 503 });
+  const token = requireRndBlobToken();
 
   const upstream = await fetch(attempt.artifact.blobUrl, {
     headers: { Authorization: `Bearer ${token}` },
