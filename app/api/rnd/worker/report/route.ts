@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
+import { fetchRndSourceAsset } from "@/lib/rnd/source-asset";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
       leaseExpiresAt: true,
       startedAt: true,
       currentPrompt: true,
-      target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+      target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { storageKey: true, blobUrl: true, mimeType: true, fileSize: true, checksum: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -292,7 +293,7 @@ export async function POST(request: Request) {
   let imageIntegrity = null;
   try {
     const [source, generated] = await Promise.all([
-      fetchPrivateArtifact(job.target.sourceAsset.blobUrl, job.target.sourceAsset.mimeType),
+      fetchRndSourceAsset(job.target.sourceAsset, request.url, request.headers.get("x-vercel-protection-bypass")),
       fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType),
     ]);
     imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
