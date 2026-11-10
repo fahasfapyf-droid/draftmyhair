@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { readPriorRndArtifactChecksums } from "@/lib/rnd/artifact-checksums";
 import { MAX_RND_INFRASTRUCTURE_RETRIES, requireRndWorker, RND_WORKER_LEASE_SECONDS, RND_WORKER_PROTOCOL_VERSION } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
@@ -142,7 +143,9 @@ export async function POST(request: Request) {
       where: { id: candidate.id },
       include: { target: { include: { sourceAsset: true } } },
     });
-    return job && { ...job, resumeArtifactId: completedArtifact };
+    if (!job) return null;
+    const priorArtifactChecksums = completedArtifact ? [] : await readPriorRndArtifactChecksums(tx, job.id, attemptNumber);
+    return { ...job, resumeArtifactId: completedArtifact, priorArtifactChecksums };
   });
 
   if (!claimed) return NextResponse.json({ ok: true, job: null });
@@ -159,6 +162,7 @@ export async function POST(request: Request) {
       status: claimed.status,
       claimGeneration: claimed.startedAt?.toISOString() ?? null,
       resumeArtifactId: claimed.resumeArtifactId,
+      priorArtifactChecksums: claimed.priorArtifactChecksums,
       promptVersionNumber: claimed.promptVersionNumber,
       currentPrompt: claimed.currentPrompt,
       attemptCount: claimed.attemptCount,

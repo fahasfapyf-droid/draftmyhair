@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import { put, del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
+import { readPriorRndArtifactChecksums } from "@/lib/rnd/artifact-checksums";
 import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { fenceRndReportLease, hasValidRndLeaseExpiry, parseRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
@@ -49,6 +50,10 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const checksum = createHash("sha256").update(buffer).digest("hex");
+  const priorChecksums = await readPriorRndArtifactChecksums(prisma, jobId, attemptNumber);
+  if (!priorChecksums || priorChecksums.includes(checksum)) {
+    return NextResponse.json({ code: priorChecksums ? "RND_DUPLICATE_ARTIFACT" : "RND_PRIOR_ARTIFACT_CHECKSUM_UNAVAILABLE" }, { status: 409 });
+  }
   const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
   // Unique object key prevents a stale upload from overwriting an earlier artifact.
   const storageKey = `rnd/attempts/${jobId}/${attemptNumber}-${checksum}-${randomUUID()}.${extension}`;
@@ -68,6 +73,10 @@ export async function POST(request: Request) {
     });
     if (recorded?.errorCode !== "RND_SUBMITTED") return null;
     if (recorded.artifact) return recorded.artifact.checksum === checksum ? { asset: recorded.artifact, reused: true } : null;
+    const commitChecksums = await readPriorRndArtifactChecksums(tx, jobId, attemptNumber);
+    if (!commitChecksums || commitChecksums.includes(checksum)) {
+      return { code: commitChecksums ? "RND_DUPLICATE_ARTIFACT" : "RND_PRIOR_ARTIFACT_CHECKSUM_UNAVAILABLE" };
+    }
     const asset = await tx.rnDAsset.create({
       data: { kind: "GENERATED", storageKey, blobUrl: blob.url, originalFilename: file.name || null,
         mimeType: file.type, fileSize: file.size, checksum, immutable: true },
@@ -76,9 +85,10 @@ export async function POST(request: Request) {
     await tx.rnDAttempt.update({ where: { id: attempt.id }, data: { artifactId: asset.id, generationCompletedAt: new Date() } });
     return { asset, reused: false };
   });
-  if (!result || result.reused) {
+  if (!result || "code" in result || result.reused) {
     await del(blob.url, { token: requireRndBlobToken() }).catch(() => undefined);
     if (!result) return NextResponse.json({ error: "Job lease or claim generation changed before upload commit" }, { status: 409 });
+    if ("code" in result) return NextResponse.json({ code: result.code }, { status: 409 });
   }
   return NextResponse.json({ ok: true, asset: result.asset, artifactId: result.asset.id, idempotent: result.reused });
 }

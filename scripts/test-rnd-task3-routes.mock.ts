@@ -4,6 +4,8 @@
  * Live Preview/isolated-database verification remains separately required.
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readPriorRndArtifactChecksums } from "../lib/rnd/artifact-checksums";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { transform } from "esbuild";
@@ -21,6 +23,7 @@ async function handler(filename: string, modules: Record<string, unknown>): Prom
   const mockRequire = (name: string) => {
     if (Object.prototype.hasOwnProperty.call(modules, name)) return modules[name];
     if (name === "next/server") return next;
+    if (name === "@/lib/rnd/artifact-checksums") return { readPriorRndArtifactChecksums };
     if (name.startsWith("@/")) return {};
     return nativeRequire(name);
   };
@@ -205,17 +208,70 @@ async function testReport() {
   console.log("PASS handler-mock: invalid/stale report generation, expired leases and failed-job requeue bypass");
 }
 
-async function testArtifact(routePath: string, fileKey: string) {
+async function testClaimArtifactHistory() {
+  const checksum = "a".repeat(64);
+  const job = { id: "fixture-job", targetId: "target", status: "QUEUED", attemptCount: 1,
+    currentPrompt: "fixture", startedAt: new Date(0), leaseExpiresAt: new Date(Date.now() + 120000),
+    target: { sourceAsset: {} } };
+  let prior: Array<{ artifact: { checksum: string | null } }> = [{ artifact: { checksum: checksum.toUpperCase() } }];
+  const tx = {
+    $queryRaw: async () => [],
+    rnDJob: { findMany: async () => [], findFirst: async () => job, updateMany: async () => ({ count: 1 }),
+      findUnique: async () => job },
+    rnDAttempt: {
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        assert.equal(data.submittedAt, null);
+        assert.equal(data.promptRevision, "reserved-v2");
+      },
+      findMany: async ({ where }: { where: object }) => {
+        assert.deepEqual(where, { jobId: job.id, attemptNumber: { lt: 2 }, artifact: { is: { kind: "GENERATED" } } });
+        return prior;
+      },
+    },
+    rnDTarget: { update: async () => null },
+  };
+  const claim = await handler("app/api/rnd/worker/claim/route.ts", {
+    "@/lib/prisma": { prisma: { $transaction: (fn: (value: typeof tx) => unknown) => fn(tx) } },
+    "@/lib/rnd/worker-auth": { requireRndWorker: () => null, RND_WORKER_LEASE_SECONDS: 120,
+      MAX_RND_INFRASTRUCTURE_RETRIES: 3, RND_WORKER_PROTOCOL_VERSION: "2" },
+  });
+  const run = async () => {
+    const req = request("claim", {});
+    req.headers.set("x-rnd-worker-protocol", "2");
+    const result = await claim(req);
+    assert.equal(result.status, 200);
+    return (await body(result)).job as { priorArtifactChecksums: string[] | null };
+  };
+  assert.deepEqual((await run()).priorArtifactChecksums, [checksum]);
+  prior = [];
+  assert.deepEqual((await run()).priorArtifactChecksums, []);
+  prior = [{ artifact: { checksum: null } }];
+  assert.equal((await run()).priorArtifactChecksums, null);
+  console.log("PASS handler-mock: claim returns scoped prior checksums and signals unverifiable history");
+}
+
+async function testWorkerArtifact(routePath: string, fileKey: string) {
   const now = Date.now();
   const startedAt = new Date(now - 1000);
   const job = { id: "fixture-job", status: "PROCESSING", leaseOwner: "worker-a",
     startedAt, attemptCount: 0, leaseExpiresAt: new Date(now + 120000) };
   let putCalls = 0, delCalls = 0, createdAssets = 0, fenced = false, reservationArtifact: string | null = null;
+  let submission = "RND_SUBMISSION_UNCERTAIN";
+  let prior: Array<{ artifact: { checksum: string | null } }> = [];
+  let commitPrior = prior;
+  const checksum = createHash("sha256").update(new Uint8Array([137, 80, 78, 71])).digest("hex");
+  job.attemptCount = 1;
+  const readPrior = ({ where }: { where: unknown }) => {
+    assert.deepEqual(where, { jobId: job.id, attemptNumber: { lt: 2 }, artifact: { is: { kind: "GENERATED" } } });
+  };
   const prisma = {
     rnDJob: { findUnique: async () => job },
-    rnDAttempt: { findUnique: async () => ({ id: "reservation-1", errorCode: "RND_SUBMITTED" }) },
+    rnDAttempt: { findUnique: async () => ({ id: "reservation-1", errorCode: submission }),
+      findMany: async (query: { where: unknown }) => { readPrior(query); return prior; } },
     $transaction: async (fn: (tx: any) => Promise<unknown>) => fn({
-      rnDAttempt: { findUnique: async () => ({ errorCode: "RND_SUBMITTED", artifact: reservationArtifact ? { id: reservationArtifact, checksum: "mock" } : null }),
+      rnDAttempt: { findUnique: async () => ({ errorCode: submission, artifact: reservationArtifact ? { id: reservationArtifact, checksum } : null }),
+        findMany: async (query: { where: unknown }) => { readPrior(query); return commitPrior; },
         update: async ({ data }: any) => { reservationArtifact = data.artifactId; } },
       rnDAsset: { create: async () => { createdAssets++; return {
         id: "mock-asset-" + createdAssets, blobUrl: "https://blob.invalid/asset",
@@ -226,21 +282,24 @@ async function testArtifact(routePath: string, fileKey: string) {
   const route = await handler(routePath, {
     "@/lib/prisma": { prisma },
     "@/lib/rnd/worker-auth": { requireRndWorker: () => null },
-    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "fixture-token" },
     "@/lib/rnd/report-lease-fence": {
       parseRndClaimGeneration: (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(v))
         && new Date(v).toISOString() === v ? new Date(v) : null,
       hasValidRndLeaseExpiry: (v: unknown, at: Date) => v instanceof Date && v > at,
       fenceRndReportLease: async () => fenced,
     },
+    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "synthetic-rnd-write" },
     "@vercel/blob": {
-      put: async () => { putCalls++; return { url: "https://blob.invalid/upload-" + putCalls }; },
+      put: async (_key: string, _bytes: Buffer, options: { token: string }) => {
+        assert.equal(options.token, "synthetic-rnd-write");
+        putCalls++; return { url: "https://blob.invalid/upload-" + putCalls };
+      },
       del: async () => { delCalls++; },
     },
   });
   const form = (token?: string) => {
     const m = new Map<string, FormDataEntryValue>();
-    m.set("jobId", "fixture-job"); m.set("attemptNumber", "1");
+    m.set("jobId", "fixture-job"); m.set("attemptNumber", "2");
     if (token) m.set("claimGeneration", token);
     m.set(fileKey, new File([new Uint8Array([137,80,78,71])], "test.png", { type: "image/png" }));
     return { headers: new Headers({ authorization: "Bearer fixture", "x-rnd-worker-id": "worker-a" }),
@@ -254,16 +313,81 @@ async function testArtifact(routePath: string, fileKey: string) {
   assert.equal(createdAssets, 0);
 
   const current = form(startedAt.toISOString());
+  assert.equal((await route(current)).status, 409);
+  assert.equal(putCalls, 0, "no upload before submission is recorded");
+  submission = "RND_SUBMITTED";
+  prior = [{ artifact: { checksum: checksum.toUpperCase() } }];
+  const duplicate = await route(current);
+  assert.equal(duplicate.status, 409);
+  assert.equal((await body(duplicate)).code, "RND_DUPLICATE_ARTIFACT");
+  prior = [{ artifact: { checksum: null } }];
+  assert.equal((await body(await route(current))).code, "RND_PRIOR_ARTIFACT_CHECKSUM_UNAVAILABLE");
+  assert.equal(putCalls, 0, "duplicate or unverifiable history must stop before Blob put");
+  assert.equal(createdAssets, 0);
+  prior = [];
   assert.equal((await route(current)).status, 409, "changed lease after blob upload must reject DB commit");
   assert.equal(putCalls, 1);
   assert.equal(delCalls, 1, "rejected upload must attempt blob compensation");
   assert.equal(createdAssets, 0, "failed final fence must not create asset");
   assert.equal(reservationArtifact, null);
   fenced = true;
+  commitPrior = [{ artifact: { checksum } }];
+  assert.equal((await body(await route(current))).code, "RND_DUPLICATE_ARTIFACT");
+  assert.equal(delCalls, 2, "a duplicate discovered under the final fence is compensated");
+  assert.equal(createdAssets, 0);
+  commitPrior = [];
   assert.equal((await route(form(startedAt.toISOString()))).status, 200,
     "current claim with a valid commit fence should succeed");
   assert.equal(createdAssets, 1);
-  console.log("PASS handler-mock: " + routePath + " generation, lease, final fence and storage compensation");
+  assert.equal((await body(await route(form(startedAt.toISOString())))).idempotent, true);
+  assert.equal(createdAssets, 1);
+  console.log("PASS handler-mock: " + routePath + " generation, lease, duplicate prevention, final fence and storage compensation");
+}
+
+async function testArtifact(routePath: string, fileKey: string) {
+  const now = Date.now();
+  const startedAt = new Date(now - 1000);
+  for (const [filename, code, replacement] of [
+    ["app/api/rnd/agent/claim/route.ts", "RND_LEGACY_AGENT_CLAIM_DISABLED", "/api/rnd/worker/claim"],
+    [routePath, "RND_LEGACY_AGENT_ARTIFACT_DISABLED", "/api/rnd/worker/artifacts"],
+  ]) {
+    const unexpectedDependency = new Proxy({}, {
+      get: () => assert.fail("Disabled agent routes must not use Prisma or Blob storage"),
+    });
+    const route = await handler(filename, {
+      "@/lib/prisma": unexpectedDependency,
+      "@vercel/blob": unexpectedDependency,
+      "@/lib/rnd/worker-auth": {
+        requireRndWorker: (authorization: string | null) =>
+          authorization === "Bearer fixture" ? null : new Response(null, { status: 401 }),
+      },
+    });
+    const run = (authorization?: string, protocol?: string) => {
+      const headers = new Headers({ "x-rnd-worker-id": "worker-a" });
+      if (authorization) headers.set("authorization", authorization);
+      if (protocol) headers.set("x-rnd-worker-protocol", protocol);
+      const form = new FormData();
+      form.set("jobId", "fixture-job");
+      form.set("attemptNumber", "1");
+      form.set("claimGeneration", startedAt.toISOString());
+      form.set(fileKey, new File([new Uint8Array([137, 80, 78, 71])], "test.png", { type: "image/png" }));
+      const req = new Request("https://fixture.invalid", {
+        method: "POST", headers, body: filename === routePath ? form : "{}",
+      });
+      const unexpectedBodyRead = () => assert.fail("Disabled agent routes must not read the request body");
+      req.json = unexpectedBodyRead;
+      req.formData = unexpectedBodyRead;
+      return route(req);
+    };
+    assert.equal((await run()).status, 401);
+    assert.equal((await run("Bearer wrong")).status, 401);
+    for (const protocol of [undefined, "1", "2"]) {
+      const result = await run("Bearer fixture", protocol);
+      assert.equal(result.status, 410);
+      assert.deepEqual(await body(result), { code, replacement });
+    }
+  }
+  console.log("PASS handler-mock: legacy agent claim and artifact reject all authenticated protocol versions without side effects");
 }
 
 async function testCleanup() {
@@ -350,7 +474,9 @@ async function testCleanup() {
 async function main() {
   await testApproval();
   await testReport();
-  await testArtifact("app/api/rnd/worker/artifacts/route.ts", "file");
+  await testClaimArtifactHistory();
+  await testWorkerArtifact("app/api/rnd/worker/artifacts/route.ts", "file");
+  await testWorkerArtifact("app/api/rnd/worker/artifacts/route.ts", "image");
   await testArtifact("app/api/rnd/agent/artifact/route.ts", "image");
   await testCleanup();
   console.log("All Task 3 handler mock regressions passed. NO database or Blob storage contacted.");

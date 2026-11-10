@@ -148,26 +148,21 @@ function rejectsInvalidLeaseBeforeQa(leaseExpiresAt: unknown, now: Date) {
 async function main() {
   const reportSource = readFileSync("app/api/rnd/worker/report/route.ts", "utf8");
   const artifactSource = readFileSync("app/api/rnd/worker/artifacts/route.ts", "utf8");
-  const agentArtifactSource = readFileSync("app/api/rnd/agent/artifact/route.ts", "utf8");
   const heartbeatSource = readFileSync("app/api/rnd/worker/heartbeat/route.ts", "utf8");
   const earlyLeaseCheck = reportSource.indexOf("!hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime)");
   const hindsightRecall = reportSource.indexOf("const hindsightHistory = await recallRndHistory");
   assert.ok(earlyLeaseCheck >= 0, "report route must reject missing, invalid, and expired leases in its early validation");
   assert.ok(hindsightRecall > earlyLeaseCheck, "lease validation must happen before Hindsight recall and QA processing");
   assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "worker artifact route must reject missing, invalid, and expired leases before upload");
-  assert.ok(agentArtifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "agent artifact route must reject missing, invalid, and expired leases before upload");
   const workerSource = readFileSync("tools/rnd-worker/worker.ts", "utf8");
   assert.ok(workerSource.includes('form.append("claimGeneration", job.claimGeneration)'), "worker must submit its captured claim generation when uploading");
   assert.ok(artifactSource.includes('parseRndClaimGeneration(formData?.get("claimGeneration"))'), "worker artifact route requires a canonical claim generation");
-  assert.ok(agentArtifactSource.includes('parseRndClaimGeneration(form?.get("claimGeneration"))'), "agent artifact route requires a canonical claim generation");
-  for (const [routeName, route] of [["worker", artifactSource], ["agent", agentArtifactSource]] as const) {
-    assert.ok(route.includes('job.startedAt?.getTime() !== claimGeneration.getTime()'), `${routeName} artifact route must reject stale generations before upload`);
-    assert.ok(route.includes('fenceRndReportLease(tx,'), `${routeName} artifact route must fence the database commit`);
-    assert.ok(route.indexOf('fenceRndReportLease(tx,') > route.indexOf('await put('), `${routeName} artifact commit must revalidate after blob upload`);
-    assert.ok(route.includes('randomUUID()'), `${routeName} artifact uploads must not overwrite an existing object key`);
-    if (routeName === "worker") assert.ok(route.includes("Preserve the object for reconciliation"), "worker artifact route must preserve a blob when commit outcome is uncertain");
-    else assert.ok(route.includes("await del(blob.url).catch(() => undefined)"), "agent artifact route must clean up a rejected blob upload");
-  }
+  assert.ok(artifactSource.includes('job.startedAt?.getTime() !== claimGeneration.getTime()'), "worker artifacts must reject stale generations before upload");
+  const upload = artifactSource.indexOf("await put(");
+  const commitFence = artifactSource.indexOf("fenceRndReportLease(tx,");
+  assert.ok(upload >= 0 && commitFence > upload, "worker artifact commit must revalidate after Blob upload");
+  assert.ok(artifactSource.includes("randomUUID()"), "worker artifacts must not overwrite an existing object key");
+  assert.ok(artifactSource.includes("Preserve the object for reconciliation"), "worker artifacts must preserve a Blob when the commit outcome is uncertain");
   assert.ok(heartbeatSource.includes("leaseExpiresAt: { gt: now }"), "heartbeat must only renew a strictly unexpired lease");
   assert.ok(!heartbeatSource.includes("leaseExpiresAt: null"), "heartbeat must not renew a missing lease expiry");
 

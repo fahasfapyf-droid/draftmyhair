@@ -1,5 +1,5 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { assertReady, captureGeneratedImage, freshChat, GeminiModelSelectionError, largeImages, openImageGenerationMode, openGemini, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
+import { assertReady, captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, openImageGenerationMode, openGemini, prepareGeminiSubmission, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -48,6 +48,7 @@ interface ClaimedJob {
   attemptNumber: number;
   claimGeneration: string;
   resumeArtifactId: string | null;
+  priorArtifactChecksums: string[] | null;
   target: {
     id: string;
     targetType: string;
@@ -276,28 +277,39 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
     generationStartedAt = new Date().toISOString();
     await openGemini(page);
     await assertReady(page);
-    await freshChat(page);
+    if (!Array.isArray(job.priorArtifactChecksums) || !job.priorArtifactChecksums.every(hash => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash))) {
+      throw new GeminiConversationError("RND_PRIOR_ARTIFACT_CHECKSUM_UNAVAILABLE: cannot verify a fresh capture for this job.");
+    }
+    const freshPath = await freshChat(page);
     await selectGemini31Pro(page);
     await openImageGenerationMode(page);
     await uploadReference(page, sourcePath);
-    const before = new Set(await largeImages(page));
     if (!job.currentPrompt) throw new Error("Claimed job has no current prompt.");
     // Entering image mode or attaching a reference can replace the composer.
     await verifyGemini31Pro(page);
+    await prepareGeminiSubmission(page, freshPath);
 
     console.log(`Job ${job.id}: submitting attempt ${attemptNumber} using Gemini profile ${profile.id}.`);
     await markGenerationStarted(profile.id);
     submissionMayHaveStarted = true;
     await recordSubmission(job, "begin");
-    await submitPrompt(page, job.currentPrompt);
-    await recordSubmission(job, "submitted");
-    const generatedSource = await waitForGeneratedImage(page, before);
-    const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
-    await captureGeneratedImage(page, outputPath, generatedSource, before);
+    const turn = await submitPrompt(page, job.currentPrompt, freshPath);
+    const outputBasePath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}`);
+    let captured: Awaited<ReturnType<typeof captureGeneratedImage>>;
+    try {
+      await recordSubmission(job, "submitted");
+      const image = await waitForGeneratedImage(page, turn);
+      captured = await captureGeneratedImage(page, outputBasePath, turn, image);
+    } finally {
+      await Promise.allSettled([turn.user.dispose(), turn.assistant.dispose()]);
+    }
+    const duplicate = job.priorArtifactChecksums.includes(captured.checksum);
+    console.log("Gemini artifact comparison", { jobId: job.id, attemptNumber, checksum: captured.checksum, duplicate });
+    if (duplicate) throw new GeminiConversationError("RND_DUPLICATE_ARTIFACT: capture matches an earlier attempt for this job.");
     captureStatus = "PASS";
     captureLastSuccessAt = new Date().toISOString();
     captureLastError = null;
-    const artifactId = await uploadArtifact(job, attemptNumber, outputPath);
+    const artifactId = await uploadArtifact(job, attemptNumber, captured.filePath);
     uploadedArtifactId = artifactId;
 
     await reportWithRetry(job, attemptNumber, {
@@ -327,7 +339,7 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
       return "STOP";
     }
 
-    if (error instanceof GeminiModelSelectionError) {
+    if (error instanceof GeminiModelSelectionError || error instanceof GeminiConversationError) {
       captureStatus = "FAIL";
       captureLastError = message;
       await release(job).catch(() => console.error("Could not release the unsubmitted R&D claim; its lease will expire."));
