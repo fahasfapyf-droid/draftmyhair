@@ -1,13 +1,16 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { assertReady, captureGeneratedImage, freshChat, largeImages, openImageGenerationMode, openGemini, submitPrompt, uploadReference, waitForGeneratedImage } from "./gemini-page.js";
+import { assertReady, captureGeneratedImage, freshChat, GeminiModelSelectionError, largeImages, openImageGenerationMode, openGemini, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyProfileError, getGeminiProfileStatusSnapshot, markGenerationStarted, markProfileExhausted, markProfileRestricted, selectGeminiProfile, type GeminiProfile } from "./profile-manager.js";
 
+import { RND_WORKER_PROTOCOL_VERSION, verifyRndWorkerHello } from "../../lib/rnd/worker-protocol.js";
+
 const API_BASE = (process.env.RND_API_BASE_URL?.trim() || "https://draftmyhair-git-rnd-qa-gate-clean-integration-draftmyhair.vercel.app").replace(/\/$/, "");
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
+if (!WORKER_TOKEN) throw new Error("RND_WORKER_TOKEN is required.");
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_ID_FILE = process.env.RND_WORKER_ID_FILE ?? path.resolve(WORKER_DIR, ".rnd-worker-id");
 const REPO_ROOT = path.resolve(WORKER_DIR, "../..");
@@ -22,7 +25,6 @@ const STATUS_HEARTBEAT_MS = 15_000;
 const RUN_ONCE = /^(1|true|yes)$/i.test(process.env.RND_WORKER_ONCE ?? "");
 const WORKER_VERSION = process.env.RND_WORKER_VERSION ?? "local-gemini-worker-v1";
 
-if (!WORKER_TOKEN) throw new Error("RND_WORKER_TOKEN is required.");
 
 interface SourceAsset {
   id: string;
@@ -45,6 +47,7 @@ interface ClaimedJob {
   attemptCount: number;
   attemptNumber: number;
   claimGeneration: string;
+  resumeArtifactId: string | null;
   target: {
     id: string;
     targetType: string;
@@ -59,7 +62,6 @@ interface ClaimedJob {
 }
 
 interface ClaimResponse { ok: boolean; workerId?: string; leaseExpiresAt?: string | null; job: ClaimedJob | null; }
-interface HelloResponse { ok: boolean; protocolVersion: string; serverTime: string; }
 let captureStatus: "UNKNOWN" | "PASS" | "FAIL" = "UNKNOWN";
 let captureLastSuccessAt: string | null = null;
 let captureLastError: string | null = null;
@@ -74,7 +76,7 @@ async function reportWorkerStatus(workerState: "ONLINE" | "STOPPED" = "ONLINE") 
       signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         workerVersion: WORKER_VERSION,
-        protocolVersion: "1",
+        protocolVersion: RND_WORKER_PROTOCOL_VERSION,
         workerState,
         activeProfileId: geminiProfileForStatus?.id ?? null,
         activeProfileLabel: geminiProfileForStatus?.label ?? null,
@@ -97,8 +99,7 @@ async function api(pathname: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${WORKER_TOKEN}`);
   headers.set("X-RND-Worker-Id", await workerId());
-  const response = await fetch(`${API_BASE}${pathname}`, { ...init, headers });
-  return response;
+  return fetch(`${API_BASE}${pathname}`, { ...init, headers });
 }
 
 let cachedWorkerId: string | null = null;
@@ -115,11 +116,8 @@ async function workerId() {
 }
 
 async function assertServer() {
-  const response = await api("/api/rnd/worker/hello");
-  if (!response.ok) throw new Error(`Worker hello failed: HTTP ${response.status} ${await response.text()}`);
-  const body = await response.json() as HelloResponse;
-  if (!body.ok || body.protocolVersion !== "1") throw new Error(`Unsupported worker protocol: ${JSON.stringify(body)}`);
-  console.log(`Connected to R&D worker API ${API_BASE}; protocol ${body.protocolVersion}.`);
+  await verifyRndWorkerHello(await api("/api/rnd/worker/hello"));
+  console.log(`Connected to R&D worker API ${API_BASE}; protocol ${RND_WORKER_PROTOCOL_VERSION}.`);
 }
 
 async function claim(): Promise<ClaimResponse> {
@@ -128,7 +126,8 @@ async function claim(): Promise<ClaimResponse> {
   const timeout = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
-    response = await api("/api/rnd/worker/claim", { method: "POST", signal: controller.signal });
+    response = await api("/api/rnd/worker/claim", { method: "POST", signal: controller.signal,
+      headers: { "x-rnd-worker-protocol": RND_WORKER_PROTOCOL_VERSION } });
   } finally {
     clearTimeout(timeout);
   }
@@ -243,12 +242,21 @@ async function uploadArtifact(job: ClaimedJob, attemptNumber: number, filePath: 
   return body.asset.id;
 }
 
+async function recordSubmission(job: ClaimedJob, phase: "begin" | "submitted") {
+  const response = await api("/api/rnd/worker/submission", { method: "POST",
+    headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify({ jobId: job.id, attemptNumber: job.attemptNumber, claimGeneration: job.claimGeneration, phase }),
+  });
+  if (!response.ok) throw new Error("R&D submission fence rejected: HTTP " + response.status);
+}
+
 async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE" | "STOP"> {
   currentJobId = job.id;
   captureStatus = "UNKNOWN";
   const attemptNumber = job.attemptNumber;
   let generationStartedAt: string | null = null;
-  let uploadedArtifactId: string | null = null;
+  let uploadedArtifactId = job.resumeArtifactId;
+  let submissionMayHaveStarted = false;
   let sourceDownloaded = false;
   let heartbeatInFlight: Promise<void> | null = null;
   const heartbeatTimer = setInterval(() => {
@@ -259,20 +267,30 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
   }, LEASE_HEARTBEAT_MS);
 
   try {
+    if (uploadedArtifactId) {
+      await reportWithRetry(job, attemptNumber, { artifactId: uploadedArtifactId });
+      return "CONTINUE";
+    }
     const sourcePath = await downloadSource(job.sourceAsset, job.id);
     sourceDownloaded = true;
     generationStartedAt = new Date().toISOString();
     await openGemini(page);
     await assertReady(page);
     await freshChat(page);
+    await selectGemini31Pro(page);
     await openImageGenerationMode(page);
     await uploadReference(page, sourcePath);
     const before = new Set(await largeImages(page));
     if (!job.currentPrompt) throw new Error("Claimed job has no current prompt.");
+    // Entering image mode or attaching a reference can replace the composer.
+    await verifyGemini31Pro(page);
 
     console.log(`Job ${job.id}: submitting attempt ${attemptNumber} using Gemini profile ${profile.id}.`);
     await markGenerationStarted(profile.id);
+    submissionMayHaveStarted = true;
+    await recordSubmission(job, "begin");
     await submitPrompt(page, job.currentPrompt);
+    await recordSubmission(job, "submitted");
     const generatedSource = await waitForGeneratedImage(page, before);
     const outputPath = path.join(OUTPUT_DIR, `${job.id}-attempt-${attemptNumber}.png`);
     await captureGeneratedImage(page, outputPath, generatedSource, before);
@@ -298,6 +316,21 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
       captureStatus = "PASS";
       captureLastError = `Artifact ${uploadedArtifactId} uploaded; report/QA handoff failed: ${message}`.slice(0, 2000);
       console.error(`Job ${job.id}: artifact ${uploadedArtifactId} is retained; stopping for lease recovery/reconciliation.`);
+      return "STOP";
+    }
+
+    if (submissionMayHaveStarted) {
+      captureStatus = "FAIL";
+      captureLastError = "Gemini submission needs reconciliation before another generation.";
+      if (classifyProfileError(message) === "EXHAUSTED") await markProfileExhausted(profile.id, message);
+      if (classifyProfileError(message) === "RESTRICTED") await markProfileRestricted(profile.id, message);
+      return "STOP";
+    }
+
+    if (error instanceof GeminiModelSelectionError) {
+      captureStatus = "FAIL";
+      captureLastError = message;
+      await release(job).catch(() => console.error("Could not release the unsubmitted R&D claim; its lease will expire."));
       return "STOP";
     }
 
@@ -507,7 +540,7 @@ async function main() {
         break;
       }
       console.log(`Claimed job ${result.job.id} (attempt ${result.job.attemptNumber}).`);
-      if (page.isClosed()) {
+      if (!result.job.resumeArtifactId && page.isClosed()) {
         await closeContextSafely();
         try {
           session = await launchGeminiSession(geminiProfile);

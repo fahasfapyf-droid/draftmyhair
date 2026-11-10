@@ -1,0 +1,1 @@
+ALTER TABLE "RnDAttempt" ALTER COLUMN "submittedAt" DROP NOT NULL;

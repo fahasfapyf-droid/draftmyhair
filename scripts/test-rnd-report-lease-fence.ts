@@ -165,7 +165,8 @@ async function main() {
     assert.ok(route.includes('fenceRndReportLease(tx,'), `${routeName} artifact route must fence the database commit`);
     assert.ok(route.indexOf('fenceRndReportLease(tx,') > route.indexOf('await put('), `${routeName} artifact commit must revalidate after blob upload`);
     assert.ok(route.includes('randomUUID()'), `${routeName} artifact uploads must not overwrite an existing object key`);
-    assert.ok(route.includes('await del(blob.url).catch(() => undefined)'), `${routeName} artifact route must try to clean up a rejected blob upload`);
+    if (routeName === "worker") assert.ok(route.includes("Preserve the object for reconciliation"), "worker artifact route must preserve a blob when commit outcome is uncertain");
+    else assert.ok(route.includes("await del(blob.url).catch(() => undefined)"), "agent artifact route must clean up a rejected blob upload");
   }
   assert.ok(heartbeatSource.includes("leaseExpiresAt: { gt: now }"), "heartbeat must only renew a strictly unexpired lease");
   assert.ok(!heartbeatSource.includes("leaseExpiresAt: null"), "heartbeat must not renew a missing lease expiry");

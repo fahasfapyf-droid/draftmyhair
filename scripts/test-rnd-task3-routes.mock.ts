@@ -177,6 +177,7 @@ async function testReport() {
   const route = await handler("app/api/rnd/worker/report/route.ts", {
     "@/lib/prisma": { prisma },
     "@/lib/rnd/worker-auth": { requireRndWorker: () => null },
+    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "fixture-token" },
     "@/lib/rnd/report-lease-fence": {
       validateRndClaimGeneration: (submitted: unknown, current: Date) =>
         typeof submitted !== "string" || Number.isNaN(new Date(submitted).getTime()) ? { status: "invalid" } :
@@ -212,9 +213,9 @@ async function testArtifact(routePath: string, fileKey: string) {
   let putCalls = 0, delCalls = 0, createdAssets = 0, fenced = false, reservationArtifact: string | null = null;
   const prisma = {
     rnDJob: { findUnique: async () => job },
-    rnDAttempt: { findUnique: async () => ({ id: "reservation-1", artifactId: reservationArtifact }) },
+    rnDAttempt: { findUnique: async () => ({ id: "reservation-1", errorCode: "RND_SUBMITTED" }) },
     $transaction: async (fn: (tx: any) => Promise<unknown>) => fn({
-      rnDAttempt: { findUnique: async () => ({ artifactId: reservationArtifact }),
+      rnDAttempt: { findUnique: async () => ({ errorCode: "RND_SUBMITTED", artifact: reservationArtifact ? { id: reservationArtifact, checksum: "mock" } : null }),
         update: async ({ data }: any) => { reservationArtifact = data.artifactId; } },
       rnDAsset: { create: async () => { createdAssets++; return {
         id: "mock-asset-" + createdAssets, blobUrl: "https://blob.invalid/asset",
@@ -225,6 +226,7 @@ async function testArtifact(routePath: string, fileKey: string) {
   const route = await handler(routePath, {
     "@/lib/prisma": { prisma },
     "@/lib/rnd/worker-auth": { requireRndWorker: () => null },
+    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "fixture-token" },
     "@/lib/rnd/report-lease-fence": {
       parseRndClaimGeneration: (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(v))
         && new Date(v).toISOString() === v ? new Date(v) : null,
@@ -314,6 +316,7 @@ async function testCleanup() {
     "@/lib/prisma": { prisma },
     "@/lib/rnd/worker-auth": { requireRndWorker: () =>
       authorized ? null : Response.json({ error: "Unauthorized" }, { status: 401 }) },
+    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "fixture-token" },
     "@vercel/blob": { del: async (url: string) => { blobDeletes.push(url); } },
   });
   const req = () => request("worker/test-cleanup", { campaignId: "fixture-campaign" });

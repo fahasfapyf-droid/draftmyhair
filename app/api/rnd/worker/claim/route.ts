@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { requireRndWorker, RND_WORKER_LEASE_SECONDS } from "@/lib/rnd/worker-auth";
+import { MAX_RND_INFRASTRUCTURE_RETRIES, requireRndWorker, RND_WORKER_LEASE_SECONDS, RND_WORKER_PROTOCOL_VERSION } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
 const MAX_RND_ATTEMPTS = 5;
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
   if (authResponse) return authResponse;
+  if (request.headers.get("x-rnd-worker-protocol") !== RND_WORKER_PROTOCOL_VERSION) {
+    return NextResponse.json({ code: "RND_WORKER_PROTOCOL_REQUIRED" }, { status: 409 });
+  }
 
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
   const now = new Date();
@@ -71,6 +74,8 @@ export async function POST(request: Request) {
     const updated = await tx.rnDJob.updateMany({
       where: {
         id: candidate.id,
+        startedAt: candidate.startedAt,
+        attemptCount: candidate.attemptCount,
         OR: [
           { status: "QUEUED", AND: [{ OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }] }] },
           { status: "PROCESSING", OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] },
@@ -81,18 +86,51 @@ export async function POST(request: Request) {
     if (updated.count !== 1) return null;
 
     const attemptNumber = candidate.attemptCount + 1;
-    let reservation = await tx.rnDAttempt.findUnique({
+    const reservation = await tx.rnDAttempt.findUnique({
       where: { jobId_attemptNumber: { jobId: candidate.id, attemptNumber } },
-      select: { id: true },
+      select: { id: true, artifactId: true, generationStartedAt: true, generationCompletedAt: true, promptRevision: true, errorCode: true },
     });
+    if (candidate.status === "PROCESSING") {
+      const recovered = reservation && await tx.rnDAttempt.update({
+        where: { id: reservation.id },
+        data: { infrastructureRetryCount: { increment: 1 } },
+        select: { infrastructureRetryCount: true },
+      });
+      if (!recovered || recovered.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+        const failureCode = recovered ? "RND_INFRASTRUCTURE_RETRY_LIMIT" : "RND_LEASE_RESERVATION_MISSING";
+        const failureMessage = "Expired R&D lease cannot be recovered within the infrastructure retry budget.";
+        if (reservation) await tx.rnDAttempt.update({
+          where: { id: reservation.id },
+          data: { verdict: "FAILED", errorCode: failureCode, errorMessage: failureMessage },
+        });
+        await tx.rnDJob.update({
+          where: { id: candidate.id },
+          data: { status: "FAILED", leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode, failureMessage },
+        });
+        await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "FAILED" } });
+        return null;
+      }
+    }
+    const completedArtifact = reservation?.errorCode === "RND_SUBMITTED" && reservation.generationCompletedAt
+      ? reservation.artifactId : null;
+    // Older reservations were created before submission fencing and are ambiguous.
+    if (reservation && !completedArtifact && (reservation.promptRevision !== "reserved-v2" ||
+        reservation.generationStartedAt || reservation.artifactId || reservation.errorCode)) {
+      const failureCode = "RND_SUBMISSION_REQUIRES_RECONCILIATION";
+      await tx.rnDAttempt.update({ where: { id: reservation.id }, data: { verdict: "FAILED", errorCode: failureCode } });
+      await tx.rnDJob.update({ where: { id: candidate.id }, data: { status: "FAILED", completedAt: now,
+        leaseOwner: null, leaseExpiresAt: null, nextEligibleAt: null, failureCode } });
+      await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "FAILED" } });
+      return null;
+    }
     if (!reservation) {
-      reservation = await tx.rnDAttempt.create({
+      await tx.rnDAttempt.create({
         data: {
           jobId: candidate.id,
           attemptNumber,
           prompt: candidate.currentPrompt,
-          promptRevision: "reserved",
-          submittedAt: now,
+          promptRevision: "reserved-v2",
+          submittedAt: null,
           verdict: "REFINE",
         },
         select: { id: true },
@@ -100,10 +138,11 @@ export async function POST(request: Request) {
     }
 
     await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "PROCESSING", currentJobId: candidate.id } });
-    return tx.rnDJob.findUnique({
+    const job = await tx.rnDJob.findUnique({
       where: { id: candidate.id },
       include: { target: { include: { sourceAsset: true } } },
     });
+    return job && { ...job, resumeArtifactId: completedArtifact };
   });
 
   if (!claimed) return NextResponse.json({ ok: true, job: null });
@@ -119,6 +158,7 @@ export async function POST(request: Request) {
       targetId: claimed.targetId,
       status: claimed.status,
       claimGeneration: claimed.startedAt?.toISOString() ?? null,
+      resumeArtifactId: claimed.resumeArtifactId,
       promptVersionNumber: claimed.promptVersionNumber,
       currentPrompt: claimed.currentPrompt,
       attemptCount: claimed.attemptCount,

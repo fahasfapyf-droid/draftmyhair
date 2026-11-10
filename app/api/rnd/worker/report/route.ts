@@ -79,8 +79,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId, attemptNumber and x-rnd-worker-id are required" }, { status: 400 });
   }
 
-  const generationStartedAt = dateOrNull(body.generationStartedAt);
-  const generationCompletedAt = dateOrNull(body.generationCompletedAt);
+  let generationStartedAt = dateOrNull(body.generationStartedAt);
+  let generationCompletedAt = dateOrNull(body.generationCompletedAt);
   const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
   const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
   const errorMessage = typeof body.errorMessage === "string" ? body.errorMessage : null;
@@ -124,9 +124,17 @@ export async function POST(request: Request) {
   }
   const reservation = await prisma.rnDAttempt.findUnique({
     where: { jobId_attemptNumber: { jobId, attemptNumber } },
-    select: { id: true, submittedAt: true, artifactId: true, verdict: true },
+    select: { id: true, submittedAt: true, artifactId: true, verdict: true, generationStartedAt: true, generationCompletedAt: true, errorCode: true, promptRevision: true },
   });
   if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
+  if (reservation.promptRevision !== "reserved-v2") return NextResponse.json({ code: "RND_SUBMISSION_REQUIRES_RECONCILIATION" }, { status: 409 });
+  if (reservation.errorCode !== "RND_SUBMITTED" || !reservation.submittedAt) return NextResponse.json({ code: "RND_SUBMISSION_NOT_RECORDED" }, { status: 409 });
+  if (reservation.generationStartedAt && !artifactId) return NextResponse.json({ code: "RND_SUBMISSION_REQUIRES_RECONCILIATION" }, { status: 409 });
+  if (artifactId && (!reservation.generationCompletedAt || reservation.artifactId !== artifactId)) return NextResponse.json({ code: "RND_REPORT_ARTIFACT_NOT_RECORDED" }, { status: 409 });
+  if (artifactId) {
+    generationStartedAt = reservation.generationStartedAt;
+    generationCompletedAt = reservation.generationCompletedAt;
+  }
   const reportFence = {
     jobId,
     workerId,
@@ -147,12 +155,7 @@ export async function POST(request: Request) {
     if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
     return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
   }
-  if (reservation.artifactId) {
-    if (reservation.artifactId !== artifactId) {
-      return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
-    }
-    return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
-  }
+  if (reservation.artifactId && reservation.artifactId !== artifactId) return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
 
   // Gemini profile quota exhaustion is a profile lifecycle event, not an R&D
   // generation attempt. Discard the reserved attempt and immediately requeue

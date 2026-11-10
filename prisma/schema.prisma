@@ -754,7 +754,7 @@ model RnDAttempt {
   attemptNumber         Int
   prompt                String            @db.Text
   promptRevision        String
-  submittedAt           DateTime
+  submittedAt           DateTime?
   infrastructureRetryCount Int             @default(0)
   generationStartedAt   DateTime?
   generationCompletedAt DateTime?

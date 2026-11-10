@@ -54,6 +54,85 @@ export async function freshChat(page: Page) {
   } catch {}
 }
 
+export class GeminiModelSelectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiModelSelectionError";
+  }
+}
+
+async function openGeminiModePicker(page: Page) {
+  // Reuse the historical mode-picker button and semantic option roles.
+  const picker = page.getByRole("button", { name: /^open mode picker\b/i }).or(
+    page.locator('button[aria-label^="Open mode picker" i], [role="button"][aria-label^="Open mode picker" i]'),
+  ).or(page.getByRole("button", { name: "Pro", exact: true })).filter({ visible: true });
+  try {
+    await picker.click({ timeout: 10_000 });
+  } catch {
+    throw new GeminiModelSelectionError("Could not open the Gemini mode picker to verify 3.1 Pro.");
+  }
+
+  const options = page.locator('[role="menuitem"], [role="menuitemradio"], [role="option"]').filter({ visible: true });
+  const exactName = /^3\.1 Pro$/;
+  const named = page.getByRole("menuitem", { name: exactName })
+    .or(page.getByRole("menuitemradio", { name: exactName }))
+    .or(page.getByRole("option", { name: exactName }));
+  // Some historical GEM-MENU-ITEM rows include a description in their accessible name.
+  const exactLabel = options.filter({ has: page.getByText("3.1 Pro", { exact: true }) });
+  const option = options.and(named.or(exactLabel));
+  try {
+    await option.waitFor({ state: "visible", timeout: 5_000 });
+  } catch {
+    throw new GeminiModelSelectionError("The Gemini mode picker did not expose one exact 3.1 Pro option.");
+  }
+  return { option, options };
+}
+
+async function hasExactGeminiSelection(page: Page, { option, options }: Awaited<ReturnType<typeof openGeminiModePicker>>) {
+  const selected = options.and(page.locator('[aria-checked="true"], [aria-selected="true"]'));
+  const conflicting = option.and(page.locator('[aria-checked="false"], [aria-selected="false"]'));
+  return await selected.count() === 1 && await selected.and(option).count() === 1 && await conflicting.count() === 0;
+}
+
+async function closeGeminiModePicker(page: Page, option: Locator) {
+  try {
+    await page.keyboard.press("Escape");
+    await option.waitFor({ state: "hidden", timeout: 3_000 });
+  } catch {
+    throw new GeminiModelSelectionError("Could not close the verified Gemini mode picker safely.");
+  }
+}
+
+export async function verifyGemini31Pro(page: Page) {
+  const controls = await openGeminiModePicker(page);
+  if (!await hasExactGeminiSelection(page, controls)) {
+    throw new GeminiModelSelectionError("Gemini 3.1 Pro is unverified: the exact option does not have an unambiguous selected state.");
+  }
+  await closeGeminiModePicker(page, controls.option);
+}
+
+export async function selectGemini31Pro(page: Page) {
+  const controls = await openGeminiModePicker(page);
+  if (await hasExactGeminiSelection(page, controls)) {
+    await closeGeminiModePicker(page, controls.option);
+    return;
+  }
+
+  try {
+    await controls.option.click({ timeout: 10_000 });
+  } catch {
+    throw new GeminiModelSelectionError("Could not select the exact Gemini 3.1 Pro option.");
+  }
+  // Clicking the option can close or rerender the menu. Reopen and obtain
+  // fresh locators so the original click or a generic Pro label is never proof.
+  try {
+    await controls.option.waitFor({ state: "hidden", timeout: 1_000 });
+  } catch {
+    await closeGeminiModePicker(page, controls.option);
+  }
+  await verifyGemini31Pro(page);
+}
+
 export async function openImageGenerationMode(page: Page) {
   const existingComposer = page.locator('textarea, [contenteditable="true"]');
   if (await existingComposer.count() > 0 && await existingComposer.first().isVisible().catch(() => false)) {
@@ -240,20 +319,15 @@ export async function submitPrompt(page: Page, prompt: string) {
   await box.fill(prompt);
   await pause(1_000, "Prompt entered; preparing submission");
 
-  for (const locator of [
+  const button = await firstVisible([
     page.getByRole("button", { name: /send|submit/i }),
     page.locator('button[aria-label="Send message"]'),
     page.locator('button[aria-label*="Send" i]'),
     page.locator('button[type="submit"]'),
-  ]) {
-    try {
-      const button = await firstVisible([locator]);
-      await button.click({ timeout: 10_000 });
-      return;
-    } catch {}
-  }
-
-  await box.press("Enter");
+  ]).catch(() => null);
+  // Once a submission is attempted, any error leaves the outcome uncertain.
+  if (button) await button.click({ timeout: 10_000 });
+  else await box.press("Enter");
 }
 
 export async function largeImages(page: Page): Promise<string[]> {
