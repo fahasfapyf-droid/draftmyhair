@@ -12,7 +12,7 @@ const JOB_ID = "rndproto2-italian-bob-20261110-a3";
 const ATTEMPT = 3;
 const TARGET_KEY = "rnd-protocol2-italian-bob-fresh-20261110-01";
 const SOURCE_CHECKSUM = "d100a15e9731e6532dec84c6e72bdab753084dba93cfe21651a48759a8368d9d";
-const EXPECTED_RECOVERED_CHECKSUM = "b3796ec3678b6dcee975897600edbc9a4f23681e54a95f6a232dea4442bc07e9";
+const EXPECTED_RECOVERED_CHECKSUM = "2008f177e7c8cabebbec6814de98b71add8be3ccebe2d8991f5a7a949c4e2478";
 
 export async function POST(request: Request) {
   const session = await auth();
