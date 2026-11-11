@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       await del(blob.url, { token: requireRndBlobToken() }).catch(() => undefined);
       return NextResponse.json({ error: "Reconciliation fence rejected the image." }, { status: 409 });
     }
-    const report = await reportRndAttempt(new Request("https://internal.local/api/rnd/worker/report", {
+    const report = await reportRndAttempt(new Request(new URL("/api/rnd/worker/report", request.url), {
       method: "POST", headers: {
         authorization: `Bearer ${process.env.RND_WORKER_TOKEN ?? ""}`,
         "content-type": "application/json",
