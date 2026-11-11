@@ -50,8 +50,7 @@ export async function POST(request: Request) {
     : null;
   const isUncertain = attempt.errorCode === "RND_SUBMISSION_UNCERTAIN" && !attempt.artifactId && !attempt.submittedAt;
   const isKnownWrongSourceAttachment = attempt.errorCode === "RND_SUBMITTED" && Boolean(attempt.submittedAt) &&
-    existingAsset?.kind === "GENERATED" && existingAsset.checksum === SOURCE_CHECKSUM &&
-    (existingAsset.originalFilename ?? "").toLowerCase().includes("007 original");
+    existingAsset?.kind === "GENERATED" && existingAsset.checksum === SOURCE_CHECKSUM;
   if (!isUncertain && !isKnownWrongSourceAttachment) {
     return NextResponse.json({ error: "Attempt is neither uncertain nor the exact known source-image misattachment; no changes made." }, { status: 409 });
   }
