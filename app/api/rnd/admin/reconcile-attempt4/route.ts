@@ -12,7 +12,7 @@ const JOB_ID = "rndproto2-italian-bob-20261110-a3";
 const ATTEMPT = 4;
 const TARGET_KEY = "rnd-protocol2-italian-bob-fresh-20261110-01";
 const SOURCE_CHECKSUM = "d100a15e9731e6532dec84c6e72bdab753084dba93cfe21651a48759a8368d9d";
-const EXPECTED_RECOVERED_CHECKSUM = "d764ab74a490940f948992d2b94492a8979451f8cad75626afb2269c8f2b52aa";
+const EXPECTED_RECOVERED_CHECKSUM = "c8b618f1d6138682cd0a8c0b55867855848a6907bac27127c5191fc891525d3d";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -114,4 +114,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Outcome uncertain; preserve the artifact and inspect the attempt before retrying." }, { status: 500 });
   }
 }
+
 
