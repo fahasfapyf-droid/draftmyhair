@@ -485,10 +485,19 @@ export class GeminiCaptureError extends GeminiConversationError {
 const activeCaptures = new WeakSet<Page>();
 const FULL_SIZE_DOWNLOAD = /^(?:download(?: image)? full[- ]size(?: image)?|download original(?: image)?|download image in full size)$/i;
 
-function trustedDownloadUrl(value: string) {
+function trustedDownloadUrl(value: string, pageOrigin: string) {
   try {
     const url = new URL(value);
-    if (url.protocol === "blob:") return url.origin === new URL(GEMINI_URL).origin;
+    const expectedOrigin = new URL(GEMINI_URL).origin;
+    if (pageOrigin !== expectedOrigin) return false;
+    if (url.protocol === "blob:") {
+      // Gemini's native download currently exposes blob:null/<id> from its same-page
+      // download handler. Accept opaque blobs only with the separately verified
+      // Gemini page, exact image-widget control, trusted click and same-page event.
+      const embedded = url.href.slice("blob:".length);
+      if (embedded.startsWith("null/")) return true;
+      return new URL(embedded).origin === expectedOrigin;
+    }
     return url.protocol === "https:" && !url.username && !url.password && !url.port &&
       (url.hostname === "gemini.google.com" || url.hostname.endsWith(".googleusercontent.com"));
   } catch { return false; }
@@ -594,7 +603,7 @@ export async function captureGeneratedImage(page: Page, outputBasePath: string, 
       const downloadPromise = page.waitForEvent("download", { timeout });
       const [download] = await Promise.all([downloadPromise, control.click({ timeout })]);
       checkActive();
-      if (downloads.length !== 1 || download.page() !== page || !trustedDownloadUrl(download.url())) {
+      if (downloads.length !== 1 || download.page() !== page || !trustedDownloadUrl(download.url(), new URL(page.url()).origin)) {
         throw new GeminiCaptureError("RND_CAPTURE_UNEXPECTED_DOWNLOAD", stage);
       }
       await verifyClick();
