@@ -1,3 +1,4 @@
+import { configuredGenerationBudget, generationBudget } from "@/lib/rnd/retry-policy";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -5,7 +6,6 @@ import { readPriorRndArtifactChecksums } from "@/lib/rnd/artifact-checksums";
 import { MAX_RND_INFRASTRUCTURE_RETRIES, requireRndWorker, RND_WORKER_LEASE_SECONDS, RND_WORKER_PROTOCOL_VERSION } from "@/lib/rnd/worker-auth";
 
 export const runtime = "nodejs";
-const MAX_RND_ATTEMPTS = 5;
 export async function POST(request: Request) {
   const authResponse = requireRndWorker(request.headers.get("authorization"));
   if (authResponse) return authResponse;
@@ -13,6 +13,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: "RND_WORKER_PROTOCOL_REQUIRED" }, { status: 409 });
   }
 
+  let globalBudget: number;
+  try { globalBudget = configuredGenerationBudget(); } catch { return NextResponse.json({ code: "RND_INVALID_ATTEMPT_BUDGET" }, { status: 503 }); }
   const workerId = request.headers.get("x-rnd-worker-id")?.trim() || randomUUID();
   const now = new Date();
   const leaseExpiresAt = new Date(now.getTime() + RND_WORKER_LEASE_SECONDS * 1000);
@@ -23,25 +25,25 @@ export async function POST(request: Request) {
     // Stop stale runaway jobs before claiming any more work. The ceiling applies
     // to actual generated attempts, not profile-quota rotations.
     const overLimitJobs = await tx.rnDJob.findMany({
-      where: { status: { in: ["QUEUED", "PROCESSING"] }, attemptCount: { gte: MAX_RND_ATTEMPTS } },
+      where: { status: { in: ["QUEUED", "PROCESSING"] }, attemptCount: { gte: globalBudget } },
       select: { id: true, targetId: true },
     });
     for (const overLimit of overLimitJobs) {
-      await tx.rnDJob.updateMany({
-        where: { id: overLimit.id, status: { in: ["QUEUED", "PROCESSING"] }, attemptCount: { gte: MAX_RND_ATTEMPTS } },
+      const stopped = await tx.rnDJob.updateMany({
+        where: { id: overLimit.id, status: { in: ["QUEUED", "PROCESSING"] }, attemptCount: { gte: globalBudget } },
         data: {
           status: "FAILED",
           leaseOwner: null,
           leaseExpiresAt: null,
           completedAt: now,
           failureCode: "RND_CONVERGENCE_LIMIT",
-          failureMessage: `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`,
+          failureMessage: `R&D stopped after ${globalBudget} attempts without satisfying every hard-pass gate.`,
         },
       });
-      await tx.rnDTarget.update({ where: { id: overLimit.targetId }, data: { status: "FAILED" } });
+      if (stopped.count === 1) await tx.rnDTarget.update({ where: { id: overLimit.targetId }, data: { status: "FAILED" } });
     }
 
-    // R&D generation is convergence-driven. Failed attempts may continue until automated QA reaches the hard-pass gate or no targeted refinement can be compiled.
+    // Visual convergence and infrastructure recovery have separate durable caps.
 
     // Queue priority fix: queued regression work must win before lease recovery.
     // Always prefer genuinely QUEUED work over an expired PROCESSING lease.
@@ -50,11 +52,11 @@ export async function POST(request: Request) {
     const queuedCandidate = await tx.rnDJob.findFirst({
       where: {
         status: "QUEUED",
-        attemptCount: { lt: MAX_RND_ATTEMPTS },
+        attemptCount: { lt: globalBudget },
         OR: [{ nextEligibleAt: null }, { nextEligibleAt: { lte: now } }],
       },
       orderBy: { queuedAt: "desc" },
-      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true },
+      select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true, maxGenerationAttempts: true, infrastructureRetryCount: true },
     });
 
     const candidate =
@@ -62,14 +64,21 @@ export async function POST(request: Request) {
       (await tx.rnDJob.findFirst({
         where: {
           status: "PROCESSING",
-          attemptCount: { lt: MAX_RND_ATTEMPTS },
+          attemptCount: { lt: globalBudget },
           OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
         },
         orderBy: { queuedAt: "desc" },
-        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true },
+        select: { id: true, targetId: true, attemptCount: true, currentPrompt: true, status: true, startedAt: true, maxGenerationAttempts: true, infrastructureRetryCount: true },
       }));
 
     if (!candidate) return null;
+    if (candidate.attemptCount >= generationBudget(candidate.maxGenerationAttempts) || candidate.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+      const code = candidate.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES ? "RND_INFRASTRUCTURE_RETRY_LIMIT" : "RND_CONVERGENCE_LIMIT";
+      const stopped = await tx.rnDJob.updateMany({ where: { id: candidate.id, status: candidate.status, startedAt: candidate.startedAt, attemptCount: candidate.attemptCount },
+        data: { status: "FAILED", leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: code, failureMessage: "R&D durable budget exhausted; no further generation authorized." } });
+      if (stopped.count === 1) await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "FAILED" } });
+      return null;
+    }
 
     const claimStartedAt = new Date(Math.max(now.getTime(), (candidate.startedAt?.getTime() ?? 0) + 1));
     const updated = await tx.rnDJob.updateMany({
@@ -97,7 +106,8 @@ export async function POST(request: Request) {
         data: { infrastructureRetryCount: { increment: 1 } },
         select: { infrastructureRetryCount: true },
       });
-      if (!recovered || recovered.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+      const jobRetry = await tx.rnDJob.update({ where: { id: candidate.id }, data: { infrastructureRetryCount: { increment: 1 } }, select: { infrastructureRetryCount: true } });
+      if (!recovered || recovered.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES || jobRetry.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
         const failureCode = recovered ? "RND_INFRASTRUCTURE_RETRY_LIMIT" : "RND_LEASE_RESERVATION_MISSING";
         const failureMessage = "Expired R&D lease cannot be recovered within the infrastructure retry budget.";
         if (reservation) await tx.rnDAttempt.update({
@@ -120,7 +130,7 @@ export async function POST(request: Request) {
       const failureCode = "RND_SUBMISSION_REQUIRES_RECONCILIATION";
       await tx.rnDAttempt.update({ where: { id: reservation.id }, data: { verdict: "FAILED", errorCode: failureCode } });
       await tx.rnDJob.update({ where: { id: candidate.id }, data: { status: "FAILED", completedAt: now,
-        leaseOwner: null, leaseExpiresAt: null, nextEligibleAt: null, failureCode } });
+        leaseOwner: null, leaseExpiresAt: null, nextEligibleAt: null, failureCode, failureMessage: "Submission outcome is uncertain; administrative reconciliation required, never automatic regeneration." } });
       await tx.rnDTarget.update({ where: { id: candidate.targetId }, data: { status: "FAILED" } });
       return null;
     }

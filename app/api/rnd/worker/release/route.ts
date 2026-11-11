@@ -1,3 +1,4 @@
+import { configuredGenerationBudget, infrastructureBackoff, MAX_INFRASTRUCTURE_RETRIES } from "@/lib/rnd/retry-policy";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
@@ -17,22 +18,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId, x-rnd-worker-id and a valid claimGeneration are required" }, { status: 400 });
   }
 
+  const globalBudget = configuredGenerationBudget();
   const result = await prisma.$transaction(async (tx) => {
     const exists = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { id: true } });
     if (!exists) return { kind: "missing" as const };
-    const released = await tx.$queryRaw<Array<{ id: string; targetId: string }>>`
+    const released = await tx.$queryRaw<Array<{ id: string; targetId: string; status: "QUEUED" | "FAILED"; infrastructureRetryCount: number }>>`
       UPDATE "RnDJob" AS job
-      SET "status" = 'QUEUED', "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "heartbeatAt" = NULL
+      SET "status" = CASE WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} OR job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN 'FAILED'::"RnDJobStatus" ELSE 'QUEUED'::"RnDJobStatus" END,
+          "infrastructureRetryCount" = job."infrastructureRetryCount" + 1,
+          "failureCode" = CASE WHEN job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN 'RND_CONVERGENCE_LIMIT' WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} THEN 'RND_INFRASTRUCTURE_RETRY_LIMIT' ELSE NULL END,
+          "failureMessage" = CASE WHEN job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN 'R&D generation budget exhausted.' WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} THEN 'Unsubmitted claim release budget exhausted.' ELSE NULL END,
+          "completedAt" = CASE WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} OR job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN clock_timestamp() ELSE NULL END,
+          "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "heartbeatAt" = NULL, "nextEligibleAt" = NULL
       WHERE job."id" = ${jobId}
         AND job."status" = 'PROCESSING'
         AND job."leaseOwner" = ${workerId}
         AND job."startedAt" = ${claimGeneration}
         AND job."leaseExpiresAt" > clock_timestamp()
-      RETURNING job."id", job."targetId"
+        AND NOT EXISTS (SELECT 1 FROM "RnDAttempt" AS attempt WHERE attempt."jobId" = job."id" AND attempt."attemptNumber" = job."attemptCount" + 1 AND
+          (attempt."generationStartedAt" IS NOT NULL OR attempt."submittedAt" IS NOT NULL OR attempt."artifactId" IS NOT NULL))
+      RETURNING job."id", job."targetId", job."status", job."infrastructureRetryCount"
     `;
     const job = released[0];
     if (released.length !== 1 || !job) return { kind: "lease" as const };
-    await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED", currentJobId: job.id } });
+    if (job.status === "QUEUED") await tx.rnDJob.update({ where: { id: job.id }, data: { nextEligibleAt: new Date(Date.now() + infrastructureBackoff(job.infrastructureRetryCount)) } });
+    await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: job.status, currentJobId: job.id } });
     return { kind: "ok" as const };
   });
 

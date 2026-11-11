@@ -1,3 +1,6 @@
+import { recallRndPlanningEvidence, formatRndPlanningEvidence, hindsightEnabled } from "@/lib/rnd/hindsight";
+import { requestResearchPlan, formatResearchPlan } from "@/lib/rnd/research-planner";
+import { unsafeResearchText } from "@/lib/rnd/bounded-json";
 import { GoogleGenAI } from "@google/genai";
 import { MASTER_PROMPT } from "@/lib/engine/prompts/master";
 import { MASTER_PROMPT_V2 } from "@/lib/engine/prompts/master-v2";
@@ -50,7 +53,7 @@ const SYSTEM = [
   "Return JSON only.",
 ].join("\n");
 
-async function callModel(instruction: string, currentStylePrompt?: string, defect?: string): Promise<ModelResult> {
+async function callModel(instruction: string, currentStylePrompt?: string, defect?: string, advisory = ""): Promise<ModelResult> {
   const ai = getClient();
   const task = currentStylePrompt
     ? [
@@ -72,22 +75,23 @@ async function callModel(instruction: string, currentStylePrompt?: string, defec
     model: process.env.RND_PROMPT_MODEL ?? "gemini-2.5-flash",
     contents: [{
       role: "user",
-      parts: [{ text: SYSTEM + "\n\n" + task }],
+      parts: [{ text: SYSTEM + "\n\n" + task + (advisory ? "\n\n" + advisory : "") }],
     }],
     config: {
+      httpOptions: { timeout: 15000 },
       responseMimeType: "application/json",
       responseSchema: OUTPUT_SCHEMA,
       maxOutputTokens: 4096,
     },
   });
 
-  const raw = response.text ?? response.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+  const raw = response.text ?? response.candidates?.[0]?.content?.parts?.map(p => p.text ?? "").join("") ?? "";
   if (!raw) throw new Error("Prompt model returned an empty response.");
   const result = JSON.parse(raw) as ModelResult;
-  if (typeof result.stylePrompt !== "string" || result.stylePrompt.trim().length < 80) {
+  if (typeof result.stylePrompt !== "string" || result.stylePrompt.trim().length < 80 || result.stylePrompt.length > 12000 || !isSafeRndStyleBlock(result.stylePrompt, instruction)) {
     throw new Error("Prompt model returned an invalid style-specific prompt.");
   }
-  return { stylePrompt: result.stylePrompt.trim(), revisionNote: result.revisionNote?.trim() ?? "" };
+  return { stylePrompt: result.stylePrompt.trim(), revisionNote: typeof result.revisionNote === "string" && !unsafeResearchText(result.revisionNote) ? result.revisionNote.trim().slice(0,400) : "" };
 }
 
 function compile(stylePrompt: string) {
@@ -107,15 +111,17 @@ function compile(stylePrompt: string) {
   return prompt;
 }
 
-export async function generateAutonomousPrompt(instruction: string) {
+export async function generateAutonomousPrompt(instruction: string, context: { targetKey: string } = { targetKey: "unspecified" }) {
   const clean = instruction.trim();
-  if (!clean) throw new Error("Human hairstyle instruction is required.");
-  const result = await callModel(clean);
+  if (!clean || clean.length > 4000 || context.targetKey.length > 128 || unsafeResearchText(clean)) throw new Error("Invalid human hairstyle objective.");
+  const [history, research] = await Promise.all([recallRndPlanningEvidence({ objective: clean, targetKey: context.targetKey }), requestResearchPlan({ objective: clean, targetKey: context.targetKey })]);
+  const result = await callModel(clean, undefined, undefined, [formatRndPlanningEvidence(history), formatResearchPlan(research.plan)].filter(Boolean).join("\n\n"));
   const prompt = compile(result.stylePrompt);
   return {
     prompt,
     diagnostics: {
       source: "autonomous",
+      planning: { memoryEnabled: hindsightEnabled(), schemaVersion: "dmh.rnd.planning.v1", memory: history, memoryIds: history.map(item => item.id), plannerStatus: research.status, objectiveId: research.objectiveId, researchPlan: research.plan },
       model: process.env.RND_PROMPT_MODEL ?? "gemini-2.5-flash",
       masterPromptVersion: process.env.PROMPT_VERSION?.toLowerCase() ?? "v3-single",
       revisionNote: result.revisionNote,
@@ -150,4 +156,24 @@ export async function optimizeAutonomousPrompt(input: {
       promptLength: prompt.length,
     },
   };
+}
+
+/** Output policy is independent of retrieved text; master bytes are prepended separately. */
+export function isSafeRndStyleBlock(style: string, objective: string): boolean {
+  if (unsafeResearchText(style) || /#\s*(?:master|identity|system|requested hairstyle)|\b(?:qa score|auto.?approv|publish|activate prompt)\b/i.test(style)) return false;
+  for (const sentence of style.split(/[.!;\n]/)) {
+    if (!/\b(?:face|facial|skin|ears?|neck|skull|background|lighting|framing|pose|body)\b/i.test(sentence)) continue;
+    // Preservation language elsewhere must not excuse a positive modification.
+    // Conservatively reject mixed/ambiguous non-hair clauses; the master already
+    // supplies protected-region rules, so style prose need not restate them.
+    for (const action of sentence.matchAll(/\b(?:alter|change|modify|smooth|regenerate|reshape|replace|widen|narrow|lighten|darken)\b/gi)) {
+      const prefix = sentence.slice(0, action.index).trimEnd();
+      if (!/\b(?:do not|don't|never)(?:\s+ever)?$/i.test(prefix)) return false;
+    }
+  }
+  if (!/\b(?:dye|recolou?r|bleach|colou?r change)\b/i.test(objective)) {
+    const colors = style.match(/\b(?:blonde|platinum|auburn|brunette|ginger|black|brown|red|pink|blue|green|grey|gray|silver|white)\b/gi) ?? [];
+    if (colors.some(color => !new RegExp("\\b" + color + "\\b", "i").test(objective))) return false;
+  }
+  return true;
 }

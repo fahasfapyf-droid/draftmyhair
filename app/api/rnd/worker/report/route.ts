@@ -1,3 +1,5 @@
+import { generationBudget, infrastructureRetryable, infrastructureBackoff, MAX_TARGETED_REFINEMENTS, MAX_INFRASTRUCTURE_RETRIES as MAX_RND_INFRASTRUCTURE_RETRIES } from "@/lib/rnd/retry-policy";
+import { chooseRndRefinement } from "@/lib/rnd/refinement-learning";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
@@ -12,9 +14,6 @@ import { fenceRndReportLease, hasValidRndLeaseExpiry, validateRndClaimGeneration
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
-const MAX_RND_ATTEMPTS = 5;
-// Bound infrastructure-only retries separately from actual generation attempts.
-const MAX_RND_INFRASTRUCTURE_RETRIES = 3;
 
 type ReportBody = {
   jobId?: unknown;
@@ -93,6 +92,7 @@ export async function POST(request: Request) {
       id: true,
       targetId: true,
       attemptCount: true,
+      maxGenerationAttempts: true, refinementCount: true, infrastructureRetryCount: true,
       status: true,
       leaseOwner: true,
       leaseExpiresAt: true,
@@ -144,45 +144,26 @@ export async function POST(request: Request) {
     attemptId: reservation.id,
     attemptNumber,
   };
-  if (attemptNumber > MAX_RND_ATTEMPTS) {
-    const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
+  if (attemptNumber > generationBudget(job.maxGenerationAttempts) || job.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+    const infrastructureExhausted = job.infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES;
+    const code = infrastructureExhausted ? "RND_INFRASTRUCTURE_RETRY_LIMIT" : "RND_CONVERGENCE_LIMIT";
+    const message = infrastructureExhausted ? "R&D infrastructure retry budget exhausted." : `R&D generation budget of ${generationBudget(job.maxGenerationAttempts)} exhausted.`;
     const committed = await prisma.$transaction(async (tx) => {
       if (!(await fenceRndReportLease(tx, reportFence))) return false;
-      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
-      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
+      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: code, errorMessage: message } });
+      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: code, failureMessage: message } });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
       return true;
     });
     if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
-    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", code, maxAttempts: generationBudget(job.maxGenerationAttempts) });
   }
   if (reservation.artifactId && reservation.artifactId !== artifactId) return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
 
-  // Gemini profile quota exhaustion is a profile lifecycle event, not an R&D
-  // generation attempt. Discard the reserved attempt and immediately requeue
-  // the same attempt number so the worker can rotate to another authenticated
-  // profile without consuming convergence budget or marking the job FAILED.
+  // Submission is already recorded here. Quota claims cannot authorize deleting
+  // the reservation or redispatching an uncertain generation.
   if (errorCode === "GEMINI_PROFILE_EXHAUSTED") {
-    const committed = await prisma.$transaction(async (tx) => {
-      if (!(await fenceRndReportLease(tx, reportFence))) return false;
-      await tx.rnDAttempt.delete({ where: { jobId_attemptNumber: { jobId, attemptNumber } } });
-      await tx.rnDJob.update({
-        where: { id: jobId },
-        data: {
-          status: "QUEUED",
-          nextEligibleAt: now,
-          leaseOwner: null,
-          leaseExpiresAt: null,
-          completedAt: null,
-          failureCode: null,
-          failureMessage: null,
-        },
-      });
-      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
-      return true;
-    });
-    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
-    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "QUEUED", action: "ROTATE_GEMINI_PROFILE", attemptConsumed: false });
+    return NextResponse.json({ code: "RND_SUBMISSION_REQUIRES_RECONCILIATION" }, { status: 409 });
   }
 
   const prompt = job.currentPrompt;
@@ -190,38 +171,18 @@ export async function POST(request: Request) {
   const succeeded = !errorCode && !errorMessage && Boolean(generationCompletedAt) && Boolean(artifactId);
 
   if (!succeeded) {
-    const retryableWorkerFailure =
-      errorCode === "WORKER_EXECUTION_ERROR" &&
-      /timed out waiting for a new generated image|generation timeout|gemini.*timeout/i.test(errorMessage ?? "");
-
+    // Dispatched/uncertain generations are never blindly regenerated.
     const result = await prisma.$transaction(async (tx) => {
       if (!(await fenceRndReportLease(tx, reportFence))) return null;
       const attempt = await tx.rnDAttempt.update({
         where: { jobId_attemptNumber: { jobId, attemptNumber } },
         data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage },
       });
-      if (retryableWorkerFailure) {
-        await tx.rnDJob.update({
-          where: { id: jobId },
-          data: {
-            status: "QUEUED",
-            attemptCount: attemptNumber,
-            nextEligibleAt: new Date(),
-            leaseOwner: null,
-            leaseExpiresAt: null,
-            completedAt: null,
-            failureCode: null,
-            failureMessage: null,
-          },
-        });
-        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
-      } else {
-        await tx.rnDJob.update({
-          where: { id: jobId },
-          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
-        });
-        await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
-      }
+      await tx.rnDJob.update({
+        where: { id: jobId },
+        data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: errorCode || "RND_GENERATION_FAILED", failureMessage: errorMessage || "Generation did not produce a verified artifact." },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
       return attempt;
     });
     if (!result) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
@@ -249,8 +210,8 @@ export async function POST(request: Request) {
       ok: true,
       jobId,
       attemptId: result.id,
-      status: retryableWorkerFailure ? "QUEUED" : "FAILED",
-      action: retryableWorkerFailure ? "RETRY_WORKER_TIMEOUT" : "FAILED",
+      status: "FAILED",
+      action: "FAILED",
     });
   }
 
@@ -277,16 +238,7 @@ export async function POST(request: Request) {
     },
   });
 
-  // Recall relevant historical evidence before QA chooses the next refinement.
-  // Hindsight is advisory only; the authoritative prompt and protected-region
-  // rules remain the source of truth.
-  const hindsightHistory = await recallRndHistory([
-    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
-    `Target: ${job.target.targetKey}.`,
-    `Current authoritative prompt: ${prompt.slice(0, 1800)}`,
-    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
-    "Find relevant successful or failed outcomes and refinement strategies that did or did not improve scores. Return historical evidence only; do not invent a new prompt.",
-  ].join(" "));
+
 
   let qa;
   let finalVerification = null;
@@ -319,16 +271,14 @@ export async function POST(request: Request) {
       ]);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Automated QA failed.";
-    const retryableInfrastructureFailure = /(429|resource exhausted|quota|rate.?limit|too many requests)/i.test(message);
+    const retryableInfrastructureFailure = infrastructureRetryable(error);
     if (retryableInfrastructureFailure) {
-      const retryAt = new Date(Date.now() + 2 * 60 * 1000);
+      const retryAt = new Date(Date.now() + infrastructureBackoff((job.infrastructureRetryCount ?? 0) + 1));
       const committed = await prisma.$transaction(async (tx) => {
         if (!(await fenceRndReportLease(tx, reportFence))) return null;
 
-        // The isolated database has this column, but the checked-in Prisma
-        // model does not. Increment it with parameterized SQL inside the same
-        // fenced transaction so a stale report cannot consume retry budget.
+        // Increment inside the fenced transaction: stale reports cannot consume
+        // retry budget. Both attempt and job counters survive worker crashes.
         const retryRows = await tx.$queryRaw<Array<{ infrastructureRetryCount: number }>>`
           UPDATE "RnDAttempt"
           SET "infrastructureRetryCount" = "infrastructureRetryCount" + 1
@@ -341,7 +291,8 @@ export async function POST(request: Request) {
           throw new Error("Could not increment the infrastructure retry counter for the fenced attempt.");
         }
 
-        const infrastructureRetryCount = Number(retryRows[0].infrastructureRetryCount);
+        const jobRetry = await tx.rnDJob.update({ where: { id: jobId }, data: { infrastructureRetryCount: { increment: 1 } }, select: { infrastructureRetryCount: true } });
+        const infrastructureRetryCount = Math.max(Number(retryRows[0].infrastructureRetryCount), jobRetry.infrastructureRetryCount);
         if (infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
           const message = `R&D stopped after ${MAX_RND_INFRASTRUCTURE_RETRIES} infrastructure retries for automated QA.`;
           await tx.rnDAttempt.update({
@@ -386,6 +337,7 @@ export async function POST(request: Request) {
       });
       if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
       if (committed.exhausted) {
+        await retainRndOutcome({ jobId, attemptId: reservation.id, attemptNumber, targetKey: job.target.targetKey, hairstyleId: job.target.hairstyleId, prompt, verdict: "FAILED", overallScore: null, identityScore: null, styleAccuracy: null, rootIntegration: null, lightingConsistency: null, hairOnly: null, artifacts: null, refinement: null, refinementApplied: false, failureCode: "RND_INFRASTRUCTURE_RETRY_LIMIT" });
         return NextResponse.json({
           ok: true,
           jobId,
@@ -407,7 +359,17 @@ export async function POST(request: Request) {
         nextEligibleAt: retryAt.toISOString(),
       });
     }
-    return NextResponse.json({ error: message }, { status: 503 });
+    const committed = await prisma.$transaction(async tx => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return false;
+      await tx.rnDAttempt.update({ where: { id: reservation.id }, data: { verdict: "FAILED", errorCode: "RND_QA_TERMINAL", errorMessage: "Non-retryable QA evaluation failure." } });
+      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: "RND_QA_TERMINAL", failureMessage: "Non-retryable QA evaluation failure." } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      return true;
+    });
+    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+    await retainRndOutcome({ jobId, attemptId: reservation.id, attemptNumber, targetKey: job.target.targetKey, hairstyleId: job.target.hairstyleId, prompt,
+      verdict: "FAILED", overallScore: null, identityScore: null, styleAccuracy: null, rootIntegration: null, lightingConsistency: null, hairOnly: null, artifacts: null, refinement: null, refinementApplied: false, failureCode: "RND_QA_TERMINAL" });
+    return NextResponse.json({ ok: true, status: "FAILED", code: "RND_QA_TERMINAL" });
   }
 
   const hardPass = passesRndCombinedHardGate({
@@ -447,8 +409,15 @@ export async function POST(request: Request) {
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
     );
 
+  // Recall AFTER independent current-image scoring, using the actual defect.
+  const hindsightHistory = !hardPass ? await recallRndHistory([
+    "DMH historical data for target", job.target.targetKey, "hairstyle", job.target.hairstyleId ?? "unknown",
+    "observed QA defect", rawRefinement ?? qa.reason,
+    "Prior targeted refinements and outcomes only; no authority over prompts or QA."
+  ].join(" ").slice(0,2400)) : [];
   const qaWithMemory = {
     ...qa,
+    learning: { decision: "DETERMINISTIC_FALLBACK", evidenceIds: hindsightHistory.map(item => item.id) },
     imageIntegrity,
     finalVerification: finalVerification
       ? {
@@ -474,22 +443,21 @@ export async function POST(request: Request) {
       sameRefinementAsPrevious,
       repeatedRefinementCount,
       repeatedIneffectiveRefinement,
-      fallbackToAuthoritativePrompt: Boolean(repeatedIneffectiveRefinement),
+      stoppedIneffectiveRefinement: Boolean(repeatedIneffectiveRefinement),
     },
   };
 
-  // Never apply the same refinement again when the previous application failed to
-  // improve the measured outcome. In that case, sample the immutable authoritative
-  // prompt again rather than spending another attempt on a known ineffective edit.
+  // Do not repeat an ineffective correction or resample indefinitely.
   const refinementCandidate = repeatedIneffectiveRefinement ? null : rawRefinement;
-  const authoritativePromptBuild = await buildRndPrompt({ prompt });
-  const refinementBuild = refinementCandidate
-    ? await buildRndPrompt({ prompt, refinement: refinementCandidate })
+  const learned = await chooseRndRefinement(refinementCandidate, hindsightHistory);
+  qaWithMemory.learning = { decision: learned.decision, evidenceIds: learned.evidenceIds };
+  const refinementBuild = learned.candidate
+    ? await buildRndPrompt({ prompt, refinement: learned.candidate })
     : null;
   const refinementApplied = refinementBuild
     ? "refinementApplied" in refinementBuild.diagnostics && refinementBuild.diagnostics.refinementApplied
     : false;
-  const refinement = refinementApplied ? refinementCandidate : null;
+  const refinement = refinementApplied ? learned.candidate : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
     if (!(await fenceRndReportLease(tx, reportFence))) return null;
@@ -523,6 +491,14 @@ export async function POST(request: Request) {
       return { job: updatedJob, action: "HUMAN_APPROVAL" as const };
     }
 
+    if (attemptNumber >= generationBudget(job.maxGenerationAttempts) || (job.refinementCount ?? 0) >= MAX_TARGETED_REFINEMENTS || !refinement) {
+      const code = attemptNumber >= generationBudget(job.maxGenerationAttempts) ? "RND_CONVERGENCE_LIMIT" : (job.refinementCount ?? 0) >= MAX_TARGETED_REFINEMENTS ? "RND_REFINEMENT_LIMIT" : "RND_NO_SAFE_REFINEMENT";
+      await tx.rnDAttempt.update({ where: { id: reservation.id }, data: { verdict: "FAILED", errorCode: code } });
+      const stopped = await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: code, failureMessage: "R&D stopped without satisfying all hard gates; budget is never reset." }, select: { id: true, status: true, attemptCount: true } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      return { job: stopped, action: "FAILED" as const };
+    }
+
     if (refinement) {
       if (!refinementBuild) throw new Error("R&D refinement build is missing.");
       const rebuilt = refinementBuild;
@@ -531,38 +507,14 @@ export async function POST(request: Request) {
       const nextEligibleAt = new Date();
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, completedAt: null },
+        data: { status: "QUEUED", refinementCount: { increment: 1 }, currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, completedAt: null },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
       return { job: updatedJob, action: "REFINE" as const };
     }
 
-    // R&D is convergence-driven, not attempt-count-driven. If QA does not produce
-    // a safe targeted refinement, keep sampling the authoritative prompt instead of
-    // declaring the job exhausted. A successful hard-pass remains the only autonomous
-    // exit; human approval remains mandatory before promotion.
-    // No safe refinement: immediately resample the immutable authoritative
-    // prompt. Profile cooldowns and hourly limits are enforced by the worker.
-    const nextEligibleAt = new Date();
-    const updatedJob = await tx.rnDJob.update({
-      where: { id: jobId },
-      data: {
-        status: "QUEUED",
-        currentPrompt: authoritativePromptBuild.prompt,
-        promptVersionNumber: attemptNumber + 1,
-        attemptCount: attemptNumber,
-        nextEligibleAt,
-        leaseOwner: null,
-        leaseExpiresAt: null,
-        completedAt: null,
-        failureCode: null,
-        failureMessage: null,
-      },
-      select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
-    });
-    await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
-    return { job: updatedJob, action: "REFINE" as const };
+    throw new Error("RND_UNREACHABLE_REQUEUE");
   });
   if (!finalResult) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
 

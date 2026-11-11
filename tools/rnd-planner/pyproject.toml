@@ -1,0 +1,6 @@
+[project]
+name = "dmh-rnd-planner-boundary"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+description = "Fail-closed authenticated research-plan boundary; DeerFlow Harness not yet integrated"

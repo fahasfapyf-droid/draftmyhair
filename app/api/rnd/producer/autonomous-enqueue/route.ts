@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireRndProducer } from "@/lib/rnd/producer-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
+import { configuredGenerationBudget } from "@/lib/rnd/retry-policy";
 import { generateAutonomousPrompt } from "@/lib/rnd/autonomous-prompt";
 
 export const runtime = "nodejs";
@@ -22,27 +24,36 @@ export async function POST(request: Request) {
   if (image.size <= 0 || image.size > MAX_SOURCE_BYTES) return NextResponse.json({ error: "source image size is outside the allowed range" }, { status: 413 });
   if (!campaignName || !targetKey || !instruction) return NextResponse.json({ error: "campaignName, targetKey and instruction are required" }, { status: 400 });
 
+  if (campaignName.length > 200 || targetKey.length > 128 || instruction.length > 4000) return NextResponse.json({ error: "R&D objective fields exceed limits." }, { status: 400 });
+  const createdByUserId = process.env.RND_PRODUCER_USER_ID?.trim();
+  if (!createdByUserId) return NextResponse.json({ error: "R&D producer identity is not configured." }, { status: 503 });
+  let budget: number;
+  let blobToken: string;
+  try { budget = configuredGenerationBudget(); blobToken = requireRndBlobToken(); }
+  catch { return NextResponse.json({ error: "R&D isolated storage or budget is not configured safely." }, { status: 503 }); }
+
   const buffer = Buffer.from(await image.arrayBuffer());
   const checksum = createHash("sha256").update(buffer).digest("hex");
   const extension = image.type === "image/jpeg" ? "jpg" : image.type === "image/webp" ? "webp" : "png";
   const storageKey = "rnd/sources/" + checksum + "." + extension;
-  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
-  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type });
+
 
   let built;
   try {
-    built = await generateAutonomousPrompt(instruction);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Autonomous prompt generation failed." }, { status: 503 });
+    built = await generateAutonomousPrompt(instruction, { targetKey });
+  } catch {
+    return NextResponse.json({ error: "Autonomous prompt generation unavailable or rejected." }, { status: 503 });
   }
 
-  const createdByUserId = process.env.RND_PRODUCER_USER_ID?.trim();
-  if (!createdByUserId) return NextResponse.json({ error: "R&D producer identity is not configured." }, { status: 503 });
+
 
   const existingHairstyle = await prisma.hairstyle.findFirst({
     where: { promptKey: targetKey, isActive: true },
     select: { id: true },
   });
+
+  const existingSource = await prisma.rnDAsset.findUnique({ where: { storageKey }, select: { id: true, blobUrl: true } });
+  const blob = existingSource ? null : await put(storageKey, buffer, { access: "private", addRandomSuffix: false, contentType: image.type, token: blobToken });
 
   const result = await prisma.$transaction(async (tx) => {
     const campaign = await tx.rnDCampaign.create({
@@ -73,6 +84,8 @@ export async function POST(request: Request) {
         status: "QUEUED",
         promptVersionNumber: 1,
         currentPrompt: built.prompt,
+        maxGenerationAttempts: budget,
+        planningDiagnostics: built.diagnostics.planning,
         queuedAt: new Date(),
       },
     });

@@ -729,6 +729,9 @@ model RnDJob {
   currentPrompt       String       @db.Text
   attemptCount        Int          @default(0)
   refinementCount     Int          @default(0)
+  maxGenerationAttempts Int @default(5)
+  infrastructureRetryCount Int @default(0)
+  planningDiagnostics Json?
   leaseOwner          String?
   leaseExpiresAt      DateTime?
   heartbeatAt         DateTime?

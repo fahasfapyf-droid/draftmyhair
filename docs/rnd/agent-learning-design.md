@@ -66,3 +66,18 @@ Run only offline mocks, local authenticated HTTP contract tests, static checks,
 Python tests, TypeScript/lint and an external credential-free build snapshot.
 Do not deploy, run Gemini/Vertex/Hindsight providers, migrate, mutate jobs, merge
 or enable unattended execution. Open a review PR only if required tests pass.
+
+## Inherited boundary and release limitations
+
+The canonical R&D approval handler is ADMIN-only and imports DRAFT/TESTING only.
+The pre-existing Production `/api/internal/prompt-promote` route is deliberately
+outside this issue's allowed changes: it trusts a shared secret and caller source
+claims without independently verifying human approval. This patch neither calls
+it nor grants its secret to memory/planner. Do not infer global production
+promotion security from these R&D tests. Hardening that existing Production
+endpoint requires a separately scoped change before claiming that guarantee.
+
+Migration execution, actual PostgreSQL races, live research providers and real
+Gemini execution are not validated here. A review PR is not runtime authorization.
+Before pushing this branch, establish that Git push/PR creation cannot trigger a
+Vercel auto-deployment; the user has prohibited deployment for this task.

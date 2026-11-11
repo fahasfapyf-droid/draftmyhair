@@ -150,7 +150,7 @@ async function main() {
   const artifactSource = readFileSync("app/api/rnd/worker/artifacts/route.ts", "utf8");
   const heartbeatSource = readFileSync("app/api/rnd/worker/heartbeat/route.ts", "utf8");
   const earlyLeaseCheck = reportSource.indexOf("!hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime)");
-  const hindsightRecall = reportSource.indexOf("const hindsightHistory = await recallRndHistory");
+  const hindsightRecall = reportSource.indexOf("const hindsightHistory = !hardPass ? await recallRndHistory");
   assert.ok(earlyLeaseCheck >= 0, "report route must reject missing, invalid, and expired leases in its early validation");
   assert.ok(hindsightRecall > earlyLeaseCheck, "lease validation must happen before Hindsight recall and QA processing");
   assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "worker artifact route must reject missing, invalid, and expired leases before upload");
@@ -222,7 +222,7 @@ async function main() {
   // reserved attempt, and must stop requeueing after three retries.
   const retryReportSource = readFileSync("app/api/rnd/worker/report/route.ts", "utf8");
   const infrastructureBranchStart = retryReportSource.indexOf("if (retryableInfrastructureFailure)");
-  const infrastructureBranchEnd = retryReportSource.indexOf('return NextResponse.json({ error: message }, { status: 503 });', infrastructureBranchStart);
+  const infrastructureBranchEnd = retryReportSource.indexOf('const committed = await prisma.$transaction(async tx => {', infrastructureBranchStart);
   assert.ok(infrastructureBranchStart >= 0 && infrastructureBranchEnd > infrastructureBranchStart, "QA infrastructure retry branch must exist");
   const infrastructureBranch = retryReportSource.slice(infrastructureBranchStart, infrastructureBranchEnd);
   const infrastructureFencePosition = infrastructureBranch.indexOf("fenceRndReportLease(tx, reportFence)");
@@ -231,7 +231,8 @@ async function main() {
   assert.ok(infrastructureCounterPosition > infrastructureFencePosition, "counter increments only after the lease fence");
   assert.match(infrastructureBranch, /WHERE "id" = \$\{reservation\.id\}[\s\S]*AND "jobId" = \$\{jobId\}[\s\S]*AND "attemptNumber" = \$\{attemptNumber\}/, "counter update must target the exact attempt reservation");
   assert.match(infrastructureBranch, /if \(retryRows\.length !== 1\)/, "missing retry-counter row must abort the transaction");
-  assert.match(retryReportSource, /const MAX_RND_INFRASTRUCTURE_RETRIES = 3;/, "infrastructure retry ceiling must be explicit");
+  assert.match(readFileSync("lib/rnd/retry-policy.ts", "utf8"), /const MAX_INFRASTRUCTURE_RETRIES = 3;/, "infrastructure retry ceiling must be explicit");
+  assert.match(retryReportSource, /MAX_INFRASTRUCTURE_RETRIES as MAX_RND_INFRASTRUCTURE_RETRIES/, "report uses the shared retry ceiling");
   assert.match(infrastructureBranch, /infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES/, "limit must be checked after increment");
   assert.match(infrastructureBranch, /action: "INFRASTRUCTURE_RETRY_LIMIT_REACHED"/, "exhaustion response must be explicit");
   assert.match(infrastructureBranch, /action: "RETRY_QA_INFRASTRUCTURE"/, "retry response must be explicit");

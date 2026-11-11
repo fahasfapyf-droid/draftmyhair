@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 export { RND_WORKER_PROTOCOL_VERSION } from "./worker-protocol";
 export const RND_WORKER_LEASE_SECONDS = 120;
-export const MAX_RND_INFRASTRUCTURE_RETRIES = 3;
+export { MAX_INFRASTRUCTURE_RETRIES as MAX_RND_INFRASTRUCTURE_RETRIES } from "./retry-policy";
 
 function configuredToken() {
   return process.env.RND_WORKER_TOKEN?.trim() || null;

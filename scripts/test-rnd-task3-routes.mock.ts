@@ -1,3 +1,4 @@
+import * as retryPolicy from "../lib/rnd/retry-policy";
 /**
  * Deterministic handler-level regression tests. Uses real route handlers with
  * mocked Prisma/auth/Blob, and NEVER connects to a database or real storage.
@@ -23,6 +24,7 @@ async function handler(filename: string, modules: Record<string, unknown>): Prom
   const mockRequire = (name: string) => {
     if (Object.prototype.hasOwnProperty.call(modules, name)) return modules[name];
     if (name === "next/server") return next;
+    if (name === "@/lib/rnd/retry-policy") return retryPolicy;
     if (name === "@/lib/rnd/artifact-checksums") return { readPriorRndArtifactChecksums };
     if (name.startsWith("@/")) return {};
     return nativeRequire(name);

@@ -1,0 +1,27 @@
+{
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "objectiveId", "geometry", "distinctions", "hypotheses", "evidence"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["dmh.rnd.research.v1"] },
+    "objectiveId": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+    "geometry": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+    "distinctions": { "type": "array", "maxItems": 5, "items": {
+      "type": "object", "additionalProperties": false, "required": ["style", "distinction"], "properties": {
+        "style": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "distinction": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    } },
+    "hypotheses": { "type": "array", "maxItems": 5, "items": {
+      "type": "object", "additionalProperties": false, "required": ["hypothesis", "observation"], "properties": {
+        "hypothesis": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "observation": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    } },
+    "evidence": { "type": "array", "maxItems": 8, "items": {
+      "type": "object", "additionalProperties": false, "required": ["referenceId", "summary"], "properties": {
+        "referenceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    } }
+  }
+}

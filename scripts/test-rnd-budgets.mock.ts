@@ -1,0 +1,161 @@
+/** Real handlers + deterministic in-memory I/O, NOT PostgreSQL concurrency tests. */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { transform } from "esbuild";
+import * as budget from "../lib/rnd/retry-policy";
+import { passesRndCombinedHardGate } from "../lib/rnd/qa-hard-gate";
+import { passesRndHardIntegrityGate } from "../lib/rnd/image-integrity";
+
+const now = new Date("2026-11-11T12:00:00.000Z");
+const good = { verdict: "APPROVE", overall: 9.8, identity: 9.8, styleAccuracy: 9.8, rootIntegration: 9.8, lightingConsistency: 9.8, hairOnly: "PASS", artifacts: "NONE", reason: "Valid fixture", refinement: "Reduce bulky side volume." };
+let state: any;
+let providerFailure: string | null = null;
+let pass = false;
+let fence = true;
+let retained = 0;
+let reservations = 0;
+function reset(attempt = 1) {
+  providerFailure = null; pass = false; fence = true; retained = 0; reservations = 0;
+  state = {
+    job: { id: "job", targetId: "target", status: "PROCESSING", attemptCount: attempt - 1, maxGenerationAttempts: 5,
+      refinementCount: 0, infrastructureRetryCount: 0, leaseOwner: "worker", startedAt: now, leaseExpiresAt: new Date(Date.now() + 120000),
+      currentPrompt: "Immutable bob prompt", target: { id: "target", targetKey: "bob", targetType: "SINGLE", hairstyleId: null, sourceAsset: {} } },
+    attempt: { id: "attempt", jobId: "job", attemptNumber: attempt, promptRevision: "reserved-v2", submittedAt: now,
+      generationStartedAt: now, generationCompletedAt: now, artifactId: "artifact", errorCode: "RND_SUBMITTED", infrastructureRetryCount: 0 },
+    target: { status: "PROCESSING" },
+  };
+}
+function apply(row: any, data: any) { for (const [key, value] of Object.entries(data)) row[key] = value && typeof value === "object" && "increment" in value ? (row[key] ?? 0) + (value as any).increment : value; return { ...row }; }
+const tx: any = {
+  rnDJob: {
+    findUnique: async () => ({ ...state.job }),
+    findMany: async ({ where }: any) => where.attemptCount && state.job.attemptCount >= where.attemptCount.gte && ["QUEUED", "PROCESSING"].includes(state.job.status) ? [{ id: "job", targetId: "target" }] : [],
+    findFirst: async ({ where }: any) => state.job.status === where.status ? { ...state.job } : null,
+    updateMany: async ({ where, data }: any) => {
+      if (where.status && typeof where.status === "string" && where.status !== state.job.status) return { count: 0 };
+      if (where.attemptCount && typeof where.attemptCount === "number" && where.attemptCount !== state.job.attemptCount) return { count: 0 };
+      if (where.OR && !["QUEUED", "PROCESSING"].includes(state.job.status)) return { count: 0 };
+      apply(state.job, data); return { count: 1 };
+    },
+    update: async ({ data }: any) => apply(state.job, data),
+  },
+  rnDAttempt: {
+    findUnique: async () => state.attempt ? { ...state.attempt } : null,
+    findFirst: async () => null, findMany: async () => [], count: async () => 0,
+    update: async ({ data }: any) => apply(state.attempt, data),
+    create: async () => { reservations++; return { id: "new-attempt" }; },
+  },
+  rnDTarget: { update: async ({ data }: any) => apply(state.target, data) },
+  $queryRaw: async (strings: TemplateStringsArray) => {
+    const sql = strings.join("?");
+    if (sql.includes('UPDATE "RnDAttempt"')) return [{ infrastructureRetryCount: ++state.attempt.infrastructureRetryCount }];
+    return [];
+  },
+};
+const prisma: any = { ...tx, rnDAsset: { findUnique: async () => ({ id: "artifact", kind: "GENERATED", storageKey: `rnd/attempts/job/${state.attempt.attemptNumber}-image`, blobUrl: "fixture-only", mimeType: "image/png" }) },
+  $transaction: async (fn: any) => { const before = structuredClone(state); try { return await fn(tx); } catch (error) { state = before; throw error; } } };
+async function route(file: string, extra: Record<string, unknown> = {}) {
+  const modules: Record<string, unknown> = {
+    "next/server": { NextResponse: { json: (v: unknown, init?: ResponseInit) => Response.json(v, init) } },
+    "@/lib/prisma": { prisma }, "@/lib/rnd/retry-policy": budget,
+    "@/lib/rnd/worker-auth": { requireRndWorker: () => null, MAX_RND_INFRASTRUCTURE_RETRIES: 3, RND_WORKER_LEASE_SECONDS: 120, RND_WORKER_PROTOCOL_VERSION: "2" },
+    "@/lib/rnd/artifact-checksums": { readPriorRndArtifactChecksums: async () => [] },
+    "@/lib/rnd/report-lease-fence": { fenceRndReportLease: async () => fence, hasValidRndLeaseExpiry: () => true,
+      validateRndClaimGeneration: () => ({ status: "valid", generation: now }), parseRndClaimGeneration: () => now },
+    "@/lib/rnd/blob-storage": { requireRndBlobToken: () => "fixture-only" },
+    "@/lib/rnd/source-asset": { fetchRndSourceAsset: async () => ({ buffer: Buffer.from("s"), mimeType: "image/png" }) },
+    "@/lib/rnd/qa": { runRndQa: async (...args: any[]) => { assert.equal(args.length, 5, "no memory enters primary QA"); if (providerFailure) throw new Error(providerFailure); return good; },
+      runRndFinalVerification: async (...args: any[]) => { assert.equal(args.length, 5, "no memory enters final QA"); return { ...good, verdict: pass ? "PASS" : "REJECT" }; } },
+    "@/lib/rnd/image-integrity": { passesRndHardIntegrityGate, runRndImageIntegrityCheck: async () => ({ canvasMatch: true, faceTexturePreservationPass: true }) },
+    "@/lib/rnd/qa-hard-gate": { passesRndCombinedHardGate },
+    "@/lib/rnd/prompt": { buildRndPrompt: async ({ prompt, refinement }: any) => ({ prompt: prompt + (refinement ? "\nSafe refinement" : ""), diagnostics: { refinementApplied: Boolean(refinement) } }) },
+    "@/lib/rnd/hindsight": { recallRndHistory: async () => [], hindsightEnabled: () => false, retainRndOutcome: async () => { retained++; } },
+    "@/lib/rnd/refinement-learning": { chooseRndRefinement: async (candidate: string) => ({ candidate, decision: "DETERMINISTIC_FALLBACK", evidenceIds: [] }) },
+    ...extra,
+  };
+  const output = (await transform(readFileSync(file, "utf8"), { loader: "ts", format: "cjs", target: "node20" })).code;
+  const mod = { exports: {} as Record<string, any> };
+  new Function("require", "module", "exports", "setTimeout", output)((name: string) => {
+    if (!(name in modules)) throw new Error("Unmocked module: " + name);
+    return modules[name];
+  }, mod, mod.exports, () => 0);
+  return mod.exports.POST;
+}
+function req(body: unknown = {}) { return new Request("https://fixture.invalid/api/rnd/worker", { method: "POST", headers: {
+  "content-type": "application/json", "x-rnd-worker-id": "worker", "x-rnd-worker-protocol": "2",
+}, body: JSON.stringify(body) }); }
+const reportRequest = (extra: object = {}) => req({ jobId: "job", attemptNumber: state.attempt.attemptNumber, claimGeneration: now.toISOString(), artifactId: "artifact", ...extra });
+
+async function main() {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("fixture generated bytes");
+  try {
+    const claim = await route("app/api/rnd/worker/claim/route.ts", { "node:crypto": { randomUUID: () => "worker" } });
+    const report = await route("app/api/rnd/worker/report/route.ts");
+    for (const max of [2, 5]) {
+      reset(max + 1); state.job.status = "QUEUED"; state.job.maxGenerationAttempts = max;
+      assert.equal((await (await claim(req())).json()).job, null);
+      assert.equal(state.job.status, "FAILED"); assert.equal(state.target.status, "FAILED"); assert.equal(reservations, 0);
+      const snapshot = structuredClone(state);
+      assert.equal((await (await claim(req())).json()).job, null); assert.deepEqual(state, snapshot, "terminal work is never claimed or reset");
+    }
+    reset(2); state.job.infrastructureRetryCount = 3; state.attempt.infrastructureRetryCount = 3;
+    assert.equal((await (await claim(req())).json()).job, null);
+    assert.equal(state.job.failureCode, "RND_INFRASTRUCTURE_RETRY_LIMIT"); assert.equal(state.target.status, "FAILED"); assert.equal(state.job.attemptCount, 1);
+    reset(2);
+    const resumed = await (await claim(req())).json();
+    assert.equal(resumed.job.resumeArtifactId, "artifact"); assert.equal(reservations, 0); assert.equal(state.job.attemptCount, 1, "reclaim reuses the artifact without a new generation");
+    reset(2); state.attempt.artifactId = null; state.attempt.generationCompletedAt = null; state.attempt.errorCode = "RND_SUBMISSION_UNCERTAIN";
+    assert.equal((await (await claim(req())).json()).job, null); assert.equal(state.job.status, "FAILED"); assert.equal(reservations, 0, "uncertainty is never a clean reservation");
+    reset(5);
+    await report(reportRequest());
+    assert.equal(state.job.status, "FAILED"); assert.equal(state.job.failureCode, "RND_CONVERGENCE_LIMIT"); assert.equal(state.target.status, "FAILED"); assert.equal(state.job.attemptCount, 5);
+    reset(1); await report(reportRequest());
+    assert.equal(state.job.status, "QUEUED"); assert.equal(state.job.refinementCount, 1); assert.equal(state.job.attemptCount, 1);
+    state.job.status = "PROCESSING"; state.job.leaseOwner = "worker";
+    state.attempt = { ...state.attempt, attemptNumber: 2, promptRevision: "reserved-v2", errorCode: "RND_SUBMITTED", submittedAt: now, generationStartedAt: now, generationCompletedAt: now };
+    await report(reportRequest());
+    assert.equal(state.job.status, "FAILED"); assert.equal(state.job.failureCode, "RND_REFINEMENT_LIMIT"); assert.equal(state.job.refinementCount, 1);
+    reset(5); pass = true; await report(reportRequest());
+    assert.equal(state.job.status, "HUMAN_APPROVAL", "last permitted attempt can pass, but never skips human approval");
+    reset(1); providerFailure = "HTTP 503 temporarily unavailable";
+    for (let count = 1; count <= 4; count++) {
+      state.job.status = "PROCESSING";
+      state.job.leaseOwner = "worker";
+      await report(reportRequest());
+      assert.equal(state.job.infrastructureRetryCount, count);
+      assert.equal(state.job.status, count <= 3 ? "QUEUED" : "FAILED");
+      assert.equal(state.job.attemptCount, count <= 3 ? 0 : 1);
+      assert.equal(state.attempt.artifactId, "artifact"); assert.equal(reservations, 0);
+    }
+    assert.equal(state.job.failureCode, "RND_INFRASTRUCTURE_RETRY_LIMIT"); assert.equal(state.target.status, "FAILED"); assert.equal(retained, 1);
+    reset(1); providerFailure = "HTTP 401 private provider information";
+    assert.equal((await report(reportRequest())).status, 200); assert.equal(state.job.failureCode, "RND_QA_TERMINAL"); assert.equal(state.job.status, "FAILED"); assert.equal(retained, 1);
+    reset(1); fence = false; providerFailure = "HTTP 503";
+    assert.equal((await report(reportRequest())).status, 409); assert.equal(state.job.infrastructureRetryCount, 0, "stale report cannot consume retry budget");
+    reset(1);
+    assert.equal((await report(reportRequest({ errorCode: "GEMINI_PROFILE_EXHAUSTED" }))).status, 409);
+    assert.equal(state.attempt.artifactId, "artifact", "quota report cannot delete/reset submitted artifact state");
+
+    reset(1); state.attempt.generationStartedAt = null; state.attempt.submittedAt = null; state.attempt.artifactId = null;
+    const releaseTx = { ...tx, $queryRaw: async (strings: TemplateStringsArray) => {
+      const sql = strings.join("?");
+      assert.ok(sql.includes("NOT EXISTS") && sql.includes('attempt."generationStartedAt" IS NOT NULL'), "release SQL explicitly excludes dispatched attempts");
+      if (state.job.status !== "PROCESSING" || state.attempt.generationStartedAt || state.attempt.submittedAt || state.attempt.artifactId) return [];
+      state.job.infrastructureRetryCount++;
+      state.job.status = state.job.infrastructureRetryCount > 3 ? "FAILED" : "QUEUED";
+      return [{ id: "job", targetId: "target", status: state.job.status, infrastructureRetryCount: state.job.infrastructureRetryCount }];
+    } };
+    const release = await route("app/api/rnd/worker/release/route.ts", { "@/lib/prisma": { prisma: { $transaction: async (fn: any) => fn(releaseTx) } } });
+    for (let count = 1; count <= 4; count++) {
+      state.job.status = "PROCESSING"; await release(req({ jobId: "job", claimGeneration: now.toISOString() }));
+      assert.equal(state.job.infrastructureRetryCount, count); assert.equal(state.job.attemptCount, 0); assert.equal(state.target.status, count <= 3 ? "QUEUED" : "FAILED");
+    }
+    assert.equal((await release(req({ jobId: "job", claimGeneration: now.toISOString() }))).status, 409);
+    state.job.status = "PROCESSING"; state.attempt.generationStartedAt = now;
+    assert.equal((await release(req({ jobId: "job", claimGeneration: now.toISOString() }))).status, 409);
+    assert.equal(state.job.infrastructureRetryCount, 4, "post-dispatch release cannot reset or consume a fresh budget");
+    console.log("PASS real-handler budget mocks: per-job/configured attempt ceilings, terminal exhaustion, one refinement, artifact-only recovery, uncertainty, bounded QA/reclaim/release retries, stale fences and quota reset rejection. NOT PostgreSQL concurrency evidence.");
+  } finally { globalThis.fetch = originalFetch; }
+}
+void main().catch(error => { console.error(error); process.exitCode = 1; });
