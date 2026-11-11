@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { type ElementHandle, type Locator, type Page } from "playwright";
-import { writeFile } from "node:fs/promises";
+import { type Download, type ElementHandle, type JSHandle, type Locator, type Page } from "playwright";
+import { mkdir, mkdtemp, readFile, rename, stat } from "node:fs/promises";
+import path from "node:path";
 
 const GEMINI_URL = "https://gemini.google.com/app";
 
@@ -473,66 +474,199 @@ export async function waitForGeneratedImage(page: Page, turn: VerifiedGeminiTurn
   throw new GeminiConversationError("Timed out waiting for a verified image in the current Gemini assistant turn.");
 }
 
-async function readImageBytes(page: Page, src: string) {
-  const url = new URL(src);
-  if (url.protocol === "data:") {
-    const match = /^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=]+)$/i.exec(src);
-    if (!match) throw new Error("Unsupported inline image.");
-    return { mime: match[1].toLowerCase(), bytes: Buffer.from(match[2], "base64") };
-  }
-  if (url.protocol === "blob:" && url.origin === new URL(GEMINI_URL).origin) {
-    const blob = await page.evaluate(async source => {
-      const response = await fetch(source);
-      if (!response.ok) throw new Error("Blob read failed.");
-      const value = await response.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject();
-        reader.onerror = () => reject();
-        reader.readAsDataURL(value);
-      });
-    }, src);
-    return readImageBytes(page, blob);
-  }
-  if (url.protocol !== "https:" || url.username || url.password || url.port ||
-      (url.hostname !== "gemini.google.com" && !url.hostname.endsWith(".googleusercontent.com"))) {
-    throw new Error("Unrecognized Gemini image source.");
-  }
-  const response = await page.request.get(src, { maxRedirects: 5, timeout: 30_000 });
-  try {
-    if (!response.ok()) throw new Error(`Image request failed: HTTP ${response.status()} at ${new URL(response.url()).hostname}.`);
-    const finalUrl = new URL(response.url());
-    if (finalUrl.protocol !== "https:" || (finalUrl.hostname !== "gemini.google.com" && !finalUrl.hostname.endsWith(".googleusercontent.com"))) {
-      throw new Error("Image redirect left the trusted Gemini image hosts.");
-    }
-    return { mime: response.headers()["content-type"]?.split(";")[0].toLowerCase(), bytes: await response.body() };
-  } finally {
-    await response.dispose();
+type CaptureStage = "TURN" | "CONTROL" | "DOWNLOAD" | "PERSIST" | "VALIDATE";
+export class GeminiCaptureError extends GeminiConversationError {
+  constructor(readonly code: string, readonly stage: CaptureStage) {
+    super(`${code}: Gemini native full-size capture failed at ${stage}; retain the submission for reconciliation.`);
+    this.name = "GeminiCaptureError";
   }
 }
 
-export async function captureGeneratedImage(page: Page, outputBasePath: string, turn: VerifiedGeminiTurn, image: GeminiImage) {
+const activeCaptures = new WeakSet<Page>();
+const FULL_SIZE_DOWNLOAD = /^(?:download(?: image)? full[- ]size(?: image)?|download original(?: image)?|download image in full size)$/i;
+
+function trustedDownloadUrl(value: string) {
   try {
-    const { src, width, height } = image;
-    const { bytes, mime } = await readImageBytes(page, src);
-    const extension = mime === "image/png" ? "png" : mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : null;
-    if (!extension || !bytes.length || bytes.length > 15 * 1024 * 1024) throw new Error("Unsupported image bytes.");
-    const dimensions = await page.evaluate(async ({ base64, type }) => {
-      const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), byte => byte.charCodeAt(0))], { type }));
-      try { return { width: bitmap.width, height: bitmap.height }; } finally { bitmap.close(); }
-    }, { base64: bytes.toString("base64"), type: mime });
+    const url = new URL(value);
+    if (url.protocol === "blob:") return url.origin === new URL(GEMINI_URL).origin;
+    return url.protocol === "https:" && !url.username && !url.password && !url.port &&
+      (url.hostname === "gemini.google.com" || url.hostname.endsWith(".googleusercontent.com"));
+  } catch { return false; }
+}
+
+function downloadedImageType(bytes: Buffer) {
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { mime: "image/png", extension: "png", headerSize: 33 };
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return { mime: "image/jpeg", extension: "jpg", headerSize: 4 };
+  if (bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP") return { mime: "image/webp", extension: "webp", headerSize: 20 };
+  return null;
+}
+
+export async function captureGeneratedImage(page: Page, outputBasePath: string, turn: VerifiedGeminiTurn, image: GeminiImage, timeout = 60_000) {
+  if (activeCaptures.has(page)) throw new GeminiCaptureError("RND_CAPTURE_ALREADY_ACTIVE", "TURN");
+  activeCaptures.add(page);
+  let stage: CaptureStage = "TURN";
+  let active = true;
+  const downloads: Download[] = [];
+  const handles: TurnNode[] = [];
+  let generated: TurnNode | null = null;
+  let clickGuard: JSHandle<{ clicks: number; otherClick: boolean; dispose: () => void }> | undefined;
+  const checkActive = () => {
+    if (!active) throw new GeminiCaptureError("RND_CAPTURE_TIMEOUT", stage);
+    if (page.isClosed()) throw new GeminiCaptureError("RND_CAPTURE_BROWSER_CLOSED", stage);
+  };
+  const verifyTurn = async () => {
+    checkActive();
     const current = await inspectTurn(page, turn);
-    if (current?.pathname !== turn.path || geminiPath(page.url()) !== turn.path || current.image?.src !== src ||
-        current.image.width !== width || current.image.height !== height ||
-        dimensions.width !== width || dimensions.height !== height) throw new Error("Image evidence changed.");
-    const filePath = outputBasePath + "." + extension;
-    await writeFile(filePath, bytes);
-    const checksum = createHash("sha256").update(bytes).digest("hex");
-    console.log("Gemini current-turn image captured", { conversation: turn.path, assistantTurnOrdinal: 1, image: 1, width, height, checksum });
-    return { filePath, checksum };
+    checkActive();
+    if (current?.pathname !== turn.path || geminiPath(page.url()) !== turn.path ||
+        current.image?.src !== image.src || current.image.width !== image.width || current.image.height !== image.height) {
+      throw new GeminiCaptureError("RND_CAPTURE_TURN_CHANGED", stage);
+    }
+    if (generated && !(await generated.evaluate((el, assistant) => el.isConnected && el.closest("model-response") === assistant, turn.assistant))) {
+      throw new GeminiCaptureError("RND_CAPTURE_TURN_CHANGED", stage);
+    }
+  };
+  let timer: ReturnType<typeof setTimeout>;
+  let rejectClosed!: (error: Error) => void;
+  const closed = new Promise<never>((_, reject) => { rejectClosed = reject; });
+  const onClose = () => rejectClosed(new GeminiCaptureError("RND_CAPTURE_BROWSER_CLOSED", stage));
+  const onDownload = (download: Download) => { downloads.push(download); };
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new GeminiCaptureError("RND_CAPTURE_TIMEOUT", stage)), timeout);
+  });
+  page.on("close", onClose);
+  page.on("crash", onClose);
+  try {
+    return await Promise.race([closed, deadline, (async () => {
+      await verifyTurn();
+      stage = "CONTROL";
+      generated = await turn.assistant.$(GENERATED_IMAGE);
+      if (!generated) throw new GeminiCaptureError("RND_CAPTURE_TURN_CHANGED", stage);
+      handles.push(generated);
+      await generated.hover({ timeout });
+      checkActive();
+      const controls = await turn.assistant.$$("button, [role='button'], a[download]");
+      handles.push(...controls);
+      const matching: TurnNode[] = [];
+      for (const control of controls) {
+        const labels = await control.evaluate(el => [el.getAttribute("aria-label"), el.getAttribute("title"),
+          el.getAttribute("mattooltip"), el.getAttribute("data-tooltip"), el.textContent]);
+        if (labels.some(label => label && FULL_SIZE_DOWNLOAD.test(label.replace(/\s+/g, " ").trim()))) matching.push(control);
+      }
+      checkActive();
+      if (matching.length !== 1) throw new GeminiCaptureError(matching.length ? "RND_CAPTURE_DUPLICATE_CONTROLS" : "RND_CAPTURE_CONTROL_UNAVAILABLE", stage);
+      const control = matching[0];
+      if (!(await control.isVisible()) || !(await control.isEnabled())) throw new GeminiCaptureError("RND_CAPTURE_CONTROL_UNAVAILABLE", stage);
+      const owned = await control.evaluate((el, expected) => {
+        if (!el.isConnected || el.closest("model-response") !== expected.assistant) return false;
+        let widget = expected.image.closest("generated-image, image-generation-image, [data-test-id='generated-image']");
+        while (widget && widget !== expected.assistant) {
+          if (widget.contains(el)) return true;
+          widget = widget.parentElement?.closest("generated-image, image-generation-image, [data-test-id='generated-image']") ?? null;
+        }
+        return false;
+      }, { assistant: turn.assistant, image: generated });
+      if (!owned) throw new GeminiCaptureError("RND_CAPTURE_CONTROL_NOT_ASSOCIATED", stage);
+      await verifyTurn();
+      stage = "DOWNLOAD";
+      clickGuard = await page.evaluateHandle(({ control, assistant }) => {
+        // Object methods remain self-contained when tsx serializes this callback
+        // into the browser; named nested arrows can acquire Node-only helpers.
+        const state = {
+          clicks: 0, otherClick: false,
+          handleEvent(event: MouseEvent) {
+            if (!event.isTrusted) return; // Ignore the site's synthetic native-download anchor.
+            if (event.composedPath().includes(control) && control.closest("model-response") === assistant) state.clicks++;
+            else state.otherClick = true;
+          },
+          dispose() { document.removeEventListener("click", state, true); },
+        };
+        document.addEventListener("click", state, true);
+        return state;
+      }, { control, assistant: turn.assistant });
+      const verifyClick = async () => {
+        const state = await clickGuard!.evaluate(value => ({ clicks: value.clicks, otherClick: value.otherClick }));
+        if (state.clicks !== 1 || state.otherClick) throw new GeminiCaptureError("RND_CAPTURE_UNEXPECTED_DOWNLOAD", stage);
+      };
+      // Arm both listeners BEFORE the one native click. No source URL is fetched,
+      // and no generic page-wide download control or lower-resolution fallback exists.
+      page.on("download", onDownload);
+      const downloadPromise = page.waitForEvent("download", { timeout });
+      const [download] = await Promise.all([downloadPromise, control.click({ timeout })]);
+      checkActive();
+      if (downloads.length !== 1 || download.page() !== page || !trustedDownloadUrl(download.url())) {
+        throw new GeminiCaptureError("RND_CAPTURE_UNEXPECTED_DOWNLOAD", stage);
+      }
+      await verifyClick();
+      await verifyTurn();
+      stage = "PERSIST";
+      await mkdir(path.dirname(outputBasePath), { recursive: true });
+      const directory = await mkdtemp(path.join(path.dirname(outputBasePath), "gemini-capture-"));
+      const pendingPath = path.join(directory, "original.download");
+      checkActive();
+      try {
+        // saveAs completes the copy outside Chrome's context-owned temp directory.
+        await download.saveAs(pendingPath);
+      } catch {
+        const failure = await download.failure().catch(() => null);
+        throw new GeminiCaptureError(failure && /cancel/i.test(failure) ? "RND_CAPTURE_DOWNLOAD_CANCELLED" : "RND_CAPTURE_SAVE_FAILED", stage);
+      }
+      checkActive();
+      const failure = await download.failure();
+      if (failure) throw new GeminiCaptureError(/cancel/i.test(failure) ? "RND_CAPTURE_DOWNLOAD_CANCELLED" : "RND_CAPTURE_DOWNLOAD_FAILED", stage);
+      stage = "VALIDATE";
+      const info = await stat(pendingPath);
+      if (!info.isFile() || info.size <= 0 || info.size > 15 * 1024 * 1024) throw new GeminiCaptureError("RND_CAPTURE_INVALID_SIZE", stage);
+      const bytes = await readFile(pendingPath);
+      if (bytes.length !== info.size) throw new GeminiCaptureError("RND_CAPTURE_INVALID_SIZE", stage);
+      const type = downloadedImageType(bytes);
+      if (!type) throw new GeminiCaptureError("RND_CAPTURE_INVALID_MIME", stage);
+      if (bytes.length < type.headerSize) throw new GeminiCaptureError("RND_CAPTURE_INVALID_SIZE", stage);
+      const dimensions = await page.evaluate(async ({ base64, mime }) => {
+        const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), byte => byte.charCodeAt(0))], { type: mime }));
+        try { return { width: bitmap.width, height: bitmap.height }; } finally { bitmap.close(); }
+      }, { base64: bytes.toString("base64"), mime: type.mime });
+      checkActive();
+      // Full-size may exceed the responsive preview. Never accept fewer pixels
+      // or a changed aspect ratio; allow only one preview pixel of resize rounding.
+      if (dimensions.width < image.width || dimensions.height < image.height || dimensions.width < 512 || dimensions.height < 512 ||
+          Math.abs(dimensions.width * image.height - dimensions.height * image.width) > Math.max(dimensions.width, dimensions.height)) {
+        throw new GeminiCaptureError("RND_CAPTURE_INVALID_DIMENSIONS", stage);
+      }
+      await verifyTurn();
+      if (downloads.length !== 1) throw new GeminiCaptureError("RND_CAPTURE_UNEXPECTED_DOWNLOAD", stage);
+      const checksum = createHash("sha256").update(bytes).digest("hex");
+      const filePath = path.join(directory, "original." + type.extension);
+      await rename(pendingPath, filePath);
+      checkActive();
+      await verifyTurn();
+      await verifyClick();
+      if (downloads.length !== 1) throw new GeminiCaptureError("RND_CAPTURE_UNEXPECTED_DOWNLOAD", stage);
+      console.log("Gemini current-turn image captured", { assistantTurnOrdinal: 1, image: 1,
+        width: dimensions.width, height: dimensions.height, checksum });
+      return { filePath, checksum, mimeType: type.mime, fileSize: bytes.length, width: dimensions.width, height: dimensions.height };
+    })()]);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    console.error("Gemini image capture diagnostic:", reason);
-    throw new GeminiConversationError(`Gemini image bytes could not be verified at the current turn's intrinsic resolution: ${reason}`);
+    // The asynchronous operation above advances the stage before rejecting.
+    const failedStage = stage as CaptureStage;
+    const captureError = error instanceof GeminiCaptureError ? error : new GeminiCaptureError(
+      page.isClosed() ? "RND_CAPTURE_BROWSER_CLOSED" : error instanceof Error && error.name === "TimeoutError" ? "RND_CAPTURE_TIMEOUT" :
+        failedStage === "VALIDATE" ? "RND_CAPTURE_INVALID_IMAGE" : failedStage === "PERSIST" ? "RND_CAPTURE_SAVE_FAILED" : "RND_CAPTURE_DOWNLOAD_FAILED", failedStage);
+    // No provider exception, URL, filename, page text or credential is logged.
+    console.error("Gemini image capture diagnostic", { code: captureError.code, stage: captureError.stage });
+    throw captureError;
+  } finally {
+    active = false;
+    activeCaptures.delete(page);
+    clearTimeout(timer!);
+    page.off("close", onClose);
+    page.off("crash", onClose);
+    page.off("download", onDownload);
+    if (clickGuard) {
+      const guard = clickGuard;
+      void guard.evaluate(state => state.dispose()).catch(() => undefined).finally(() => guard.dispose().catch(() => undefined));
+    }
+    for (const download of downloads) void download.cancel().catch(() => undefined);
+    for (const handle of handles) void handle.dispose().catch(() => undefined);
   }
 }
