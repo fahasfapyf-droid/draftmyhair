@@ -23,8 +23,11 @@ checks that fetching it fails, then captures via the independent native download
    Generic Download buttons, response-level unrelated controls and duplicates
    fail closed. No alternative image acquisition method is attempted.
 3. Monitor trusted clicks, arm the Playwright download listener, then click that
-   exact control once. Require one download from this page and a Gemini-origin
-   blob or HTTPS Gemini/googleusercontent URL. No URL is fetched by this code.
+   exact control once. Require one download from this page and a Gemini-origin blob or HTTPS
+   Gemini/googleusercontent URL. Gemini currently exposes its native download as
+   `blob:null/<id>`; accept that opaque URL only with the verified Gemini page,
+   exact image-widget control, trusted click and same-page download event. No URL
+   is fetched by this code.
 4. Use download.saveAs into a unique persistent directory under the configured
    worker output directory. The provider filename is never used as a path.
 5. Read the saved file; verify actual PNG/JPEG/WebP signatures, required header
@@ -120,7 +123,7 @@ page was changed, removed, merged or invoked here.
 
 ## Validation and limitations
 
-The offline browser suite covers real Playwright native downloads plus 26 native
+The offline browser suite covers real Playwright native downloads plus 28 native
 capture scenarios: revoked preview, larger original, PNG/JPEG/WebP, persistence
 after context close, wrong turn/widget/page/origin, competing click/download,
 duplicate controls, missing event, stalled transfer, cancellation, save failure,

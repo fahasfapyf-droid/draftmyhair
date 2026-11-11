@@ -313,7 +313,7 @@ async function testConversation(page: Page) {
 
 async function testNativeDownloads(browser: Browser) {
   const scenarios = [
-    ["real-native-persistence", null], ["revoked-preview", null], ["larger-original", null],
+    ["real-native-persistence", null], ["revoked-preview", null], ["larger-original", null], ["native-blob-url", null], ["native-opaque-blob-url", null],
     ["jpeg-original", null], ["webp-original", null], ["wrong-control", "RND_CAPTURE_CONTROL_UNAVAILABLE"],
     ["wrong-image-control", "RND_CAPTURE_CONTROL_NOT_ASSOCIATED"],
     ["wrong-turn", "RND_CAPTURE_TURN_CHANGED"], ["wrong-page", "RND_CAPTURE_UNEXPECTED_DOWNLOAD"],
@@ -346,7 +346,7 @@ async function testNativeDownloads(browser: Browser) {
         if (scenario === "timeout") return;
         const download = {
           page: () => otherPage ?? page,
-          url: () => scenario === "wrong-origin" ? "https://untrusted.invalid/private?credential=DO_NOT_LOG_THIS" : "https://lh3.googleusercontent.com/native-full-size",
+          url: () => scenario === "wrong-origin" ? "https://untrusted.invalid/private?credential=DO_NOT_LOG_THIS" : scenario === "native-blob-url" ? "blob:https://gemini.google.com/12345678-1234-1234-1234-123456789012" : scenario === "native-opaque-blob-url" ? "blob:null/12345678-1234-1234-1234-123456789012" : "https://lh3.googleusercontent.com/native-full-size",
           saveAs: async (filename: string) => {
             if (scenario === "browser-shutdown") {
               void context.close();
@@ -526,7 +526,7 @@ async function main() {
       assert.equal(Object.hasOwn(diagnostic, "assistantTurn"), false);
     }
     await testNativeDownloads(browser);
-    console.log("PASS offline picker, conversation/capture, native downloads (26 scenarios), and mocked worker dispatch and duplicate guards.");
+    console.log("PASS offline picker, conversation/capture, native downloads (28 scenarios), and mocked worker dispatch and duplicate guards.");
   } finally {
     await browser.close();
   }
