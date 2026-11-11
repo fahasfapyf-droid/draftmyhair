@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
+import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
+import { fetchRndSourceAsset } from "@/lib/rnd/source-asset";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
 import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
-import { runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
+import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
+import { fenceRndReportLease, hasValidRndLeaseExpiry, validateRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
 
 export const runtime = "nodejs";
 const QA_TIMEOUT_MS = 120_000;
+const MAX_RND_ATTEMPTS = 5;
+// Bound infrastructure-only retries separately from actual generation attempts.
+const MAX_RND_INFRASTRUCTURE_RETRIES = 3;
 
 type ReportBody = {
   jobId?: unknown;
@@ -17,6 +24,7 @@ type ReportBody = {
   submittedAt?: unknown;
   generationStartedAt?: unknown;
   generationCompletedAt?: unknown;
+  claimGeneration?: unknown;
   artifactId?: unknown;
   errorCode?: unknown;
   errorMessage?: unknown;
@@ -47,7 +55,7 @@ function scoreFromQaJson(value: unknown, key: string) {
 }
 
 async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = requireRndBlobToken();
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
   const response = await fetch(blobUrl, {
     headers: { Authorization: "Bearer " + token },
@@ -72,8 +80,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId, attemptNumber and x-rnd-worker-id are required" }, { status: 400 });
   }
 
-  const generationStartedAt = dateOrNull(body.generationStartedAt);
-  const generationCompletedAt = dateOrNull(body.generationCompletedAt);
+  let generationStartedAt = dateOrNull(body.generationStartedAt);
+  let generationCompletedAt = dateOrNull(body.generationCompletedAt);
   const artifactId = typeof body.artifactId === "string" ? body.artifactId : undefined;
   const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
   const errorMessage = typeof body.errorMessage === "string" ? body.errorMessage : null;
@@ -88,47 +96,93 @@ export async function POST(request: Request) {
       status: true,
       leaseOwner: true,
       leaseExpiresAt: true,
+      startedAt: true,
       currentPrompt: true,
-      target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { blobUrl: true, mimeType: true } } } },
+      target: { select: { targetKey: true, hairstyleId: true, sourceAsset: { select: { storageKey: true, blobUrl: true, mimeType: true, fileSize: true, checksum: true } } } },
     },
   });
   if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
+  // Failed jobs require a separately authorized administrative recovery path.
+  // Worker credentials alone must never turn a terminal job back into QUEUED,
+  // even when a stale worker knows the job ID.
   if (body.requeueFailed === true) {
-    if (job.status !== "FAILED") {
-      return NextResponse.json({ ok: true, jobId, status: job.status, requeued: false });
-    }
-    const retryAt = new Date(Date.now() + 60_000);
-    const updated = await prisma.$transaction(async (tx) => {
-      const current = await tx.rnDJob.findUnique({ where: { id: jobId }, select: { status: true, targetId: true } });
-      if (!current || current.status !== "FAILED") return null;
-      const next = await tx.rnDJob.update({
-        where: { id: jobId },
-        data: { status: "QUEUED", nextEligibleAt: retryAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
-        select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
-      });
-      await tx.rnDTarget.update({ where: { id: current.targetId }, data: { status: "QUEUED" } });
-      return next;
-    });
-    return NextResponse.json({ ok: true, jobId, status: updated?.status ?? "FAILED", requeued: Boolean(updated), nextEligibleAt: updated?.nextEligibleAt?.toISOString() ?? null });
+    return NextResponse.json({ error: "Failed-job recovery requires administrative authorization" }, { status: 409 });
   }
-  if (job.leaseOwner !== workerId || (job.leaseExpiresAt && job.leaseExpiresAt < now) || job.status !== "PROCESSING") {
+  const submittedGeneration = validateRndClaimGeneration(body.claimGeneration, job.startedAt);
+  if (submittedGeneration.status === "invalid") {
+    return NextResponse.json({ error: "A valid claimGeneration is required" }, { status: 400 });
+  }
+  if (submittedGeneration.status === "stale") {
+    return NextResponse.json({ error: "Job claim generation is no longer current" }, { status: 409 });
+  }
+  const leaseValidationTime = new Date();
+  if (job.leaseOwner !== workerId || !hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime) || job.status !== "PROCESSING") {
     return NextResponse.json({ error: "Job lease is no longer valid" }, { status: 409 });
   }
   if (attemptNumber !== job.attemptCount + 1) {
     return NextResponse.json({ error: "Unexpected attempt number", expectedAttemptNumber: job.attemptCount + 1 }, { status: 409 });
   }
-
   const reservation = await prisma.rnDAttempt.findUnique({
     where: { jobId_attemptNumber: { jobId, attemptNumber } },
-    select: { id: true, submittedAt: true, artifactId: true, verdict: true },
+    select: { id: true, submittedAt: true, artifactId: true, verdict: true, generationStartedAt: true, generationCompletedAt: true, errorCode: true, promptRevision: true },
   });
   if (!reservation) return NextResponse.json({ error: "Attempt reservation not found" }, { status: 409 });
-  if (reservation.artifactId) {
-    if (reservation.artifactId !== artifactId) {
-      return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
-    }
-    return NextResponse.json({ ok: true, jobId, attemptNumber, idempotent: true });
+  if (reservation.promptRevision !== "reserved-v2") return NextResponse.json({ code: "RND_SUBMISSION_REQUIRES_RECONCILIATION" }, { status: 409 });
+  if (reservation.errorCode !== "RND_SUBMITTED" || !reservation.submittedAt) return NextResponse.json({ code: "RND_SUBMISSION_NOT_RECORDED" }, { status: 409 });
+  if (reservation.generationStartedAt && !artifactId) return NextResponse.json({ code: "RND_SUBMISSION_REQUIRES_RECONCILIATION" }, { status: 409 });
+  if (artifactId && (!reservation.generationCompletedAt || reservation.artifactId !== artifactId)) return NextResponse.json({ code: "RND_REPORT_ARTIFACT_NOT_RECORDED" }, { status: 409 });
+  if (artifactId) {
+    generationStartedAt = reservation.generationStartedAt;
+    generationCompletedAt = reservation.generationCompletedAt;
+  }
+  const reportFence = {
+    jobId,
+    workerId,
+    claimStartedAt: submittedGeneration.generation,
+    expectedAttemptCount: attemptNumber - 1,
+    attemptId: reservation.id,
+    attemptNumber,
+  };
+  if (attemptNumber > MAX_RND_ATTEMPTS) {
+    const message = `R&D stopped after ${MAX_RND_ATTEMPTS} attempts without satisfying every hard-pass gate.`;
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return false;
+      await tx.rnDAttempt.update({ where: { jobId_attemptNumber: { jobId, attemptNumber } }, data: { verdict: "FAILED", errorCode: "RND_CONVERGENCE_LIMIT", errorMessage: message } });
+      await tx.rnDJob.update({ where: { id: jobId }, data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: now, failureCode: "RND_CONVERGENCE_LIMIT", failureMessage: message } });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+      return true;
+    });
+    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "FAILED", action: "CONVERGENCE_LIMIT_REACHED", maxAttempts: MAX_RND_ATTEMPTS });
+  }
+  if (reservation.artifactId && reservation.artifactId !== artifactId) return NextResponse.json({ error: "Artifact does not belong to this R&D attempt" }, { status: 409 });
+
+  // Gemini profile quota exhaustion is a profile lifecycle event, not an R&D
+  // generation attempt. Discard the reserved attempt and immediately requeue
+  // the same attempt number so the worker can rotate to another authenticated
+  // profile without consuming convergence budget or marking the job FAILED.
+  if (errorCode === "GEMINI_PROFILE_EXHAUSTED") {
+    const committed = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return false;
+      await tx.rnDAttempt.delete({ where: { jobId_attemptNumber: { jobId, attemptNumber } } });
+      await tx.rnDJob.update({
+        where: { id: jobId },
+        data: {
+          status: "QUEUED",
+          nextEligibleAt: now,
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          completedAt: null,
+          failureCode: null,
+          failureMessage: null,
+        },
+      });
+      await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+      return true;
+    });
+    if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+    return NextResponse.json({ ok: true, jobId, attemptNumber, status: "QUEUED", action: "ROTATE_GEMINI_PROFILE", attemptConsumed: false });
   }
 
   const prompt = job.currentPrompt;
@@ -141,6 +195,7 @@ export async function POST(request: Request) {
       /timed out waiting for a new generated image|generation timeout|gemini.*timeout/i.test(errorMessage ?? "");
 
     const result = await prisma.$transaction(async (tx) => {
+      if (!(await fenceRndReportLease(tx, reportFence))) return null;
       const attempt = await tx.rnDAttempt.update({
         where: { jobId_attemptNumber: { jobId, attemptNumber } },
         data: { prompt, promptRevision: revision, generationStartedAt, generationCompletedAt, artifactId: null, verdict: "FAILED", errorCode, errorMessage },
@@ -154,7 +209,6 @@ export async function POST(request: Request) {
             nextEligibleAt: new Date(),
             leaseOwner: null,
             leaseExpiresAt: null,
-            heartbeatAt: now,
             completedAt: null,
             failureCode: null,
             failureMessage: null,
@@ -164,12 +218,13 @@ export async function POST(request: Request) {
       } else {
         await tx.rnDJob.update({
           where: { id: jobId },
-          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
+          data: { status: "FAILED", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: null, failureCode: errorCode, failureMessage: errorMessage },
         });
         await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
       }
       return attempt;
     });
+    if (!result) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
     await retainRndOutcome({
       jobId,
       attemptId: result.id,
@@ -203,17 +258,42 @@ export async function POST(request: Request) {
 
   const artifact = await prisma.rnDAsset.findUnique({
     where: { id: artifactId },
-    select: { id: true, blobUrl: true, mimeType: true },
+    select: { id: true, kind: true, storageKey: true, blobUrl: true, mimeType: true },
   });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
+  if (artifact.kind !== "GENERATED" || !artifact.storageKey.startsWith(`rnd/attempts/${jobId}/${attemptNumber}-`)) {
+    return NextResponse.json({ error: "Artifact is not a generated asset for this job and attempt" }, { status: 409 });
+  }
   if (!artifact.blobUrl || !artifact.mimeType) return NextResponse.json({ error: "Artifact is missing blob URL or MIME type" }, { status: 422 });
+
+  const previousAttempt = await prisma.rnDAttempt.findFirst({
+    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
+    orderBy: { attemptNumber: "desc" },
+    select: {
+      attemptNumber: true,
+      overallScore: true,
+      qaJson: true,
+      refinementReason: true,
+    },
+  });
+
+  // Recall relevant historical evidence before QA chooses the next refinement.
+  // Hindsight is advisory only; the authoritative prompt and protected-region
+  // rules remain the source of truth.
+  const hindsightHistory = await recallRndHistory([
+    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
+    `Target: ${job.target.targetKey}.`,
+    `Current authoritative prompt: ${prompt.slice(0, 1800)}`,
+    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
+    "Find relevant successful or failed outcomes and refinement strategies that did or did not improve scores. Return historical evidence only; do not invent a new prompt.",
+  ].join(" "));
 
   let qa;
   let finalVerification = null;
   let imageIntegrity = null;
   try {
     const [source, generated] = await Promise.all([
-      fetchPrivateArtifact(job.target.sourceAsset.blobUrl, job.target.sourceAsset.mimeType),
+      fetchRndSourceAsset(job.target.sourceAsset, request.url, request.headers.get("x-vercel-protection-bypass")),
       fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType),
     ]);
     imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
@@ -243,7 +323,51 @@ export async function POST(request: Request) {
     const retryableInfrastructureFailure = /(429|resource exhausted|quota|rate.?limit|too many requests)/i.test(message);
     if (retryableInfrastructureFailure) {
       const retryAt = new Date(Date.now() + 2 * 60 * 1000);
-      await prisma.$transaction(async (tx) => {
+      const committed = await prisma.$transaction(async (tx) => {
+        if (!(await fenceRndReportLease(tx, reportFence))) return null;
+
+        // The isolated database has this column, but the checked-in Prisma
+        // model does not. Increment it with parameterized SQL inside the same
+        // fenced transaction so a stale report cannot consume retry budget.
+        const retryRows = await tx.$queryRaw<Array<{ infrastructureRetryCount: number }>>`
+          UPDATE "RnDAttempt"
+          SET "infrastructureRetryCount" = "infrastructureRetryCount" + 1
+          WHERE "id" = ${reservation.id}
+            AND "jobId" = ${jobId}
+            AND "attemptNumber" = ${attemptNumber}
+          RETURNING "infrastructureRetryCount"
+        `;
+        if (retryRows.length !== 1) {
+          throw new Error("Could not increment the infrastructure retry counter for the fenced attempt.");
+        }
+
+        const infrastructureRetryCount = Number(retryRows[0].infrastructureRetryCount);
+        if (infrastructureRetryCount > MAX_RND_INFRASTRUCTURE_RETRIES) {
+          const message = `R&D stopped after ${MAX_RND_INFRASTRUCTURE_RETRIES} infrastructure retries for automated QA.`;
+          await tx.rnDAttempt.update({
+            where: { id: reservation.id },
+            data: {
+              verdict: "FAILED",
+              errorCode: "RND_INFRASTRUCTURE_RETRY_LIMIT",
+              errorMessage: message,
+            },
+          });
+          await tx.rnDJob.update({
+            where: { id: jobId },
+            data: {
+              status: "FAILED",
+              attemptCount: attemptNumber,
+              leaseOwner: null,
+              leaseExpiresAt: null,
+              completedAt: now,
+              failureCode: "RND_INFRASTRUCTURE_RETRY_LIMIT",
+              failureMessage: message,
+            },
+          });
+          await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "FAILED" } });
+          return { infrastructureRetryCount, exhausted: true as const };
+        }
+
         await tx.rnDJob.update({
           where: { id: jobId },
           data: {
@@ -252,62 +376,51 @@ export async function POST(request: Request) {
             nextEligibleAt: retryAt,
             leaseOwner: null,
             leaseExpiresAt: null,
-            heartbeatAt: now,
             completedAt: null,
             failureCode: null,
             failureMessage: null,
           },
         });
         await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
+        return { infrastructureRetryCount, exhausted: false as const };
       });
+      if (!committed) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
+      if (committed.exhausted) {
+        return NextResponse.json({
+          ok: true,
+          jobId,
+          attemptNumber,
+          status: "FAILED",
+          action: "INFRASTRUCTURE_RETRY_LIMIT_REACHED",
+          infrastructureRetryCount: committed.infrastructureRetryCount,
+          maxInfrastructureRetries: MAX_RND_INFRASTRUCTURE_RETRIES,
+        });
+      }
       return NextResponse.json({
         ok: true,
         jobId,
         attemptNumber,
         status: "QUEUED",
         action: "RETRY_QA_INFRASTRUCTURE",
+        infrastructureRetryCount: committed.infrastructureRetryCount,
+        maxInfrastructureRetries: MAX_RND_INFRASTRUCTURE_RETRIES,
         nextEligibleAt: retryAt.toISOString(),
       });
     }
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  const hardPass =
-    qa.verdict === "APPROVE" &&
-    qa.overall >= 9.5 &&
-    qa.identity >= 9.5 &&
-    qa.styleAccuracy >= 9.5 &&
-    qa.rootIntegration >= 9.5 &&
-    qa.lightingConsistency >= 9.5 &&
-    qa.hairOnly === "PASS" &&
-    qa.artifacts === "NONE" &&
-    imageIntegrity?.canvasMatch === true &&
-    imageIntegrity?.faceTexturePreservationPass === true &&
-    finalVerification?.verdict === "PASS" &&
-    finalVerification.overall >= 9.5 &&
-    finalVerification.identity >= 9.5 &&
-    finalVerification.styleAccuracy >= 9.5 &&
-    finalVerification.rootIntegration >= 9.5 &&
-    finalVerification.lightingConsistency >= 9.5 &&
-    finalVerification.hairOnly === "PASS" &&
-    finalVerification.artifacts === "NONE";
+  const hardPass = passesRndCombinedHardGate({
+    qa,
+    imageIntegrity,
+    finalVerification,
+  });
 
   const rawRefinement = !hardPass
     ? (finalVerification?.verdict === "REJECT" && finalVerification.refinement.trim()
         ? finalVerification.refinement.trim()
         : qa.refinement.trim() || null)
     : null;
-
-  const previousAttempt = await prisma.rnDAttempt.findFirst({
-    where: { jobId, attemptNumber: { lt: attemptNumber }, overallScore: { not: null } },
-    orderBy: { attemptNumber: "desc" },
-    select: {
-      attemptNumber: true,
-      overallScore: true,
-      qaJson: true,
-      refinementReason: true,
-    },
-  });
 
   const sameRefinementAsPrevious =
     Boolean(rawRefinement) &&
@@ -333,15 +446,6 @@ export async function POST(request: Request) {
       Number(qa.overall) <= Number(previousAttempt?.overallScore ?? -1) ||
       (qa.hairOnly === "FAIL" && previousAttempt?.overallScore !== null)
     );
-
-  const hindsightHistory = await recallRndHistory([
-    `Draft My Hair R&D historical outcomes for hairstyle ${job.target.hairstyleId ?? "unknown"}.`,
-    `Target: ${job.target.targetKey}.`,
-    `Current QA defect/refinement: ${rawRefinement ?? "no refinement requested"}.`,
-    `Previous refinement strategy: ${previousAttempt?.refinementReason ?? "none"}.`,
-    `Repeated ineffective refinement detected: ${repeatedIneffectiveRefinement ? "yes" : "no"}.`,
-    "Find prior successful or failed refinement strategies and recurring defects. Return historical evidence only; do not invent a new prompt.",
-  ].join(" "));
 
   const qaWithMemory = {
     ...qa,
@@ -388,6 +492,7 @@ export async function POST(request: Request) {
   const refinement = refinementApplied ? refinementCandidate : null;
 
   const finalResult = await prisma.$transaction(async (tx) => {
+    if (!(await fenceRndReportLease(tx, reportFence))) return null;
     await tx.rnDAttempt.update({
       where: { jobId_attemptNumber: { jobId, attemptNumber } },
       data: {
@@ -411,7 +516,7 @@ export async function POST(request: Request) {
     if (hardPass) {
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null, failureCode: null, failureMessage: null },
+        data: { status: "HUMAN_APPROVAL", attemptCount: attemptNumber, leaseOwner: null, leaseExpiresAt: null, completedAt: null, failureCode: null, failureMessage: null },
         select: { id: true, status: true, attemptCount: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "HUMAN_APPROVAL" } });
@@ -426,7 +531,7 @@ export async function POST(request: Request) {
       const nextEligibleAt = new Date();
       const updatedJob = await tx.rnDJob.update({
         where: { id: jobId },
-        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: now, completedAt: null },
+        data: { status: "QUEUED", currentPrompt: rebuilt.prompt, promptVersionNumber: attemptNumber + 1, attemptCount: attemptNumber, nextEligibleAt, leaseOwner: null, leaseExpiresAt: null, completedAt: null },
         select: { id: true, status: true, attemptCount: true, nextEligibleAt: true },
       });
       await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
@@ -450,7 +555,6 @@ export async function POST(request: Request) {
         nextEligibleAt,
         leaseOwner: null,
         leaseExpiresAt: null,
-        heartbeatAt: now,
         completedAt: null,
         failureCode: null,
         failureMessage: null,
@@ -460,6 +564,7 @@ export async function POST(request: Request) {
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "QUEUED" } });
     return { job: updatedJob, action: "REFINE" as const };
   });
+  if (!finalResult) return NextResponse.json({ error: "Job lease changed before report commit" }, { status: 409 });
 
   const scoredAttempts = await prisma.rnDAttempt.findMany({
     where: {
@@ -475,13 +580,24 @@ export async function POST(request: Request) {
       qaJson: true,
       artifactId: true,
       generationCompletedAt: true,
+      aiGatePassed: true,
+      publicationTierPassed: true,
     },
   });
 
   const candidateAttempts = scoredAttempts.filter((attempt) => {
     if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
     const qaRecord = attempt.qaJson as Record<string, unknown>;
-    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE";
+    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
+    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
+    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
+      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch, faceTexturePreservationPass: integrity.faceTexturePreservationPass }) &&
+      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
+      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
+      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
+      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
   });
 
   const bestAttempt = candidateAttempts
@@ -598,7 +714,16 @@ export async function GET(request: Request) {
   const eligibleAttempts = job.attempts.filter((attempt) => {
     if (!attempt.artifactId || !attempt.qaJson || typeof attempt.qaJson !== "object" || Array.isArray(attempt.qaJson)) return false;
     const qaRecord = attempt.qaJson as Record<string, unknown>;
-    return qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null;
+    const verification = qaRecord.finalVerification as Record<string, unknown> | null | undefined;
+    const integrity = qaRecord.imageIntegrity as Record<string, unknown> | null | undefined;
+    return attempt.aiGatePassed === true && attempt.publicationTierPassed === true &&
+      qaRecord.hairOnly === "PASS" && qaRecord.artifacts === "NONE" && attempt.overallScore !== null &&
+      integrity != null && typeof integrity.canvasMatch === "boolean" &&
+      passesRndHardIntegrityGate({ canvasMatch: integrity.canvasMatch, faceTexturePreservationPass: integrity.faceTexturePreservationPass }) &&
+      verification?.verdict === "PASS" && Number(verification.overall) >= 9.5 &&
+      Number(verification.identity) >= 9.5 && Number(verification.styleAccuracy) >= 9.5 &&
+      Number(verification.rootIntegration) >= 9.5 && Number(verification.lightingConsistency) >= 9.5 &&
+      verification.hairOnly === "PASS" && verification.artifacts === "NONE";
   });
 
   const bestCandidate = eligibleAttempts

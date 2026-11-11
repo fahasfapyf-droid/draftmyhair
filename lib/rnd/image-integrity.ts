@@ -147,3 +147,8 @@ export async function runRndImageIntegrityCheck(
     faceRegionWarning: faceRegionDrift > 0.12,
   };
 }
+
+/** Preserve the audited baseline: both deterministic checks are mandatory. */
+export function passesRndHardIntegrityGate(result: { canvasMatch?: unknown; faceTexturePreservationPass?: unknown } | null): boolean {
+  return result?.canvasMatch === true && result.faceTexturePreservationPass === true;
+}

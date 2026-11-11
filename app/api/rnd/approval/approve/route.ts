@@ -6,7 +6,10 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const jobId = typeof body?.jobId === "string" ? body.jobId : null;
   if (!jobId) return NextResponse.json({ error: "jobId is required" }, { status: 400 });
@@ -23,16 +26,29 @@ export async function POST(request: Request) {
           where: { verdict: "HUMAN_APPROVAL" },
           orderBy: { attemptNumber: "desc" },
           take: 1,
-          select: { id: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true },
+          select: { id: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true, aiGatePassed: true, publicationTierPassed: true },
         },
       },
     });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
-
     const approvedAttempt = job.attempts[0] ?? null;
+    const approvedScore = approvedAttempt?.overallScore == null ? NaN : Number(approvedAttempt.overallScore);
+    if (!approvedAttempt || !approvedAttempt.artifactId ||
+        !approvedAttempt.aiGatePassed || !approvedAttempt.publicationTierPassed ||
+        !Number.isFinite(approvedScore) || approvedScore < 9.5) {
+      return { kind: "gate" as const };
+    }
 
-    if (job.target.hairstyleId && approvedAttempt) {
+    // Compare-and-set the approval state before any side effects. A concurrent
+    // approve/reject request can win this transition only once.
+    const claimed = await tx.rnDJob.updateMany({
+      where: { id: jobId, status: "HUMAN_APPROVAL" },
+      data: { status: "COMPLETED", completedAt: new Date() },
+    });
+    if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
+
+    if (job.target.hairstyleId) {
       const existingPrompt = await tx.promptVersion.findUnique({
         where: { sourceRnDAttemptId: approvedAttempt.id },
         select: { id: true },
@@ -66,13 +82,13 @@ export async function POST(request: Request) {
       }
     }
 
-    await tx.rnDJob.update({ where: { id: jobId }, data: { status: "COMPLETED", completedAt: new Date() } });
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
     await tx.rnDAttempt.updateMany({ where: { jobId, verdict: "HUMAN_APPROVAL" }, data: { verdict: "APPROVED" } });
     return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt) };
   });
 
   if (result.kind === "missing") return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  if (result.kind === "gate") return NextResponse.json({ error: "Approved attempt is missing or has not passed QA gates" }, { status: 409 });
   if (result.kind === "state") return NextResponse.json({ error: "Job is not awaiting human approval", status: result.status }, { status: 409 });
   return NextResponse.json({ ok: true, promptImported: result.importedPrompt });
 }
