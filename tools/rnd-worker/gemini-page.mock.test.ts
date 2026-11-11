@@ -139,7 +139,7 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
   return { outcome, order };
 }
 
-type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong";
+type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong" | "responsive-srcset" | "responsive-picture";
 
 async function mountConversation(page: Page, fixture: ConversationFixture) {
   const url = "https://gemini.google.com/app/old-fixture";
@@ -213,7 +213,7 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           group.append(response);
         }
         thread.append(group);
-        if (fixture === "valid" || fixture === "stale-image") {
+        if (["valid", "stale-image", "responsive-srcset", "responsive-picture"].includes(fixture)) {
           const canvas = document.createElement("canvas");
           canvas.width = 640; canvas.height = 768;
           const bitmap = canvas.getContext("2d");
@@ -221,9 +221,21 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           const generated = document.createElement("generated-image");
           const img = new Image();
           img.width = 64; img.height = 76;
-          img.src = canvas.toDataURL("image/png");
-          generated.append(img);
-          (fixture === "valid" ? response : document.body).append(generated);
+          const dataUrl = canvas.toDataURL("image/png");
+          const payload = Uint8Array.from(atob(dataUrl.split(",")[1]), byte => byte.charCodeAt(0));
+          const objectUrl = URL.createObjectURL(new Blob([payload], { type: "image/png" }));
+          img.src = fixture.startsWith("responsive-") ? objectUrl : dataUrl;
+          if (fixture === "responsive-srcset") img.srcset = objectUrl + " 1x";
+          if (fixture === "responsive-picture") {
+            const picture = document.createElement("picture");
+            const source = document.createElement("source");
+            source.srcset = objectUrl;
+            picture.append(source, img);
+            generated.append(picture);
+          } else {
+            generated.append(img);
+          }
+          (fixture === "stale-image" ? document.body : response).append(generated);
         }
       };
     </script>` }));
@@ -260,7 +272,7 @@ async function testConversation(page: Page) {
     assert.equal(freshPath, "/app");
     await assert.rejects(submitPrompt(page, prompt, freshPath, 350), /did not verify/);
   }
-  for (const fixture of ["stale-image", "valid"] as const) {
+  for (const fixture of ["stale-image", "valid", "responsive-srcset", "responsive-picture"] as const) {
     await mountConversation(page, fixture);
     const freshPath = await freshChat(page, 800);
     const turn = await submitPrompt(page, prompt, freshPath, 800);
@@ -274,7 +286,7 @@ async function testConversation(page: Page) {
       assert.deepEqual([image.width, image.height], [640, 768]);
       const base = path.join(mkdtempSync(path.join(tmpdir(), "dmh-capture-mock-")), "image");
       const captured = await captureGeneratedImage(page, base, turn, image);
-      const originalBytes = Buffer.from(image.src.split(",")[1], "base64");
+      const originalBytes = Buffer.from(await page.evaluate(async source => Array.from(new Uint8Array(await (await fetch(source)).arrayBuffer())), image.src));
       assert.deepEqual(readFileSync(captured.filePath), originalBytes);
       assert.equal(captured.checksum, createHash("sha256").update(originalBytes).digest("hex"));
       await page.locator("model-response").evaluate(el => el.replaceWith(el.cloneNode(true)));

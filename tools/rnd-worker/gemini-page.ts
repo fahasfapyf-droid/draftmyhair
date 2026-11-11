@@ -385,7 +385,7 @@ async function inspectTurn(page: Page, turn?: Pick<VerifiedGeminiTurn, "user" | 
       pathname: location.pathname,
       prompt: promptContent.textContent ?? "",
       started: Boolean(assistant.matches('[aria-busy="true"]') || assistant.querySelector('[aria-busy="true"]') || responseText || image),
-      image: image && src && src === image.src && !image.srcset && !image.closest("picture") &&
+      image: image && src &&
         image.complete && image.naturalWidth >= 512 && image.naturalHeight >= 512 && image.getClientRects().length
         ? { src, width: image.naturalWidth, height: image.naturalHeight } : null,
     };
@@ -498,9 +498,13 @@ async function readImageBytes(page: Page, src: string) {
       (url.hostname !== "gemini.google.com" && !url.hostname.endsWith(".googleusercontent.com"))) {
     throw new Error("Unrecognized Gemini image source.");
   }
-  const response = await page.request.get(src, { maxRedirects: 0, timeout: 30_000 });
+  const response = await page.request.get(src, { maxRedirects: 5, timeout: 30_000 });
   try {
-    if (!response.ok()) throw new Error("Image request failed.");
+    if (!response.ok()) throw new Error(`Image request failed: HTTP ${response.status()} at ${new URL(response.url()).hostname}.`);
+    const finalUrl = new URL(response.url());
+    if (finalUrl.protocol !== "https:" || (finalUrl.hostname !== "gemini.google.com" && !finalUrl.hostname.endsWith(".googleusercontent.com"))) {
+      throw new Error("Image redirect left the trusted Gemini image hosts.");
+    }
     return { mime: response.headers()["content-type"]?.split(";")[0].toLowerCase(), bytes: await response.body() };
   } finally {
     await response.dispose();
@@ -526,7 +530,9 @@ export async function captureGeneratedImage(page: Page, outputBasePath: string, 
     const checksum = createHash("sha256").update(bytes).digest("hex");
     console.log("Gemini current-turn image captured", { conversation: turn.path, assistantTurnOrdinal: 1, image: 1, width, height, checksum });
     return { filePath, checksum };
-  } catch {
-    throw new GeminiConversationError("Gemini image bytes could not be verified at the current turn's intrinsic resolution.");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error("Gemini image capture diagnostic:", reason);
+    throw new GeminiConversationError(`Gemini image bytes could not be verified at the current turn's intrinsic resolution: ${reason}`);
   }
 }
