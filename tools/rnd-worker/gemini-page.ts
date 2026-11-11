@@ -361,13 +361,29 @@ async function inspectTurn(page: Page, turn?: Pick<VerifiedGeminiTurn, "user" | 
 
     const query = user.querySelector<HTMLElement>(".query-text, [data-test-id='user-query-text']");
     if (!query || !query.getClientRects().length || !assistant.getClientRects().length) return null;
+    // Gemini adds a screen-reader summary and renders prompt lines separately.
+    // Read a detached copy so offscreen content-visibility cannot erase the text.
+    const promptContent = query.cloneNode(true) as HTMLElement;
+    promptContent.querySelectorAll(".screen-reader-user-query-label").forEach(label => label.remove());
+    promptContent.querySelectorAll("br").forEach(lineBreak => lineBreak.replaceWith("\n"));
+    promptContent.querySelectorAll(".query-text-line").forEach(line => line.append("\n"));
+    for (const list of promptContent.querySelectorAll<HTMLOListElement>("ol.query-numbered-list")) {
+      let ordinal = list.start;
+      for (const item of Array.from(list.children) as HTMLLIElement[]) {
+        if (!item.matches("li.query-numbered-item")) return null;
+        if (item.hasAttribute("value")) ordinal = item.value;
+        item.prepend(`${ordinal}. `);
+        item.append("\n");
+        ordinal++;
+      }
+    }
     const images = Array.from(assistant.querySelectorAll<HTMLImageElement>(imageSelector));
     const image = images.length === 1 ? images[0] : null;
     const src = image?.currentSrc;
     const responseText = assistant.querySelector("message-content")?.textContent?.trim();
     return {
       pathname: location.pathname,
-      prompt: query.innerText,
+      prompt: promptContent.textContent ?? "",
       started: Boolean(assistant.matches('[aria-busy="true"]') || assistant.querySelector('[aria-busy="true"]') || responseText || image),
       image: image && src && src === image.src && !image.srcset && !image.closest("picture") &&
         image.complete && image.naturalWidth >= 512 && image.naturalHeight >= 512 && image.getClientRects().length
@@ -386,6 +402,7 @@ export async function prepareGeminiSubmission(page: Page, freshPath: string) {
 }
 
 export async function submitPrompt(page: Page, prompt: string, freshPath: string, timeout = 30_000): Promise<VerifiedGeminiTurn> {
+  let verification = "DISPATCH_UNCONFIRMED";
   try {
     await prepareGeminiSubmission(page, freshPath);
     const box = await composer(page);
@@ -395,10 +412,15 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
     ]).catch(() => null);
     if (button) await button.click({ timeout: 10_000 });
     else await box.press("Enter");
+    verification = "TURN_ASSOCIATION_UNVERIFIED";
 
     const deadline = Date.now() + timeout;
     do {
       const current = await inspectTurn(page);
+      if (current) {
+        verification = renderedPrompt(current.prompt) !== renderedPrompt(prompt) ? "PROMPT_MISMATCH" :
+          !current.started ? "ASSISTANT_NOT_STARTED" : "CONVERSATION_UNVERIFIED";
+      }
       if (current && geminiPath(page.url()) === current.pathname && CONVERSATION_PATH.exec(current.pathname)?.[1] &&
           renderedPrompt(current.prompt) === renderedPrompt(prompt) && current.started) {
         const user = await page.locator(USER_TURN).elementHandle({ timeout: 1_000 });
@@ -416,8 +438,9 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
     } while (Date.now() < deadline);
   } catch (error) {
     if (error instanceof Error && error.message === GEMINI_QUOTA_ERROR) throw error;
+    verification = page.isClosed() ? "BROWSER_CLOSED" : "DOM_INSPECTION_FAILED";
   }
-  throw new GeminiConversationError("Gemini did not verify the submitted prompt and its new assistant turn.");
+  throw new GeminiConversationError(`Gemini did not verify the submitted prompt and its new assistant turn. [${verification}]`);
 }
 
 const GEMINI_QUOTA_MESSAGE = "I can create more images as soon as your limit resets. Check your usage in Settings.";

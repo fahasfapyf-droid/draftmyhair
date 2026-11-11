@@ -92,7 +92,8 @@ const processSource = workerSource.slice(workerSource.indexOf("async function pr
   workerSource.indexOf("async function launchGeminiSession("));
 const compiledProcess = transformSync(processSource, { loader: "ts" }).code;
 
-async function processWithMocks(page: Page, { revokeAfterUpload = false, duplicate = false, chatFails = false } = {}) {
+async function processWithMocks(page: Page, { revokeAfterUpload = false, duplicate = false, chatFails = false,
+  submissionFails = false, captureFails = false } = {}) {
   const order: string[] = [];
   const prompt = "  Server-authoritative Italian Bob prompt.\nPreserve the image.  ";
   const hit = (value: string) => () => { order.push(value); };
@@ -119,10 +120,12 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
     submitPrompt: (_page: Page, value: string) => {
       assert.equal(value, prompt);
       order.push("submit");
+      if (submissionFails) throw new GeminiConversationError("Gemini did not verify the submitted prompt and its new assistant turn. [PROMPT_MISMATCH]");
       return { user: { dispose: async () => {} }, assistant: { dispose: async () => {} } };
     },
     waitForGeneratedImage: () => "mock-image", captureGeneratedImage: () => {
       order.push("capture");
+      if (captureFails) throw new GeminiConversationError("mock capture association lost");
       return { filePath: "mock-output.png", checksum: "a".repeat(64) };
     },
     uploadArtifact: () => { order.push("artifact"); return "mock-artifact"; },
@@ -136,7 +139,7 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
   return { outcome, order };
 }
 
-type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "stale-image" | "valid";
+type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong";
 
 async function mountConversation(page: Page, fixture: ConversationFixture) {
   const url = "https://gemini.google.com/app/old-fixture";
@@ -162,6 +165,35 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           const label = document.createElement("p");
           label.className = "query-text";
           label.textContent = fixture === "wrong-user" ? "Other prompt" : input.value;
+          if (fixture.startsWith("gemini-query-")) {
+            label.replaceChildren();
+            if (fixture === "gemini-query-offscreen") {
+              label.style.cssText = "position:absolute;top:20000px;content-visibility:auto;contain-intrinsic-size:100px 100px";
+            }
+            const summary = document.createElement("h5");
+            summary.className = "cdk-visually-hidden screen-reader-user-query-label";
+            summary.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)";
+            summary.textContent = "You said A screen-reader summary of the submitted prompt";
+            label.append(summary);
+            for (const line of input.value.split("\\n")) {
+              const numbered = line.match(/^(\\d+)\\. (.*)$/);
+              if (numbered) {
+                const list = document.createElement("ol");
+                list.className = "query-numbered-list";
+                list.start = Number(numbered[1]);
+                const item = document.createElement("li");
+                item.className = "query-numbered-item";
+                item.textContent = numbered[2];
+                list.append(item);
+                label.append(list);
+              } else {
+                const paragraph = document.createElement("p");
+                paragraph.className = "query-text-line";
+                paragraph.textContent = fixture === "gemini-query-wrong" ? "Different prompt content" : line;
+                label.append(paragraph);
+              }
+            }
+          }
           user.append(label);
           group.append(user);
         }
@@ -200,6 +232,24 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
 
 async function testConversation(page: Page) {
   const prompt = "  Exact fixture prompt.\nKeep framing.  ";
+  const markupPrompt = "Exact fixture prompt.\nKeep framing.\n1. Preserve identity.\n2. Change hair only.";
+  for (const fixture of ["gemini-query-markup", "gemini-query-offscreen", "gemini-query-wrong"] as const) {
+    await mountConversation(page, fixture);
+    const markupPath = await freshChat(page, 800);
+    if (fixture === "gemini-query-wrong") {
+      await assert.rejects(submitPrompt(page, markupPrompt, markupPath, 350), /PROMPT_MISMATCH/);
+      continue;
+    }
+    const markupTurn = await submitPrompt(page, markupPrompt, markupPath, 800);
+    const rendered = await page.locator("user-query .query-text").innerText();
+    if (fixture === "gemini-query-offscreen") {
+      assert.equal(rendered, "", "offscreen Gemini prompt must exercise content-visibility text omission");
+    } else {
+      assert.match(rendered, /You said A screen-reader summary/);
+      assert.notEqual(rendered.replace(/\s+/g, " ").trim(), markupPrompt.replace(/\s+/g, " ").trim());
+    }
+    await Promise.all([markupTurn.user.dispose(), markupTurn.assistant.dispose()]);
+  }
   for (const fixture of ["missing", "disabled", "stays"] as const) {
     await mountConversation(page, fixture);
     await assert.rejects(freshChat(page, 350), /new chat could not be verified/);
@@ -294,13 +344,23 @@ async function main() {
       "download", "open", "ready", "fresh-chat", "select", "image-mode", "upload", "verify-before-dispatch", "release",
     ] });
     await mount(page);
-    assert.deepEqual(await processWithMocks(page, { duplicate: true }), { outcome: "STOP", order: [
+    assert.deepEqual(await processWithMocks(page, { duplicate: true }), { outcome: "RECONCILE", order: [
       "download", "open", "ready", "fresh-chat", "select", "image-mode", "upload", "verify-before-dispatch",
       "verify-empty-conversation", "quota-mark", "begin", "submit", "submitted", "capture",
     ] });
     await mount(page);
     assert.deepEqual(await processWithMocks(page, { chatFails: true }), { outcome: "STOP", order: [
       "download", "open", "ready", "fresh-chat", "release",
+    ] });
+    await mount(page);
+    assert.deepEqual(await processWithMocks(page, { submissionFails: true }), { outcome: "RECONCILE", order: [
+      "download", "open", "ready", "fresh-chat", "select", "image-mode", "upload", "verify-before-dispatch",
+      "verify-empty-conversation", "quota-mark", "begin", "submit",
+    ] });
+    await mount(page);
+    assert.deepEqual(await processWithMocks(page, { captureFails: true }), { outcome: "RECONCILE", order: [
+      "download", "open", "ready", "fresh-chat", "select", "image-mode", "upload", "verify-before-dispatch",
+      "verify-empty-conversation", "quota-mark", "begin", "submit", "submitted", "capture",
     ] });
     const assistantDiagnostics = new Map<string, Record<string, unknown>>();
     const log = console.log;

@@ -251,7 +251,7 @@ async function recordSubmission(job: ClaimedJob, phase: "begin" | "submitted") {
   if (!response.ok) throw new Error("R&D submission fence rejected: HTTP " + response.status);
 }
 
-async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE" | "STOP"> {
+async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): Promise<"CONTINUE" | "ROTATE" | "STOP" | "RECONCILE"> {
   currentJobId = job.id;
   captureStatus = "UNKNOWN";
   const attemptNumber = job.attemptNumber;
@@ -328,15 +328,17 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
       captureStatus = "PASS";
       captureLastError = `Artifact ${uploadedArtifactId} uploaded; report/QA handoff failed: ${message}`.slice(0, 2000);
       console.error(`Job ${job.id}: artifact ${uploadedArtifactId} is retained; stopping for lease recovery/reconciliation.`);
-      return "STOP";
+      return "RECONCILE";
     }
 
     if (submissionMayHaveStarted) {
       captureStatus = "FAIL";
-      captureLastError = "Gemini submission needs reconciliation before another generation.";
+      captureLastError = error instanceof GeminiConversationError
+        ? `${message} Gemini submission needs reconciliation before another generation.`
+        : "Gemini submission needs reconciliation before another generation.";
       if (classifyProfileError(message) === "EXHAUSTED") await markProfileExhausted(profile.id, message);
       if (classifyProfileError(message) === "RESTRICTED") await markProfileRestricted(profile.id, message);
-      return "STOP";
+      return "RECONCILE";
     }
 
     if (error instanceof GeminiModelSelectionError || error instanceof GeminiConversationError) {
@@ -425,8 +427,7 @@ async function launchGeminiSession(profile: GeminiProfile) {
     context.on("close", () => console.error("DIAGNOSTIC: Playwright BrowserContext emitted close."));
     const browser = context.browser();
     browser?.on("disconnected", () => {
-      console.error("DIAGNOSTIC: Playwright Browser emitted disconnected (browser closed or crashed).");
-      console.error("DIAGNOSTIC: Chrome was disconnected after Gemini generation; capture could not continue.");
+      console.error("DIAGNOSTIC: Playwright Browser emitted disconnected. Check the preceding worker lifecycle messages for the close reason.");
     });
     context.on("weberror", (error) => console.error(`DIAGNOSTIC: BrowserContext web error: ${error.error().message}`));
     for (const existingPage of context.pages()) {
@@ -460,8 +461,13 @@ async function main() {
   let context: BrowserContext | null = null;
   let shutdownRequested = false;
   let statusUpdates = Promise.resolve();
+  let acknowledgeReconciliation: (() => void) | null = null;
   const onSigint = () => {
     shutdownRequested = true;
+    if (acknowledgeReconciliation) {
+      acknowledgeReconciliation();
+      return;
+    }
     console.log("Stopping worker after the current operation; cleanup will run before exit.");
   };
   const updateWorkerStatus = (workerState: "ONLINE" | "STOPPED" = "ONLINE") => {
@@ -474,6 +480,7 @@ async function main() {
     context = null;
     if (!activeContext) return;
     try {
+      console.log("Closing the worker-owned browser context after completion or acknowledged reconciliation.");
       await activeContext.close();
     } catch (error) {
       console.error(`Browser context close failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -564,6 +571,26 @@ async function main() {
         }
       }
       const action = await processJob(page, result.job, geminiProfile);
+      if (action === "RECONCILE") {
+        if (statusTimer) clearInterval(statusTimer);
+        statusTimer = null;
+        await statusUpdates;
+        await reportWorkerStatus("STOPPED");
+        console.error("Awaiting operator reconciliation. No further job will be claimed. The browser remains open; close its worker tab or press Ctrl+C after inspecting the uncertain submission. This does not clear its database marker.");
+        if (!page.isClosed()) {
+          await new Promise<void>(resolve => {
+            const finish = () => {
+              page.off("close", finish);
+              acknowledgeReconciliation = null;
+              resolve();
+            };
+            acknowledgeReconciliation = finish;
+            page.once("close", finish);
+            if (page.isClosed()) finish();
+          });
+        }
+        return;
+      }
       if (RUN_ONCE) {
         console.log("RND_WORKER_ONCE enabled; the one-shot run is finished and will not claim another job.");
         return;
