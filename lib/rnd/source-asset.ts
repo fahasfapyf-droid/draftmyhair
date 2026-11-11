@@ -45,8 +45,9 @@ export async function fetchRndSourceAsset(
 
   if (isExactLegacyFixture) {
     const fallbackUrl = new URL(LEGACY_PREVIEW_SOURCE.publicPath, requestUrl);
-    const headers = protectionBypass
-      ? { "x-vercel-protection-bypass": protectionBypass }
+    const effectiveBypass = protectionBypass ?? process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? null;
+    const headers = effectiveBypass
+      ? { "x-vercel-protection-bypass": effectiveBypass }
       : undefined;
 
     try {
