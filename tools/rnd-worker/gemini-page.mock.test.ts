@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { writeFile } from "node:fs/promises";
 import { existsSync, readFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { transformSync } from "esbuild";
-import { chromium, type Page } from "playwright";
-import { captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, selectGemini31Pro,
+import { chromium, type Browser, type Download, type Page } from "playwright";
+import { captureGeneratedImage, freshChat, GeminiCaptureError, GeminiConversationError, GeminiModelSelectionError, selectGemini31Pro,
   submitPrompt, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
 
 type Model = "3.1 Pro" | "Flash";
@@ -235,6 +237,17 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           } else {
             generated.append(img);
           }
+          const download = document.createElement("button");
+          download.setAttribute("aria-label", "Download full size");
+          download.textContent = "Download full size";
+          download.onclick = () => {
+            if (window.mockNativeDownload) return window.mockNativeDownload();
+            const anchor = document.createElement("a");
+            anchor.href = URL.createObjectURL(new Blob([payload], { type: "image/png" }));
+            anchor.download = "Gemini_Generated_Image.png";
+            anchor.click();
+          };
+          generated.append(download);
           (fixture === "stale-image" ? document.body : response).append(generated);
         }
       };
@@ -298,7 +311,126 @@ async function testConversation(page: Page) {
   console.log("PASS offline: missing/blocked/stale chat, absent user turn, wrong assistant, stale image, intrinsic capture and replaced response.");
 }
 
+async function testNativeDownloads(browser: Browser) {
+  const scenarios = [
+    ["real-native-persistence", null], ["revoked-preview", null], ["larger-original", null],
+    ["jpeg-original", null], ["webp-original", null], ["wrong-control", "RND_CAPTURE_CONTROL_UNAVAILABLE"],
+    ["wrong-image-control", "RND_CAPTURE_CONTROL_NOT_ASSOCIATED"],
+    ["wrong-turn", "RND_CAPTURE_TURN_CHANGED"], ["wrong-page", "RND_CAPTURE_UNEXPECTED_DOWNLOAD"],
+    ["interfering-click", "RND_CAPTURE_UNEXPECTED_DOWNLOAD"],
+    ["wrong-origin", "RND_CAPTURE_UNEXPECTED_DOWNLOAD"], ["duplicate-controls", "RND_CAPTURE_DUPLICATE_CONTROLS"],
+    ["duplicate-downloads", "RND_CAPTURE_UNEXPECTED_DOWNLOAD"], ["timeout", "RND_CAPTURE_TIMEOUT"],
+    ["save-timeout", "RND_CAPTURE_TIMEOUT"],
+    ["cancelled", "RND_CAPTURE_DOWNLOAD_CANCELLED"], ["save-failed", "RND_CAPTURE_SAVE_FAILED"],
+    ["download-failed", "RND_CAPTURE_DOWNLOAD_FAILED"], ["invalid-mime", "RND_CAPTURE_INVALID_MIME"],
+    ["empty", "RND_CAPTURE_INVALID_SIZE"], ["oversized", "RND_CAPTURE_INVALID_SIZE"],
+    ["truncated", "RND_CAPTURE_INVALID_SIZE"], ["invalid-image", "RND_CAPTURE_INVALID_IMAGE"],
+    ["small-dimensions", "RND_CAPTURE_INVALID_DIMENSIONS"], ["wrong-aspect", "RND_CAPTURE_INVALID_DIMENSIONS"],
+    ["browser-shutdown", "RND_CAPTURE_BROWSER_CLOSED"],
+  ] as const;
+  for (const [scenario, expected] of scenarios) {
+    const context = await browser.newContext({ offline: true, acceptDownloads: true, serviceWorkers: "block" });
+    await context.route("**/*", route => route.abort());
+    const page = await context.newPage();
+    let clicks = 0;
+    let downloadEvents = 0;
+    page.on("download", () => { downloadEvents++; });
+    let fileSaved = false;
+    let bytes = Buffer.alloc(0);
+    let otherPage: Page | null = null;
+    const errorLog: string[] = [];
+    const originalError = console.error;
+    try {
+      if (scenario !== "real-native-persistence") await page.exposeFunction("mockNativeDownload", () => {
+        clicks++;
+        if (scenario === "timeout") return;
+        const download = {
+          page: () => otherPage ?? page,
+          url: () => scenario === "wrong-origin" ? "https://untrusted.invalid/private?credential=DO_NOT_LOG_THIS" : "https://lh3.googleusercontent.com/native-full-size",
+          saveAs: async (filename: string) => {
+            if (scenario === "browser-shutdown") {
+              void context.close();
+              return new Promise<void>(() => undefined);
+            }
+            if (scenario === "save-timeout") return new Promise<void>(() => undefined);
+            if (scenario === "cancelled" || scenario === "save-failed") throw new Error("DO_NOT_LOG_THIS signed URL provider error");
+            await writeFile(filename, bytes);
+            fileSaved = true;
+            if (scenario === "wrong-turn") await page.locator("model-response").evaluate(el => el.replaceWith(el.cloneNode(true)));
+            if (scenario === "interfering-click") await page.locator("user-query").click();
+          },
+          failure: async () => scenario === "cancelled" ? "canceled DO_NOT_LOG_THIS" :
+            scenario === "download-failed" ? "network provider error DO_NOT_LOG_THIS" : null,
+          cancel: async () => undefined,
+        } as unknown as Download;
+        (page as unknown as EventEmitter).emit("download", download);
+        if (scenario === "duplicate-downloads") (page as unknown as EventEmitter).emit("download", download);
+      });
+      await mountConversation(page, "responsive-srcset");
+      const turn = await submitPrompt(page, "Fixture prompt", await freshChat(page, 800), 800);
+      const image = await waitForGeneratedImage(page, turn, 800);
+      const mime = scenario === "jpeg-original" ? "image/jpeg" : scenario === "webp-original" ? "image/webp" : "image/png";
+      bytes = Buffer.from(await page.evaluate(({ width, height, mime }) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "navy"; ctx.fillRect(0, 0, width, height);
+        return canvas.toDataURL(mime).split(",")[1];
+      }, { width: scenario === "larger-original" ? 1280 : scenario === "small-dimensions" ? 1 : scenario === "wrong-aspect" ? 768 : 640,
+        height: scenario === "larger-original" ? 1536 : scenario === "small-dimensions" ? 1 : 768, mime }), "base64");
+      if (scenario === "revoked-preview") {
+        await page.evaluate(src => URL.revokeObjectURL(src), image.src);
+        assert.equal(await page.evaluate(async src => { try { await fetch(src); return true; } catch { return false; } }, image.src), false,
+          "regression control: the displayed preview URL really is revoked");
+      }
+      if (scenario === "wrong-control") await page.locator("generated-image button").evaluate(el => document.body.append(el));
+      if (scenario === "wrong-image-control") await page.locator("generated-image button").evaluate(el => el.closest("model-response")!.append(el));
+      if (scenario === "wrong-page") otherPage = await context.newPage();
+      if (scenario === "duplicate-controls") await page.locator("generated-image button").evaluate(el => el.after(el.cloneNode(true)));
+      if (scenario === "invalid-mime") bytes = Buffer.from("<html>DO_NOT_LOG_THIS</html>");
+      if (scenario === "empty") bytes = Buffer.alloc(0);
+      if (scenario === "oversized") bytes = Buffer.alloc(15 * 1024 * 1024 + 1);
+      if (scenario === "truncated") bytes = bytes.subarray(0, 8);
+      if (scenario === "invalid-image") bytes = bytes.subarray(0, 33);
+      const base = path.join(mkdtempSync(path.join(tmpdir(), "dmh-native-download-")), "artifact");
+      console.error = (...args: unknown[]) => { errorLog.push(JSON.stringify(args)); };
+      if (expected) {
+        const pending = captureGeneratedImage(page, base, turn, image, scenario === "timeout" || scenario === "save-timeout" ? 800 : 2500);
+        if (scenario === "timeout") await assert.rejects(captureGeneratedImage(page, base, turn, image),
+          (error: unknown) => error instanceof GeminiCaptureError && error.code === "RND_CAPTURE_ALREADY_ACTIVE");
+        await assert.rejects(pending,
+          (error: unknown) => error instanceof GeminiCaptureError && error.code === expected, scenario);
+        assert.equal(clicks, scenario === "wrong-control" || scenario === "wrong-image-control" || scenario === "duplicate-controls" ? 0 : 1,
+          "never retry download clicks after a failure");
+      } else {
+        const result = await captureGeneratedImage(page, base, turn, image, 2500);
+        assert.equal(downloadEvents, 1);
+        if (scenario !== "real-native-persistence") { assert.equal(clicks, 1); assert.equal(fileSaved, true); }
+        assert.equal(result.mimeType, mime);
+        assert.equal(result.fileSize, bytes.length);
+        assert.equal(result.checksum, createHash("sha256").update(bytes).digest("hex"));
+        assert.deepEqual(readFileSync(result.filePath), bytes);
+        assert.deepEqual([result.width, result.height], scenario === "larger-original" ? [1280, 1536] : [640, 768]);
+        await context.close();
+        assert.deepEqual(readFileSync(result.filePath), bytes, "persistent original survives browser-context cleanup");
+      }
+      assert.equal(errorLog.join(" ").includes("DO_NOT_LOG_THIS"), false, "capture diagnostics never leak raw provider data or URLs");
+      await Promise.allSettled([turn.user.dispose(), turn.assistant.dispose()]);
+      console.log(`PASS offline native download: ${scenario}`);
+    } finally {
+      console.error = originalError;
+      await context.close();
+    }
+  }
+}
+
 async function main() {
+  const captureSource = readFileSync(new URL("./gemini-page.ts", import.meta.url), "utf8").split("export async function captureGeneratedImage")[1];
+  assert.doesNotMatch(captureSource, /\bfetch\s*\(|\.request\.|\.screenshot\s*\(|\.toDataURL\s*\(|\.toBlob\s*\(/,
+    "static wiring guard: native originals must never be replaced by preview acquisition");
+  assert.match(captureSource, /page\.waitForEvent\("download"/);
+  assert.match(captureSource, /download\.saveAs\(pendingPath\)/);
+  console.log("PASS static: native download wiring and absence of preview/screenshot/canvas fallbacks.");
   const packaged = chromium.executablePath();
   const systemChrome = "C:/Program Files/Google/Chrome/Application/chrome.exe";
   const executablePath = existsSync(packaged) ? packaged :
@@ -393,7 +525,8 @@ async function main() {
       assert.equal(diagnostic.assistantTurnOrdinal, 1);
       assert.equal(Object.hasOwn(diagnostic, "assistantTurn"), false);
     }
-    console.log("PASS offline picker, conversation/capture, and mocked worker dispatch and duplicate guards.");
+    await testNativeDownloads(browser);
+    console.log("PASS offline picker, conversation/capture, native downloads (26 scenarios), and mocked worker dispatch and duplicate guards.");
   } finally {
     await browser.close();
   }
