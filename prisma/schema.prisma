@@ -38,6 +38,9 @@ model User {
   promoRedemptions    PromoRedemption[]
   contactMessages     ContactMessage[]
   contactReplies      ContactMessageReply[]
+  rndCalibrationReviews RnDQAReferenceRating[]
+  rndCalibrationExecutions RnDPromptCalibration[]
+  rndCalibrationReceipts RnDQAReviewReceipt[]
 
   @@index([email])
   @@index([role])
@@ -314,8 +317,10 @@ model PromptVersion {
   updatedAt          DateTime        @updatedAt
   hairstyle          Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
   sourceRnDAttempt   RnDAttempt?     @relation(fields: [sourceRnDAttemptId], references: [id], onDelete: Restrict)
+  calibrations RnDPromptCalibration[]
 
   @@unique([hairstyleId, version])
+  @@unique([id, hairstyleId])
   @@index([hairstyleId, status])
   @@index([status])
   @@index([qaStatus])
@@ -616,11 +621,52 @@ model RnDQAReferenceRating {
   humanHairstyleScore Decimal?  @db.Decimal(4, 2)
   notes               String?   @db.Text
   createdAt           DateTime  @default(now())
-  attempt             RnDAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  reviewedByUserId     String?
+  reviewedAt          DateTime?
+  promptChecksum      String?
+  artifactChecksum    String?
+  reviewedByUser       User? @relation(fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  attempt             RnDAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
 
   @@unique([attemptId, reviewerKey])
+  @@unique([attemptId, reviewedByUserId])
   @@index([attemptId])
   @@index([createdAt])
+}
+
+model RnDQAReviewReceipt {
+  id               String    @id @default(cuid())
+  tokenHash        String    @unique
+  attemptId        String
+  reviewerId       String
+  promptChecksum   String
+  artifactChecksum String
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  attempt          RnDAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  reviewer         User       @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([attemptId, reviewerId, expiresAt])
+  @@index([expiresAt])
+}
+
+
+model RnDPromptCalibration {
+  id BigInt @id @default(autoincrement())
+  promptVersionId String
+  hairstyleId String
+  promptChecksum String
+  sourceAttemptId String
+  result String
+  completedAt DateTime
+  executedByUserId String
+  policyVersion String
+  evidenceDigest String
+  summary Json
+  promptVersion PromptVersion @relation(fields: [promptVersionId, hairstyleId], references: [id, hairstyleId], onDelete: Restrict)
+  executedByUser User @relation(fields: [executedByUserId], references: [id], onDelete: Restrict)
+  @@index([promptVersionId, id])
 }
 
 enum RnDAttemptVerdict {
@@ -774,6 +820,7 @@ model RnDAttempt {
   job                   RnDJob            @relation(fields: [jobId], references: [id], onDelete: Cascade)
   artifact              RnDAsset?         @relation(fields: [artifactId], references: [id], onDelete: Restrict)
   calibrationRatings     RnDQAReferenceRating[]
+  calibrationReviewReceipts RnDQAReviewReceipt[]
   promptVersion         PromptVersion?
 
   @@unique([jobId, attemptNumber])

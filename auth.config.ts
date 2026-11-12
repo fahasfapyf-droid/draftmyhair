@@ -60,6 +60,7 @@ export default {
         const currentUser = await prisma.user.findUnique({
           where: { id: tokenUserId },
           select: {
+            role: true,
             sessionVersion: true,
             isActive: true,
             isDeleted: true,
@@ -70,7 +71,8 @@ export default {
           !currentUser ||
           !currentUser.isActive ||
           currentUser.isDeleted ||
-          currentUser.sessionVersion !== token.sessionVersion
+          currentUser.sessionVersion !== token.sessionVersion ||
+          currentUser.role !== token.role
         ) {
           token.revoked = true;
           token.id = "";

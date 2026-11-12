@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { lockActiveAdmin } from "@/lib/rnd/admin-auth";
+import { lockCalibration } from "@/lib/rnd/calibration-evidence";
+import { lockPromptStyle } from "@/lib/rnd/promotion-provenance";
 
 export const runtime = "nodejs";
 
@@ -18,10 +21,14 @@ export async function POST(request: Request) {
   const result = await prisma.$transaction(async (tx) => {
     const job = await tx.rnDJob.findUnique({
       where: { id: jobId },
-      select: { id: true, targetId: true, status: true },
+      select: { id: true, targetId: true, status: true, target: { select: { hairstyleId: true } } },
     });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
+
+    if (job.target.hairstyleId && !await lockPromptStyle(tx, job.target.hairstyleId)) return { kind: "state" as const, status: "STYLE_MISSING" };
+    await lockCalibration(tx);
+    if (!await lockActiveAdmin(tx, session.user.id)) return { kind: "unauthorized" as const };
 
     // Compare-and-set prevents concurrent approval/rejection requests from
     // both transitioning the same job after reading HUMAN_APPROVAL.
@@ -47,6 +54,7 @@ export async function POST(request: Request) {
     return { kind: "ok" as const };
   });
 
+  if (result.kind === "unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (result.kind === "missing") return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (result.kind === "state") return NextResponse.json({ error: "Job is not awaiting human approval", status: result.status }, { status: 409 });
   return NextResponse.json({ ok: true });

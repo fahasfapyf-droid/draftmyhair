@@ -7,14 +7,16 @@ async function main(){
   const {run,root,repo}=require(process.env.DMH71_REVIEW_RUNNER);
   const connection={host:'127.0.0.1',port:meta.port,user:meta.user,database:meta.database};
   const control=new Client(connection);await control.connect();
+  const cleanupRole=(await control.query("SELECT 1 FROM pg_roles WHERE rolname = 'dmh_calibration_cleanup'")).rowCount>0;
+  await control.query(cleanupRole ? "ALTER ROLE dmh_calibration_cleanup NOLOGIN NOINHERIT NOBYPASSRLS" : "CREATE ROLE dmh_calibration_cleanup NOLOGIN NOINHERIT NOBYPASSRLS");
   const ident=(await control.query("SELECT current_setting('data_directory') AS data, host(inet_server_addr()) AS host")).rows[0];assert.equal(ident.host,'127.0.0.1');assert.equal(ident.data.replaceAll('\\','/').toLowerCase(),meta.data.replaceAll('\\','/').toLowerCase());
   const make=async()=>{const database='dmh71_review_'+crypto.randomBytes(8).toString('hex');await control.query('CREATE DATABASE "'+database+'"');const c=new Client({...connection,database});await c.connect();return{database,c};};
   const fresh=await make(),upgrade=await make();const folder=fs.mkdtempSync(path.join(root,'migration-schema-'));fs.cpSync(path.join(repo,'prisma'),path.join(folder,'prisma'),{recursive:true});
   const schema=path.join(folder,'prisma/schema.prisma');
   const env={DATABASE_URL:`postgresql://${meta.user}@127.0.0.1:${meta.port}/${fresh.database}?schema=public`,PRISMA_HIDE_UPDATE_MESSAGE:'1',CHECKPOINT_DISABLE:'1'};
   try{
-    assert.equal(run('FINAL full 26-migration Prisma deploy on NEW database',process.execPath,[path.join(repo,'node_modules/prisma/build/index.js'),'migrate','deploy','--schema',schema],folder,env).exitCode,0);
-    const statuses=(await fresh.c.query('SELECT migration_name,checksum,finished_at,rolled_back_at FROM "_prisma_migrations" ORDER BY migration_name')).rows;assert.equal(statuses.length,26);assert.ok(statuses.every(r=>r.finished_at&&!r.rolled_back_at));
+    assert.equal(run('FINAL full Prisma deploy on NEW database',process.execPath,[path.join(repo,'node_modules/prisma/build/index.js'),'migrate','deploy','--schema',schema],folder,env).exitCode,0);
+    const statuses=(await fresh.c.query('SELECT migration_name,checksum,finished_at,rolled_back_at FROM "_prisma_migrations" ORDER BY migration_name')).rows;const expectedMigrationCount=fs.readdirSync(path.join(repo,'prisma/migrations')).filter(f=>fs.statSync(path.join(repo,'prisma/migrations',f)).isDirectory()).length;assert.equal(statuses.length,expectedMigrationCount);assert.ok(statuses.every(r=>r.finished_at&&!r.rolled_back_at));
     for(const migration of statuses)assert.equal(migration.checksum,crypto.createHash('sha256').update(fs.readFileSync(path.join(repo,'prisma/migrations',migration.migration_name,'migration.sql'))).digest('hex'),'exact SQL checksum: '+migration.migration_name);
     const directories=fs.readdirSync(path.join(repo,'prisma/migrations')).filter(f=>fs.statSync(path.join(repo,'prisma/migrations',f)).isDirectory()).sort();
     for(const migration of directories.filter(f=>f<'20261111170000'))await upgrade.c.query(fs.readFileSync(path.join(repo,'prisma/migrations',migration,'migration.sql'),'utf8'));
@@ -33,6 +35,53 @@ async function main(){
     await assert.rejects(upgrade.c.query(forward),e=>e.code==='23505');await upgrade.c.query('ROLLBACK');
     assert.equal((await upgrade.c.query('SELECT "refinementCount" FROM "RnDJob"')).rows[0].refinementCount,0,'failed guard migration rolls back conservative backfill');
     await upgrade.c.query("DELETE FROM \"PromptVersion\" WHERE id='migration-b'");await upgrade.c.query(forward);
+    await upgrade.c.query(`UPDATE "PromptVersion" SET "qaStatus"='PASSED'; INSERT INTO "RnDQAReferenceRating" (id,"attemptId","reviewerKey","humanOverallScore") VALUES ('legacy-rating','upgrade-attempt','unbound-worker-key',9.5)`);
+    await upgrade.c.query(fs.readFileSync(path.join(repo,'prisma/migrations/20261112120000_rnd_calibration_evidence/migration.sql'),'utf8'));
+    await upgrade.c.query(fs.readFileSync(path.join(repo,'prisma/migrations/20261112130000_rnd_calibration_review_immutable/migration.sql'),'utf8'));
+    await upgrade.c.query(fs.readFileSync(path.join(repo,'prisma/migrations/20261112140000_rnd_calibration_review_receipts_and_execution_delete_guard/migration.sql'),'utf8'));
+    assert.equal((await upgrade.c.query('SELECT count(*)::int AS n FROM "RnDPromptCalibration"')).rows[0].n,0,'legacy PASSED prompt receives no calibration evidence');
+    await upgrade.c.query(`INSERT INTO "User" (id,email,role,"updatedAt") VALUES ('migration-admin','migration-admin@test.invalid','ADMIN',now());
+      INSERT INTO "RnDPromptCalibration" ("promptVersionId","hairstyleId","promptChecksum","sourceAttemptId",result,"completedAt","executedByUserId","policyVersion","evidenceDigest",summary)
+      VALUES ('migration-a','migration-style',repeat('a',64),'upgrade-attempt','PASSED',now(),'migration-admin','test-policy',repeat('b',64),'{}'::jsonb);
+      INSERT INTO "RnDQAReviewReceipt" (id,"tokenHash","attemptId","reviewerId","promptChecksum","artifactChecksum","expiresAt")
+      VALUES ('migration-receipt',repeat('c',64),'upgrade-attempt','migration-admin',repeat('a',64),repeat('b',64),now()+interval '5 minutes');`);
+    await assert.rejects(upgrade.c.query('DELETE FROM "RnDPromptCalibration"'), e=>e.code==='23514', 'calibration execution DELETE is rejected');
+    const appRole="dmh_calibration_app_"+upgrade.database.slice(-8);
+    await upgrade.c.query("CREATE ROLE "+appRole+" LOGIN PASSWORD 'synthetic-only-password'; GRANT DELETE ON \"RnDPromptCalibration\" TO "+appRole+"; GRANT DELETE ON \"RnDQAReferenceRating\" TO "+appRole);
+    const appClient=new Client({host:"127.0.0.1",port:meta.port,user:appRole,password:"synthetic-only-password",database:upgrade.database}); await appClient.connect();
+    await assert.rejects(appClient.query("SET ROLE dmh_calibration_cleanup"), e=>e.code==="42501", "application role cannot assume test cleanup role");
+    await assert.rejects(appClient.query("DELETE FROM \"RnDPromptCalibration\""), e=>e.code==="23514", "application role cannot delete calibration evidence");
+    await assert.rejects(appClient.query("DELETE FROM \"RnDQAReferenceRating\""), e=>e.code==="23514", "application role cannot delete human review evidence");
+    await appClient.end();
+    await upgrade.c.query("BEGIN; SET LOCAL ROLE dmh_calibration_cleanup; DELETE FROM \"RnDPromptCalibration\"; COMMIT;");
+    assert.equal((await upgrade.c.query('SELECT count(*)::int AS n FROM "RnDPromptCalibration"')).rows[0].n,0,'explicit disposable cleanup works');
+    assert.equal((await upgrade.c.query('SELECT count(*)::int AS n FROM "RnDQAReviewReceipt"')).rows[0].n,1,'review receipt migration and FK work');
+    const guardDatabase="dmh71_review_unsafe_"+crypto.randomBytes(6).toString("hex"); await control.query('CREATE DATABASE "'+guardDatabase+'"');
+    const guard=new Client({...connection,database:guardDatabase}); await guard.connect();
+    try {
+      await guard.query('CREATE TABLE "RnDPromptCalibration" (id text PRIMARY KEY, "promptVersionId" text NOT NULL); CREATE TABLE "RnDQAReferenceRating" (id text PRIMARY KEY, "attemptId" text NOT NULL)');
+      const executionMigration=fs.readFileSync(path.join(repo,'prisma/migrations/20261112140000_rnd_calibration_review_receipts_and_execution_delete_guard/migration.sql'),'utf8');
+      const executionStart=executionMigration.indexOf('CREATE OR REPLACE FUNCTION "rnd_calibration_immutable"');
+      const executionEnd=executionMigration.indexOf('COMMIT;',executionStart); assert.ok(executionStart>=0&&executionEnd>executionStart);
+      await guard.query(executionMigration.slice(executionStart,executionEnd));
+      const reviewMigration=fs.readFileSync(path.join(repo,'prisma/migrations/20261112130000_rnd_calibration_review_immutable/migration.sql'),'utf8');
+      const reviewStart=reviewMigration.indexOf('CREATE FUNCTION "rnd_calibration_review_immutable"');
+      const reviewEnd=reviewMigration.indexOf('COMMIT;',reviewStart); assert.ok(reviewStart>=0&&reviewEnd>reviewStart);
+      await guard.query(reviewMigration.slice(reviewStart,reviewEnd));
+      await guard.query('GRANT DELETE ON "RnDPromptCalibration" TO dmh_calibration_cleanup; GRANT SELECT ("promptVersionId") ON "RnDPromptCalibration" TO dmh_calibration_cleanup; GRANT DELETE ON "RnDQAReferenceRating" TO dmh_calibration_cleanup; GRANT SELECT ("attemptId") ON "RnDQAReferenceRating" TO dmh_calibration_cleanup; INSERT INTO "RnDPromptCalibration" VALUES (\'guard-row\',\'guard-prompt\'); INSERT INTO "RnDQAReferenceRating" VALUES (\'guard-review\',\'guard-attempt\')');
+      for (const table of ['RnDPromptCalibration','RnDQAReferenceRating']) {
+        await guard.query('BEGIN; SET LOCAL ROLE dmh_calibration_cleanup');
+        await assert.rejects(guard.query('DELETE FROM "'+table+'"'),e=>e.code==='23514','cleanup role cannot delete '+table+' in a prefix-matching database whose name is not the exact disposable format');
+        await guard.query('ROLLBACK');
+      }
+    } finally { await guard.end(); await control.query('DROP DATABASE "'+guardDatabase+'"'); }
+    assert.equal((await upgrade.c.query('SELECT count(*)::int AS n FROM "RnDPromptCalibration"')).rows[0].n,0,'migration must not certify legacy PASSED statuses');
+    const legacy=(await upgrade.c.query('SELECT "reviewedByUserId","reviewedAt","promptChecksum","artifactChecksum" FROM "RnDQAReferenceRating"')).rows[0];
+    assert.deepEqual(legacy,{reviewedByUserId:null,reviewedAt:null,promptChecksum:null,artifactChecksum:null},'legacy ratings remain untrusted; no manufactured identity or checksum backfill');
+    await assert.rejects(upgrade.c.query('DELETE FROM "RnDAttempt" WHERE id=\'upgrade-attempt\''),e=>e.code==='23503','attempt deletion cannot cascade-delete immutable human review evidence');
+    await assert.rejects(upgrade.c.query('DELETE FROM "RnDQAReferenceRating" WHERE id=\'legacy-rating\''),e=>e.code==='23514','direct human review DELETE is rejected');
+    await upgrade.c.query("BEGIN; SET LOCAL ROLE dmh_calibration_cleanup; DELETE FROM \"RnDQAReferenceRating\" WHERE id=\'legacy-rating\'; COMMIT;");
+    assert.equal((await upgrade.c.query('SELECT count(*)::int AS n FROM "RnDQAReferenceRating"')).rows[0].n,0,'explicit disposable cleanup role may remove synthetic legacy review');
     assert.deepEqual((await upgrade.c.query('SELECT status,"attemptCount","failureCode","currentPrompt" FROM "RnDJob"')).rows,before);
     const budgets=(await upgrade.c.query('SELECT "refinementCount","maxGenerationAttempts","infrastructureRetryCount" FROM "RnDJob"')).rows[0];assert.deepEqual(budgets,{refinementCount:1,maxGenerationAttempts:5,infrastructureRetryCount:2});
     for(const[sql,code]of [['UPDATE "RnDJob" SET "infrastructureRetryCount"=NULL','23502'],['UPDATE "RnDJob" SET "infrastructureRetryCount"=-1','23514'],['UPDATE "RnDJob" SET "refinementCount"=NULL','23502'],['UPDATE "RnDJob" SET "refinementCount"=-1','23514'],['UPDATE "RnDJob" SET "attemptCount"=-1','23514'],['UPDATE "RnDJob" SET "maxGenerationAttempts"=6','23514'],['UPDATE "RnDJob" SET "maxGenerationAttempts"=NULL','23502'],['UPDATE "RnDAttempt" SET "infrastructureRetryCount"=NULL','23502'],['UPDATE "RnDAttempt" SET "infrastructureRetryCount"=-1','23514']])await assert.rejects(upgrade.c.query(sql),e=>e.code===code);
@@ -46,7 +95,7 @@ async function main(){
     const constraints=(await fresh.c.query(`SELECT c.conname,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid WHERE t.relname LIKE 'RnD%' OR t.relname='PromptVersion' ORDER BY c.conname`)).rows;
     fs.writeFileSync(path.join(root,'migration-evidence.json'),JSON.stringify({freshDatabase:fresh.database,upgradeDatabase:upgrade.database,statuses,before,budgets,columns,indexes,constraints,enumRows,expectedRejectedSqlstates:['23502','23514','23505']},null,2));
     fs.writeFileSync(path.join(root,'final-database.json'),JSON.stringify({...meta,database:fresh.database},null,2));
-    console.log('PASS actual PostgreSQL: 26 Prisma migrations; matching R&D enums/columns/defaults/constraints/indexes; pre-Issue71 upgrade preserves terminal state, consumed refinement and infrastructure allowance; invalid NULL/negative/over-budget writes rejected; duplicate ACTIVE guard rollback is atomic.');
+    console.log(`PASS actual PostgreSQL: ${statuses.length} Prisma migrations; matching R&D enums/columns/defaults/constraints/indexes; pre-Issue71 upgrade preserves terminal state, consumed refinement and infrastructure allowance; legacy PASSED rows/ratings receive no calibration proof; invalid NULL/negative/over-budget writes rejected; duplicate ACTIVE guard rollback is atomic.`);
   }finally{await fresh.c.end();await upgrade.c.end();await control.end();}
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

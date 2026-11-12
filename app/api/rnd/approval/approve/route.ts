@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { eligibleRndApproval, humanApprovalProof, lockPromptStyle } from "@/lib/rnd/promotion-provenance";
+import { lockActiveAdmin } from "@/lib/rnd/admin-auth";
+import { lockCalibration } from "@/lib/rnd/calibration-evidence";
 
 export const runtime = "nodejs";
 
@@ -39,6 +41,11 @@ export async function POST(request: Request) {
       return { kind: "gate" as const };
     }
 
+    // Acquire the same style -> calibration -> actor lock order used by prompt promotion.
+    if (job.target.hairstyleId && !await lockPromptStyle(tx, job.target.hairstyleId)) throw new Error("RND_APPROVAL_STYLE_MISSING");
+    await lockCalibration(tx);
+    if (!await lockActiveAdmin(tx, session.user.id)) return { kind: "unauthorized" as const };
+
     // Compare-and-set the approval state before any side effects. A concurrent
     // approve/reject request can win this transition only once.
     const claimed = await tx.rnDJob.updateMany({
@@ -48,7 +55,6 @@ export async function POST(request: Request) {
     if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
 
     if (job.target.hairstyleId) {
-      if (!await lockPromptStyle(tx, job.target.hairstyleId)) throw new Error("RND_APPROVAL_STYLE_MISSING");
       const existingPrompt = await tx.promptVersion.findUnique({
         where: { sourceRnDAttemptId: approvedAttempt.id },
         select: { id: true },
@@ -89,6 +95,7 @@ export async function POST(request: Request) {
     return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt) };
   });
 
+  if (result.kind === "unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (result.kind === "missing") return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (result.kind === "gate") return NextResponse.json({ error: "Approved attempt is missing or has not passed QA gates" }, { status: 409 });
   if (result.kind === "state") return NextResponse.json({ error: "Job is not awaiting human approval", status: result.status }, { status: 409 });

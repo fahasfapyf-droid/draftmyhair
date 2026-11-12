@@ -2,10 +2,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { transformSync } from "esbuild";
 import * as provenance from "../lib/rnd/promotion-provenance";
+import { runCalibrationCases } from "./rnd-calibration-fixtures";
 
 const req = createRequire(import.meta.url);
 const prefix = "review71-" + randomUUID();
@@ -15,14 +17,15 @@ const scores = { overall: 9.5, identity: 9.5, styleAccuracy: 9.5, rootIntegratio
 const qaJson = () => ({ ...scores, verdict: "APPROVE", imageIntegrity: { canvasMatch: true, faceTexturePreservationPass: true }, finalVerification: { ...scores, verdict: "PASS" } });
 let session: any = { user: { id: "local-synthetic-admin", role: "ADMIN" } };
 let prisma: any;
+let cleanupClient: any;
 let db: any;
 let serial = 0;
 let qaBarrier: (() => Promise<void>) | null = null;
 function barrier() { let count = 0; let release!: () => void; const wait = new Promise<void>(r => { release = r; }); return async () => { if (++count === 2) release(); await wait; }; }
 function request(body: unknown, worker = "worker-a", method = "POST") { return new Request("https://local-test.invalid/handler", { method,
   headers: { authorization: "Bearer local-test-only", "x-rnd-worker-id": worker, "x-rnd-worker-protocol": "2", "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(body) }); }
-function handler(file: string, baseline = false) {
-  const source = baseline ? execFileSync("git", ["show", "f463f347:" + file], { encoding: "utf8" }) : readFileSync(file, "utf8");
+function handler(file: string, baseline: boolean | string = false) {
+  const source = baseline ? execFileSync("git", ["show", (typeof baseline === "string" ? baseline : "f463f347") + ":" + file], { encoding: "utf8" }) : readFileSync(file, "utf8");
   const code = transformSync(source, { loader: "ts", format: "cjs", target: "node20" }).code;
   const mod = { exports: {} as any };
   const modules: Record<string, unknown> = {
@@ -38,15 +41,28 @@ function handler(file: string, baseline = false) {
   };
   new Function("require", "module", "exports", "setTimeout", code)((name: string) => {
     if (name in modules) return modules[name];
+    if (name.startsWith(".")) return handler(path.posix.join(path.posix.dirname(file), name) + ".ts");
     return name.startsWith("@/") ? req("../" + name.slice(2)) : req(name);
   }, mod, mod.exports, (fn: () => void, ms: number) => { const timer = setTimeout(fn, ms); timer.unref(); return timer; });
   return mod.exports;
 }
 async function clean() {
   qaBarrier = null;
+  if (cleanupClient) {
+    await cleanupClient.query("BEGIN");
+    try {
+      await cleanupClient.query("SET LOCAL ROLE dmh_calibration_cleanup");
+      const promptIds = (await prisma.promptVersion.findMany({ where: { hairstyleId: { startsWith: prefix } }, select: { id: true } })).map((v: any) => v.id);
+      if (promptIds.length) await cleanupClient.query('DELETE FROM "RnDPromptCalibration" WHERE "promptVersionId" = ANY($1::text[])', [promptIds]);
+      const attemptIds = (await prisma.rnDAttempt.findMany({ where: { job: { target: { campaignId: { startsWith: prefix } } }, calibrationRatings: { some: {} } }, select: { id: true } })).map((v: any) => v.id);
+      if (attemptIds.length) await cleanupClient.query('DELETE FROM "RnDQAReferenceRating" WHERE "attemptId" = ANY($1::text[])', [attemptIds]);
+      await cleanupClient.query("COMMIT");
+    } catch (error) { await cleanupClient.query("ROLLBACK"); throw error; }
+  }
   await prisma.promptVersion.deleteMany({ where: { hairstyleId: { startsWith: prefix } } });
   await prisma.rnDCampaign.deleteMany({ where: { id: { startsWith: prefix } } });
   await prisma.hairstyle.deleteMany({ where: { id: { startsWith: prefix } } });
+  await prisma.user.deleteMany({ where: { id: { startsWith: prefix } } });
 }
 async function seed(status = "HUMAN_APPROVAL", style?: string) {
   const tag = prefix + "-" + (++serial);
@@ -72,6 +88,8 @@ async function run() {
   process.env.RND_WORKER_TOKEN = "local-test-only";
   const { PrismaClient } = req(process.env.DMH71_PRISMA_CLIENT!);
   prisma = new PrismaClient({ datasources: { db: { url: `postgresql://${meta.user}@127.0.0.1:${meta.port}/${meta.database}?schema=public` } } }); db = prisma;
+  await prisma.user.upsert({ where: { id: "local-synthetic-admin" }, create: { id: "local-synthetic-admin", email: "local-synthetic-admin@fixture.invalid", role: "ADMIN" }, update: { role: "ADMIN", isActive: true, isDeleted: false } });
+  const { Client } = req("pg"); cleanupClient = new Client({ host: "127.0.0.1", port: meta.port, user: meta.user, database: meta.database }); await cleanupClient.connect();
   const identity = await prisma.$queryRawUnsafe("SELECT current_database() AS database, host(inet_server_addr()) AS host, current_setting('data_directory') AS directory, version() AS version");
   assert.equal(identity[0].database, meta.database); assert.equal(identity[0].host, "127.0.0.1");
   assert.equal(identity[0].directory.replaceAll("\\", "/").toLowerCase(), meta.data.replaceAll("\\", "/").toLowerCase());
@@ -88,6 +106,7 @@ async function run() {
     assert.equal(collision.filter(v => v.status === "rejected" && v.reason.code === "P2002").length, 1);
     console.log("REPRODUCED starting HEAD defect: concurrent same-style imports select version 1 twice; one real Prisma P2002 rollback.");
     db = prisma; await clean();
+    if (!process.argv.includes("--no-worker-dispatch")) {
     const claim = handler("app/api/rnd/worker/claim/route.ts").POST, submission = handler("app/api/rnd/worker/submission/route.ts").POST;
     const queued = await seed("QUEUED");
     const claims = await Promise.all([claim(request({}, "worker-a")), claim(request({}, "worker-b"))]);
@@ -127,6 +146,7 @@ async function run() {
     assert.deepEqual(reports.map(r => r.status).sort(), [200, 409]); assert.equal(await prisma.rnDAttempt.count({ where: { jobId: j.id } }), 1);
     assert.equal((await report(request(reportBody))).status, 409, "lost successful report response cannot cause a second transition");
     console.log("PASS real DB: submitted timestamp, concurrent artifact idempotence, duplicate report CAS, lost report response remains safe.");
+    } else console.log("SKIP worker claim/submission/artifact/report execution: --no-worker-dispatch. These paths run only in offline mocks in this review.");
     const approve = handler("app/api/rnd/approval/approve/route.ts").POST, reject = handler("app/api/rnd/approval/reject/route.ts").POST;
     await clean(); const contested = await seed();
     const decision = await Promise.all([approve(request({ jobId: contested.id })), reject(request({ jobId: contested.id }))]);
@@ -142,32 +162,9 @@ async function run() {
     const imports = await Promise.all([approve(request({ jobId: a.id })), approve(request({ jobId: b.id }))]); assert.ok(imports.every(r => r.status === 200));
     assert.deepEqual((await prisma.promptVersion.findMany({ orderBy: { version: "asc" } })).map((v: any) => v.version), [1, 2]);
     console.log("PASS real DB: approval/rejection conflict, duplicate approval, durable exact human proof, same-style imports serialized without duplicate versions.");
-    const source = await prisma.rnDAttempt.findFirst({ where: { jobId: a.id }, include: { promptVersion: true } });
-    const promote = handler("app/api/internal/prompt-promote/route.ts").POST;
-    const promotionBody = { promptKey: a.styleId, sourceAttemptId: source.id, sourceJobId: a.id, prompt: a.currentPrompt };
-    session = null; assert.equal((await promote(request(promotionBody))).status, 401); session = { user: { id: "local-synthetic-admin", role: "ADMIN" } };
-    assert.equal((await promote(request({ ...promotionBody, approved: true, sourceAttemptId: "fabricated" }))).status, 409);
-    assert.equal((await promote(request({ ...promotionBody, prompt: "arbitrary caller replacement" }))).status, 409);
-    assert.equal((await promote(request(promotionBody))).status, 409, "human approval cannot bypass calibration");
-    const approvedSource = await prisma.rnDAttempt.findUnique({ where: { id: source.id } });
-    for (const change of [{ verdict: "FAILED" }, { qaJson: { ...approvedSource.qaJson, humanApproval: null } }, { qaJson: { ...approvedSource.qaJson, imageIntegrity: { canvasMatch: true, faceTexturePreservationPass: false } } }, { qaJson: { ...approvedSource.qaJson, finalVerification: null } }]) {
-      await prisma.rnDAttempt.update({ where: { id: source.id }, data: change });
-      assert.equal((await promote(request(promotionBody))).status, 409, "stored approval/QA/integrity evidence is independently required");
-      await prisma.rnDAttempt.update({ where: { id: source.id }, data: { verdict: "APPROVED", qaJson: approvedSource.qaJson } });
-    }
-    const patch = handler("app/api/dashboard/admin/content/prompts/[id]/route.ts").PATCH;
-    const patchReq = (data: unknown) => request(data, "worker-a", "PATCH"); const params = { params: Promise.resolve({ id: source.promptVersion.id }) };
-    assert.equal((await patch(patchReq({ prompt: "replace approved prompt" }), params)).status, 409);
-    assert.equal((await patch(patchReq({ qaStatus: "PASSED" }), params)).status, 200);
-    assert.equal((await promote(request(promotionBody))).status, 200); assert.equal((await (await promote(request(promotionBody))).json()).idempotent, true);
-    const candidate = handler("app/api/dashboard/admin/content/prompts/route.ts").POST;
-    assert.equal((await candidate(request({ hairstyleId: a.styleId, prompt: "forged", status: "ACTIVE", qaStatus: "PASSED" }))).status, 409);
-    assert.equal(await prisma.promptVersion.count({ where: { status: "ACTIVE" } }), 1);
-    const drafts = await Promise.all([candidate(request({ hairstyleId: a.styleId, prompt: "Synthetic draft A" })), candidate(request({ hairstyleId: a.styleId, prompt: "Synthetic draft B" }))]);
-    assert.ok(drafts.every(r => r.status === 201));
-    assert.deepEqual((await prisma.promptVersion.findMany({ orderBy: { version: "asc" } })).map((v: any) => v.version), [1, 2, 3, 4]);
-    const e2e = handler("app/api/rnd/e2e-test/route.ts").GET; assert.equal((await e2e()).status, 410);
-    console.log("PASS real DB + fake ADMIN session: foreign/fabricated/shared-secret-only promotion denied, immutable source, calibration required, local-synthetic activation idempotent, direct ACTIVE bypass denied; retired E2E has no writers.");
+    await runCalibrationCases({ prisma, handler, request, seed, clean, prefix, setSession: value => { session = value; } });
+    if (!process.argv.includes("--no-worker-dispatch")) {
+    const claim = handler("app/api/rnd/worker/claim/route.ts").POST;
     const staleFence = req("../lib/rnd/report-lease-fence"); await clean(); const stale = await seed("QUEUED");
     const old = await (await claim(request({}))).json(); await prisma.rnDJob.update({ where: { id: stale.id }, data: { leaseExpiresAt: new Date(Date.now() - 1) } });
     const attempt = await prisma.rnDAttempt.findFirst({ where: { jobId: stale.id } });
@@ -189,6 +186,7 @@ async function run() {
     assert.equal(released.status, "QUEUED"); assert.equal(released.infrastructureRetryCount, 2); assert.equal(released.attemptCount, 0);
     assert.ok(released.nextEligibleAt.getTime() > Date.now() && released.nextEligibleAt.getTime() < Date.now() + 600001);
     console.log("PASS real DB: stale report fence loses after newer claim generation. No exactly-once Gemini/provider claim is made.");
-  } finally { globalThis.fetch = originalFetch; await clean(); await prisma.$disconnect(); }
+    } else console.log("SKIP live claim/reclaim/release DB cases: --no-worker-dispatch; no worker endpoint dispatched.");
+  } finally { globalThis.fetch = originalFetch; await clean(); await cleanupClient?.end(); await prisma.$disconnect(); }
 }
 run().catch(async error => { console.error(error); await prisma?.$disconnect(); process.exitCode = 1; });

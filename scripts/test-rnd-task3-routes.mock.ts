@@ -27,6 +27,8 @@ async function handler(filename: string, modules: Record<string, unknown>): Prom
     if (name === "next/server") return next;
     if (name === "@/lib/rnd/retry-policy") return retryPolicy;
     if (name === "@/lib/rnd/promotion-provenance") return provenance;
+    if (name === "@/lib/rnd/admin-auth") return { lockActiveAdmin: async () => true };
+    if (name === "@/lib/rnd/calibration-evidence") return { lockCalibration: async () => undefined };
     if (name === "@/lib/rnd/artifact-checksums") return { readPriorRndArtifactChecksums };
     if (name.startsWith("@/")) return {};
     return nativeRequire(name);

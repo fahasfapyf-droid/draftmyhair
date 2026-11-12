@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { passesRndCombinedHardGate } from "./qa-hard-gate";
 import type { Prisma } from "@prisma/client";
+import { hasVerifiedCalibration } from "./calibration-evidence";
 
 export const rndPromptChecksum = (prompt: string) => createHash("sha256").update(prompt).digest("hex");
 const record = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -40,10 +41,10 @@ export async function lockPromptStyle(tx: { $queryRaw<T>(query: TemplateStringsA
   const rows = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Hairstyle" WHERE "id" = ${hairstyleId} FOR UPDATE`;
   return rows.length === 1;
 }
-export async function verifiedPromptCandidate(tx: Pick<Prisma.TransactionClient, "rnDAttempt">,
-  candidate: { sourceRnDAttemptId: string | null; hairstyleId: string; prompt: string; qaStatus: string }) {
+export async function verifiedPromptCandidate(tx: Pick<Prisma.TransactionClient, "rnDAttempt" | "$queryRaw" | "rnDQAReferenceRating" | "rnDPromptCalibration">,
+  candidate: { id: string; sourceRnDAttemptId: string | null; hairstyleId: string; prompt: string; qaStatus: string }) {
   if (!candidate.sourceRnDAttemptId || candidate.qaStatus !== "PASSED") return false;
   const source = await tx.rnDAttempt.findUnique({ where: { id: candidate.sourceRnDAttemptId }, include: { artifact: true, job: { include: { target: true } } } });
   return Boolean(source && source.verdict === "APPROVED" && source.job.status === "COMPLETED" && source.job.target.status === "APPROVED" &&
-    source.job.target.hairstyleId === candidate.hairstyleId && source.prompt === candidate.prompt && verifiedHumanApproval(source));
+    source.job.target.hairstyleId === candidate.hairstyleId && source.prompt === candidate.prompt && verifiedHumanApproval(source) && await hasVerifiedCalibration(tx, candidate));
 }
