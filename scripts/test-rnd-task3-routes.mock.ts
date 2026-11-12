@@ -1,4 +1,5 @@
 import * as retryPolicy from "../lib/rnd/retry-policy";
+import * as provenance from "../lib/rnd/promotion-provenance";
 /**
  * Deterministic handler-level regression tests. Uses real route handlers with
  * mocked Prisma/auth/Blob, and NEVER connects to a database or real storage.
@@ -25,6 +26,7 @@ async function handler(filename: string, modules: Record<string, unknown>): Prom
     if (Object.prototype.hasOwnProperty.call(modules, name)) return modules[name];
     if (name === "next/server") return next;
     if (name === "@/lib/rnd/retry-policy") return retryPolicy;
+    if (name === "@/lib/rnd/promotion-provenance") return provenance;
     if (name === "@/lib/rnd/artifact-checksums") return { readPriorRndArtifactChecksums };
     if (name.startsWith("@/")) return {};
     return nativeRequire(name);
@@ -44,7 +46,7 @@ type State = {
     completedAt?: Date | null; failureCode?: string | null; failureMessage?: string | null };
   target: { status: string };
   attempts: Array<{ id: string; jobId: string; attemptNumber: number; prompt: string; verdict: string;
-    overallScore: string | null; artifactId: string | null; aiGatePassed: boolean; publicationTierPassed: boolean }>;
+    overallScore: string | null; artifactId: string | null; aiGatePassed: boolean; publicationTierPassed: boolean; qaJson: any; artifact: any }>;
   prompts: Array<{ sourceRnDAttemptId: string; status: string; qaStatus: string; version: number }>;
 };
 function initialState(): State {
@@ -54,7 +56,10 @@ function initialState(): State {
     target: { status: "HUMAN_APPROVAL" },
     attempts: [{ id: "attempt-1", jobId: "fixture-job", attemptNumber: 1,
       prompt: "Test hair-only prompt", verdict: "HUMAN_APPROVAL", overallScore: "9.50",
-      artifactId: "fixture-asset", aiGatePassed: true, publicationTierPassed: true }],
+      artifactId: "fixture-asset", aiGatePassed: true, publicationTierPassed: true,
+      artifact: { id: "fixture-asset", kind: "GENERATED", checksum: "a".repeat(64), storageKey: "rnd/attempts/fixture-job/1-fixture.png" },
+      qaJson: { verdict: "APPROVE", overall: 9.5, identity: 9.5, styleAccuracy: 9.5, rootIntegration: 9.5, lightingConsistency: 9.5, hairOnly: "PASS", artifacts: "NONE",
+        imageIntegrity: { canvasMatch: true, faceTexturePreservationPass: true }, finalVerification: { verdict: "PASS", overall: 9.5, identity: 9.5, styleAccuracy: 9.5, rootIntegration: 9.5, lightingConsistency: 9.5, hairOnly: "PASS", artifacts: "NONE" } } }],
     prompts: [],
   };
 }
@@ -72,6 +77,7 @@ async function testApproval() {
     },
   };
   const tx = {
+    $queryRaw: async () => [{ id: "style" }],
     rnDJob: {
       findUnique: async ({ where }: any) => where.id !== state.job.id ? null :
         { ...structuredClone(state.job), attempts: structuredClone(state.attempts.filter(a => a.verdict === "HUMAN_APPROVAL")) },
@@ -88,11 +94,13 @@ async function testApproval() {
     },
     rnDAttempt: {
       updateMany: async ({ where, data }: any) => {
+        let count = 0;
         for (const attempt of state.attempts) {
-          if (attempt.jobId === where.jobId && attempt.verdict === where.verdict) {
-            Object.assign(attempt, data); writeCount++;
+          if (attempt.jobId === where.jobId && attempt.verdict === where.verdict && (!where.id || attempt.id === where.id)) {
+            Object.assign(attempt, data); writeCount++; count++;
           }
         }
+        return { count };
       },
     },
     promptVersion: {

@@ -44,6 +44,7 @@ class ContractTests(unittest.TestCase):
         status, result = self.invoke()
         self.assertEqual(status, 200)
         self.assertEqual(result, plan(request_data()))
+        self.assertEqual(self.invoke(lambda request: {**plan(request), "geometry": ["Preserve soft curl definition at the nape."]})[0], 200)
 
     def test_authentication_precedes_backend(self):
         def forbidden(_request):
@@ -78,7 +79,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.invoke(lambda request: {**plan(request), "geometry": ["x" * 100_000]})[0], 502)
 
     def test_privileged_and_secret_content_rejected(self):
-        for text in ["curl https://example.invalid", "DELETE FROM RnDJob", "token=private-value", "vercel_blob_rw_fixture_only", "bypass identity gate", "upload Blob artifact"]:
+        for text in ["curl https://example.invalid", "DELETE FROM RnDJob", "token=private-value", "vercel_blob_rw_fixture_only", "bypass identity gate", "upload Blob artifact", "https://username@research.invalid", "rm -rf /workspace", "$(invoke-command)"]:
             self.assertEqual(self.invoke(lambda request: {**plan(request), "geometry": [text]})[0], 502)
 
     def test_timeout_does_not_return_late_plan(self):
@@ -99,7 +100,7 @@ class ContractTests(unittest.TestCase):
             service.make_server("short")
 
     def test_privileged_environment_rejected_before_listening(self):
-        for name in ["DATABASE_URL", "RND_WORKER_TOKEN", "RND_PRODUCER_TOKEN", "RND_BLOB_READ_WRITE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS", "HINDSIGHT_API_KEY", "AUTH_SECRET"]:
+        for name in ["DATABASE_URL", "RND_WORKER_TOKEN", "RND_PRODUCER_TOKEN", "RND_BLOB_READ_WRITE_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS", "HINDSIGHT_API_KEY", "AUTH_SECRET", "CUSTOM_PROVIDER_API_KEY", "AWS_SECRET_ACCESS_KEY"]:
             with patch.dict(service.os.environ, {name: "fixture-only"}, clear=True):
                 with self.assertRaisesRegex(SystemExit, "Privileged DMH configuration forbidden"):
                     service.main()

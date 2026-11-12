@@ -3,6 +3,7 @@ import { PromptQAStatus, PromptStatus } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
+import { lockPromptStyle, verifiedPromptCandidate } from "@/lib/rnd/promotion-provenance";
 
 async function requireAdmin() { const session = await auth(); return session?.user?.id && session.user.role === "ADMIN"; }
 
@@ -14,6 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const status = typeof body.status === "string" && Object.values(PromptStatus).includes(body.status) ? body.status as PromptStatus : undefined;
   const qaStatus = typeof body.qaStatus === "string" && Object.values(PromptQAStatus).includes(body.qaStatus) ? body.qaStatus as PromptQAStatus : undefined;
+  if (id.startsWith("compiled:") && status === PromptStatus.ACTIVE) return NextResponse.json({ code: "RND_PROMOTION_PROVENANCE_REQUIRED" }, { status: 409 });
 
   // A compiled prompt is the existing production source when no database
   // override is active. Editing it from the admin UI creates a real database
@@ -27,10 +29,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     try {
       const result = await prisma.$transaction(async (tx) => {
+        if (!await lockPromptStyle(tx, hairstyleId)) throw new Error("PROMPT_STYLE_MISSING");
         const latest = await tx.promptVersion.findFirst({ where: { hairstyleId }, orderBy: { version: "desc" }, select: { version: true } });
         const version = (latest?.version ?? 0) + 1;
-        const nextStatus = status === PromptStatus.ACTIVE ? PromptStatus.ACTIVE : PromptStatus.DRAFT;
-        if (nextStatus === PromptStatus.ACTIVE) await tx.promptVersion.updateMany({ where: { hairstyleId, status: PromptStatus.ACTIVE }, data: { status: PromptStatus.ARCHIVED } });
+        const nextStatus = PromptStatus.DRAFT;
         return tx.promptVersion.create({
           data: {
             hairstyleId,
@@ -55,6 +57,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      if (!await lockPromptStyle(tx, existing.hairstyleId)) return { code: "PROMPT_STYLE_MISSING" };
+      const candidate = await tx.promptVersion.findUnique({ where: { id } });
+      if (!candidate) return { code: "PROMPT_VERSION_MISSING" };
+      const edited = typeof body.prompt === "string" && body.prompt.trim() !== candidate.prompt;
+      if (candidate.sourceRnDAttemptId && edited) return { code: "RND_APPROVED_PROMPT_IMMUTABLE" };
+      const affectsActive = status === PromptStatus.ACTIVE || (candidate.status === PromptStatus.ACTIVE && status !== PromptStatus.DRAFT && status !== PromptStatus.ARCHIVED && (edited || qaStatus !== undefined));
+      if (affectsActive && (edited || (qaStatus && qaStatus !== PromptQAStatus.PASSED) || !await verifiedPromptCandidate(tx, candidate))) return { code: "RND_PROMOTION_PROVENANCE_REQUIRED" };
       if (status === PromptStatus.ACTIVE) await tx.promptVersion.updateMany({ where: { hairstyleId: existing.hairstyleId, status: PromptStatus.ACTIVE, id: { not: id } }, data: { status: PromptStatus.ARCHIVED } });
       const data: Record<string, unknown> = {};
       if (typeof body.prompt === "string") data.prompt = body.prompt.trim();
@@ -63,6 +72,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (status) data.status = status;
       return tx.promptVersion.update({ where: { id }, data, include: { hairstyle: { select: { id: true, name: true, promptKey: true } } } });
     });
+    if ("code" in result) return NextResponse.json(result, { status: 409 });
     return NextResponse.json({ prompt: result });
   } catch (error) {
     console.error("Admin prompt update failed:", error);

@@ -1,5 +1,8 @@
 # Issue 71 — offline verification and review limits
 
+Historical snapshot at f463f347. Superseded by `agent-learning-final-review.md`,
+which includes the newly authorized disposable PostgreSQL tests and remediation.
+
 Branch: `rnd/agent-learning-deerflow-v1`. Audited baseline:
 `5fe5ae3b9235341f36c62e8fb41d1a1c0f2054ce`.
 

@@ -84,8 +84,10 @@ immutable master and original color rules remain in the compiler. Primary and
 final QA receive only the current image pair and authoritative prompt. Every
 score must be >=9.5, canvas AND face texture must pass, independent final QA must
 pass, then an authorized human must approve. Promotion creates DRAFT/TESTING;
-this R&D flow never activates production prompts. The separate pre-existing
-Production `/api/internal/prompt-promote` shared-secret route remains outside
-scope and does not independently establish human-review provenance. This is an
-inherited release risk, not a security guarantee established by these tests.
+this R&D approval flow never activates production prompts. The separately
+authenticated ADMIN promotion path now resolves the exact source attempt and
+artifact server-side, rechecks both QA/integrity gates, verifies saved human
+approval hashes, and requires the linked immutable candidate to have completed
+calibration. Shared-secret-only requests and unverifiable foreign-DB source IDs
+fail closed. No cross-environment approval-attestation bridge is implemented.
 No unattended execution is approved.

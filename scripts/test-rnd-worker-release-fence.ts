@@ -76,8 +76,8 @@ function main() {
   assert.ok(releaseSource.includes("parseRndClaimGeneration(body?.claimGeneration)"), "release route must use the shared canonical claim-generation parser");
   assert.ok(releaseSource.includes('AND job."status" = \'PROCESSING\''), "release SQL must condition on PROCESSING");
   assert.ok(releaseSource.includes('AND job."leaseOwner" = ${workerId}'), "release SQL must condition on lease owner");
-  assert.ok(releaseSource.includes('AND job."startedAt" = ${claimGeneration}'), "release SQL must condition on the submitted claim generation");
-  assert.ok(releaseSource.includes('AND job."leaseExpiresAt" > clock_timestamp()'), "release SQL must reject missing, invalid, and expired lease expirations");
+  assert.ok(releaseSource.includes('AND job."startedAt" = (${claimGeneration}::timestamptz AT TIME ZONE \'UTC\')'), "release SQL must condition on the submitted generation in Prisma UTC timestamp representation");
+  assert.ok(releaseSource.includes('AND job."leaseExpiresAt" > (clock_timestamp() AT TIME ZONE \'UTC\')'), "release SQL must compare Prisma UTC timestamps independently of database session timezone");
   assert.ok(releaseSource.includes('RETURNING job."id", job."targetId"'), "release SQL must return the target from the same conditional update");
   assert.ok(releaseSource.includes("await tx.rnDTarget.update"), "target release must be part of the transaction");
   assert.ok(workerSource.includes("body: JSON.stringify({ jobId: job.id, claimGeneration: job.claimGeneration })"), "worker release must send the generation captured on its claim");

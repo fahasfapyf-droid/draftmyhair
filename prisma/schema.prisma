@@ -313,7 +313,7 @@ model PromptVersion {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   hairstyle          Hairstyle       @relation(fields: [hairstyleId], references: [id], onDelete: Cascade)
-  sourceRnDAttempt   RnDAttempt?     @relation(fields: [sourceRnDAttemptId], references: [id], onDelete: SetNull)
+  sourceRnDAttempt   RnDAttempt?     @relation(fields: [sourceRnDAttemptId], references: [id], onDelete: Restrict)
 
   @@unique([hairstyleId, version])
   @@index([hairstyleId, status])

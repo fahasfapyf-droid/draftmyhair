@@ -39,7 +39,7 @@ const response = (body: unknown, url = "https://planner.invalid/v1/plan", status
 
 async function main() {
   const originalFetch = globalThis.fetch;
-  const envNames = ["HINDSIGHT_API_URL", "HINDSIGHT_API_KEY", "HINDSIGHT_RND_BANK", "RND_PLANNER_URL", "RND_PLANNER_TOKEN", "RND_PLANNER_ALLOW_LOOPBACK", "RND_MAX_GENERATION_ATTEMPTS", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_LOCATION", "PROMPT_VERSION"];
+  const envNames = ["HINDSIGHT_API_URL", "HINDSIGHT_API_KEY", "HINDSIGHT_RND_BANK", "RND_PLANNER_URL", "RND_PLANNER_TOKEN", "RND_PRODUCER_TOKEN", "RND_PLANNER_ALLOW_LOOPBACK", "RND_MAX_GENERATION_ATTEMPTS", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_LOCATION", "PROMPT_VERSION"];
   const saved = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
   let count = 0;
   const check = (value: unknown, label: string) => { assert.ok(value, label); count++; };
@@ -83,12 +83,19 @@ async function main() {
 
     const id = "a".repeat(64);
     check(planner.validateResearchPlan(validPlan(id), id) !== null, "strict valid plan");
+    check(planner.validateResearchPlan({ ...validPlan(id), geometry: ["Preserve soft curl definition at the nape."] }, id) !== null, "hairstyle curl terminology is data, not a shell command");
+    for (const text of ["https://username@research.invalid/private", "rm -rf /workspace", "$(invoke-command)"]) {
+      check(planner.validateResearchPlan({ ...validPlan(id), geometry: [text] }, id) === null, "credential userinfo and executable shell fragments rejected");
+    }
     for (const bad of [null, {}, { ...validPlan(id), tools: [] }, { ...validPlan(id), schemaVersion: "v2" }, { ...validPlan(id), geometry: ["curl https://invalid"] }, { ...validPlan(id), geometry: ["x".repeat(401)] }]) {
       check(planner.validateResearchPlan(bad, id) === null, "malformed/privileged/oversized plan rejected");
     }
     check(planner.validateResearchPlan(validPlan(id), "b".repeat(64)) === null, "objective replay rejected");
     process.env.RND_PLANNER_URL = "https://planner.invalid/v1/plan";
     process.env.RND_PLANNER_TOKEN = "fixture-planner-only-" + "x".repeat(40);
+    process.env.RND_PRODUCER_TOKEN = process.env.RND_PLANNER_TOKEN;
+    check((await planner.requestResearchPlan({ objective: "Bob", targetKey: "bob" })).status === "INVALID_CONFIGURATION", "planner rejects reused producer credentials");
+    delete process.env.RND_PRODUCER_TOKEN;
     for (const mode of ["valid", "unauthorized", "malformed", "oversized", "timeout", "redirected", "wrong-origin"]) {
       globalThis.fetch = async (url, init) => {
         check(init?.redirect === "error", "redirects disabled before credentials are sent");
@@ -122,6 +129,7 @@ async function main() {
     check(built.diagnostics.planning.memoryIds[0] === "e1" && built.diagnostics.planning.plannerStatus === "VALIDATED", "planning provenance persisted in diagnostics");
     check(built.prompt.includes("Keep a compact nape perimeter."), "memory-conditioned fake synthesis wording survives only in the style block");
     const passingStyle = returnedStyle;
+    check(generator.isSafeRndStyleBlock("Maintain soft curl definition at the nape.", "curly bob"), "legitimate curl geometry remains usable while command forms are rejected");
     for (const style of ["Smooth the facial skin but preserve the framing.", "Keep the face unchanged and change the skin."]) {
       check(!generator.isSafeRndStyleBlock(style, "Italian Bob"), "mixed preservation language cannot excuse facial alteration");
     }

@@ -26,6 +26,7 @@ export async function fetchRndSourceAsset(
 
   try {
     upstream = await fetch(asset.blobUrl, {
+      redirect: "error",
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.timeout(30_000),
@@ -35,7 +36,11 @@ export async function fetchRndSourceAsset(
   }
 
   if (upstream?.ok && upstream.body) {
-    return { buffer: Buffer.from(await upstream.arrayBuffer()), mimeType: asset.mimeType };
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    if (buffer.byteLength !== asset.fileSize || !/^[a-f0-9]{64}$/.test(asset.checksum ?? "") || createHash("sha256").update(buffer).digest("hex") !== asset.checksum) {
+      throw new Error("RND_SOURCE_INTEGRITY_MISMATCH");
+    }
+    return { buffer, mimeType: asset.mimeType };
   }
 
   const isExactLegacyFixture =
@@ -52,6 +57,7 @@ export async function fetchRndSourceAsset(
 
     try {
       const fallback = await fetch(fallbackUrl, {
+        redirect: "error",
         headers,
         cache: "no-store",
         signal: AbortSignal.timeout(30_000),

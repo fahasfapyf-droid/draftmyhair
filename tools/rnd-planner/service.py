@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "dmh.rnd.research.v1"
 SCHEMA = json.loads((Path(__file__).resolve().parents[2] / "contracts/rnd-research-plan.v1.json").read_text())
-UNSAFE = re.compile(r"postgres(?:ql)?://|vercel_blob_rw_|-----BEGIN [A-Z ]*PRIVATE KEY|\bAIza[\w-]+|\bsk-[\w-]{16,}|https?://[^\s/]+:[^\s/]+@|\bBearer\s+\S+|\b(?:api[_ -]?key|password|secret|token)\s*[:=]|\b(?:curl|wget|powershell|cmd\.exe|bash|subprocess|eval|exec)\b|\b(?:DROP|ALTER|DELETE|INSERT|UPDATE)\s+(?:TABLE|FROM|INTO|\"?RnD)|\b(?:ignore|override|bypass|disable)\b.{0,60}\b(?:instruction|master|identity|gate|approval|qa|policy)|\b(?:queue|claim|upload|delete)\b.{0,30}\b(?:job|blob|artifact|worker)|/api/rnd/|```|</?(?:script|system)\b", re.I)
+UNSAFE = re.compile(r"postgres(?:ql)?://|vercel_blob_rw_|-----BEGIN [A-Z ]*PRIVATE KEY|\bAIza[\w-]+|\bsk-[\w-]{16,}|https?://[^\s/]+@|\bBearer\s+\S+|\b(?:api[_ -]?key|password|secret|token)\s*[:=]|\bcurl\s+(?:https?://|--?\S+|(?:[\w-]+\.)+[\w-]+(?:[/:\s]|$)|localhost(?:[:/\s]|$))|\b(?:wget|powershell|cmd\.exe|bash|subprocess|eval|exec)\b|\b(?:rm\s+-|sudo\b|chmod\b|ssh\b|python(?:3)?\s+-|node\s+-|Invoke-\w+\b)|\$\(|\b(?:DROP|ALTER|DELETE|INSERT|UPDATE)\s+(?:TABLE|FROM|INTO|\"?RnD)|\b(?:ignore|override|bypass|disable)\b.{0,60}\b(?:instruction|master|identity|gate|approval|qa|policy)|\b(?:queue|claim|upload|delete)\b.{0,30}\b(?:job|blob|artifact|worker)|/api/rnd/|```|</?(?:script|system)\b", re.I)
 
 
 def matches(value, rule):
@@ -123,7 +123,7 @@ def make_server(token, backend=None, port=0, timeout=3.0):
 def main():
     if sys.version_info < (3, 12):
         raise SystemExit("Python >=3.12 required")
-    if any(value and (name in {"DATABASE_URL", "DIRECT_URL", "RND_WORKER_TOKEN", "RND_PRODUCER_TOKEN", "PROMPT_PROMOTION_SECRET", "AUTH_SECRET", "NEXTAUTH_SECRET", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_API_KEY", "GEMINI_API_KEY", "VERCEL_TOKEN"} or "BLOB" in name or name.startswith("HINDSIGHT_")) for name, value in os.environ.items()):
+    if any(value and (name in {"DATABASE_URL", "DIRECT_URL", "RND_WORKER_TOKEN", "RND_PRODUCER_TOKEN", "PROMPT_PROMOTION_SECRET", "AUTH_SECRET", "NEXTAUTH_SECRET", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_API_KEY", "GEMINI_API_KEY", "VERCEL_TOKEN"} or "BLOB" in name or name.startswith("HINDSIGHT_") or (name != "RND_PLANNER_TOKEN" and re.search(r"(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|API_KEY|ACCESS_KEY)", name))) for name, value in os.environ.items()):
         raise SystemExit("Privileged DMH configuration forbidden in planner runtime")
     server = make_server(os.environ.get("RND_PLANNER_TOKEN", ""), port=int(os.environ.get("RND_PLANNER_PORT", "8765")))
     server.serve_forever()

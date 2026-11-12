@@ -8,7 +8,14 @@ import { classifyProfileError, getGeminiProfileStatusSnapshot, markGenerationSta
 
 import { RND_WORKER_PROTOCOL_VERSION, verifyRndWorkerHello } from "../../lib/rnd/worker-protocol.js";
 
-const API_BASE = (process.env.RND_API_BASE_URL?.trim() || "https://draftmyhair-git-rnd-qa-gate-clean-integration-draftmyhair.vercel.app").replace(/\/$/, "");
+const API_BASE = process.env.RND_API_BASE_URL?.trim().replace(/\/$/, "");
+if (!API_BASE) throw new Error("RND_API_BASE_URL must explicitly select the approved isolated Protocol 2 deployment.");
+const apiTarget = new URL(API_BASE);
+const localApi = process.env.RND_ALLOW_LOCAL_API === "1" && ["localhost", "127.0.0.1", "[::1]"].includes(apiTarget.hostname);
+if ((apiTarget.protocol !== "https:" && !(localApi && apiTarget.protocol === "http:")) || apiTarget.origin !== API_BASE ||
+    apiTarget.username || apiTarget.password || ["draftmyhair.com", "www.draftmyhair.com", "draftmyhair.vercel.app"].includes(apiTarget.hostname)) {
+  throw new Error("RND_API_BASE_URL must be an explicit HTTPS origin; known Production aliases, credentials and URL paths are forbidden.");
+}
 const WORKER_TOKEN = process.env.RND_WORKER_TOKEN?.trim();
 if (!WORKER_TOKEN) throw new Error("RND_WORKER_TOKEN is required.");
 const WORKER_DIR = path.dirname(fileURLToPath(import.meta.url));

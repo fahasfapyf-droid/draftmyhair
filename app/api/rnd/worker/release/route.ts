@@ -28,13 +28,13 @@ export async function POST(request: Request) {
           "infrastructureRetryCount" = job."infrastructureRetryCount" + 1,
           "failureCode" = CASE WHEN job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN 'RND_CONVERGENCE_LIMIT' WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} THEN 'RND_INFRASTRUCTURE_RETRY_LIMIT' ELSE NULL END,
           "failureMessage" = CASE WHEN job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN 'R&D generation budget exhausted.' WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} THEN 'Unsubmitted claim release budget exhausted.' ELSE NULL END,
-          "completedAt" = CASE WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} OR job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN clock_timestamp() ELSE NULL END,
+          "completedAt" = CASE WHEN job."infrastructureRetryCount" >= ${MAX_INFRASTRUCTURE_RETRIES} OR job."attemptCount" >= LEAST(job."maxGenerationAttempts", ${globalBudget}) THEN (clock_timestamp() AT TIME ZONE 'UTC') ELSE NULL END,
           "leaseOwner" = NULL, "leaseExpiresAt" = NULL, "heartbeatAt" = NULL, "nextEligibleAt" = NULL
       WHERE job."id" = ${jobId}
         AND job."status" = 'PROCESSING'
         AND job."leaseOwner" = ${workerId}
-        AND job."startedAt" = ${claimGeneration}
-        AND job."leaseExpiresAt" > clock_timestamp()
+        AND job."startedAt" = (${claimGeneration}::timestamptz AT TIME ZONE 'UTC')
+        AND job."leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
         AND NOT EXISTS (SELECT 1 FROM "RnDAttempt" AS attempt WHERE attempt."jobId" = job."id" AND attempt."attemptNumber" = job."attemptCount" + 1 AND
           (attempt."generationStartedAt" IS NOT NULL OR attempt."submittedAt" IS NOT NULL OR attempt."artifactId" IS NOT NULL))
       RETURNING job."id", job."targetId", job."status", job."infrastructureRetryCount"

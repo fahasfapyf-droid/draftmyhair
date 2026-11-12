@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { eligibleRndApproval, humanApprovalProof, lockPromptStyle } from "@/lib/rnd/promotion-provenance";
 
 export const runtime = "nodejs";
 
@@ -26,17 +27,15 @@ export async function POST(request: Request) {
           where: { verdict: "HUMAN_APPROVAL" },
           orderBy: { attemptNumber: "desc" },
           take: 1,
-          select: { id: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true, aiGatePassed: true, publicationTierPassed: true },
+          select: { id: true, jobId: true, attemptNumber: true, prompt: true, overallScore: true, artifactId: true, aiGatePassed: true, publicationTierPassed: true, qaJson: true,
+            artifact: { select: { id: true, kind: true, storageKey: true, checksum: true } } },
         },
       },
     });
     if (!job) return { kind: "missing" as const };
     if (job.status !== "HUMAN_APPROVAL") return { kind: "state" as const, status: job.status };
     const approvedAttempt = job.attempts[0] ?? null;
-    const approvedScore = approvedAttempt?.overallScore == null ? NaN : Number(approvedAttempt.overallScore);
-    if (!approvedAttempt || !approvedAttempt.artifactId ||
-        !approvedAttempt.aiGatePassed || !approvedAttempt.publicationTierPassed ||
-        !Number.isFinite(approvedScore) || approvedScore < 9.5) {
+    if (!approvedAttempt || !eligibleRndApproval(approvedAttempt)) {
       return { kind: "gate" as const };
     }
 
@@ -49,6 +48,7 @@ export async function POST(request: Request) {
     if (claimed.count !== 1) return { kind: "state" as const, status: "CHANGED" };
 
     if (job.target.hairstyleId) {
+      if (!await lockPromptStyle(tx, job.target.hairstyleId)) throw new Error("RND_APPROVAL_STYLE_MISSING");
       const existingPrompt = await tx.promptVersion.findUnique({
         where: { sourceRnDAttemptId: approvedAttempt.id },
         select: { id: true },
@@ -83,7 +83,9 @@ export async function POST(request: Request) {
     }
 
     await tx.rnDTarget.update({ where: { id: job.targetId }, data: { status: "APPROVED" } });
-    await tx.rnDAttempt.updateMany({ where: { jobId, verdict: "HUMAN_APPROVAL" }, data: { verdict: "APPROVED" } });
+    const saved = await tx.rnDAttempt.updateMany({ where: { id: approvedAttempt.id, jobId, verdict: "HUMAN_APPROVAL" },
+      data: { verdict: "APPROVED", qaJson: { ...(approvedAttempt.qaJson as Record<string, unknown>), humanApproval: humanApprovalProof(approvedAttempt, session.user.id) } } });
+    if (saved.count !== 1) throw new Error("RND_APPROVAL_ATTEMPT_CHANGED");
     return { kind: "ok" as const, importedPrompt: Boolean(job.target.hairstyleId && approvedAttempt) };
   });
 

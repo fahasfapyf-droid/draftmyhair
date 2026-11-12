@@ -3,6 +3,7 @@ import { PromptQAStatus, PromptStatus } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { STYLE_PROMPTS } from "@/lib/engine/prompts/styles";
+import { lockPromptStyle } from "@/lib/rnd/promotion-provenance";
 
 async function requireAdmin() { const session = await auth(); return session?.user?.id && session.user.role === "ADMIN"; }
 
@@ -51,13 +52,14 @@ export async function POST(request: Request) {
   const qaStatus = typeof body.qaStatus === "string" && Object.values(PromptQAStatus).includes(body.qaStatus) ? body.qaStatus as PromptQAStatus : PromptQAStatus.DRAFT;
   const notes = typeof body.notes === "string" ? body.notes.trim() || null : null;
   const status = body.status === PromptStatus.ACTIVE ? PromptStatus.ACTIVE : PromptStatus.DRAFT;
+  if (status === PromptStatus.ACTIVE) return NextResponse.json({ code: "RND_PROMOTION_PROVENANCE_REQUIRED", error: "Create a draft; activation requires an approved R&D source and completed calibration." }, { status: 409 });
   if (!hairstyleId || !prompt) return NextResponse.json({ error: "Hairstyle and prompt are required." }, { status: 400 });
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      if (!await lockPromptStyle(tx, hairstyleId)) throw new Error("PROMPT_STYLE_MISSING");
       const latest = await tx.promptVersion.findFirst({ where: { hairstyleId }, orderBy: { version: "desc" }, select: { version: true } });
       const version = (latest?.version ?? 0) + 1;
-      if (status === PromptStatus.ACTIVE) await tx.promptVersion.updateMany({ where: { hairstyleId, status: PromptStatus.ACTIVE }, data: { status: PromptStatus.ARCHIVED } });
       return tx.promptVersion.create({ data: { hairstyleId, version, prompt, qaStatus, notes, status }, include: { hairstyle: { select: { id: true, name: true, promptKey: true } } } });
     });
     return NextResponse.json({ prompt: result }, { status: 201 });

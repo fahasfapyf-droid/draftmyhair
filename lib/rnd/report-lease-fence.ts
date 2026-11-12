@@ -36,12 +36,12 @@ export function validateRndClaimGeneration(value: unknown, currentGeneration: Da
 export async function fenceRndReportLease(tx: ReportFenceQuery, fence: RndReportLeaseFence) {
   const rows = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "RnDJob" AS job
-    SET "heartbeatAt" = clock_timestamp()
+    SET "heartbeatAt" = (clock_timestamp() AT TIME ZONE 'UTC')
     WHERE job."id" = ${fence.jobId}
       AND job."status" = 'PROCESSING'
       AND job."leaseOwner" = ${fence.workerId}
-      AND job."leaseExpiresAt" > clock_timestamp()
-      AND job."startedAt" = ${fence.claimStartedAt}
+      AND job."leaseExpiresAt" > (clock_timestamp() AT TIME ZONE 'UTC')
+      AND job."startedAt" = (${fence.claimStartedAt}::timestamptz AT TIME ZONE 'UTC')
       AND job."attemptCount" = ${fence.expectedAttemptCount}
       AND EXISTS (
         SELECT 1

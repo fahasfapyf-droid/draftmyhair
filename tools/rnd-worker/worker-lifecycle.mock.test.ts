@@ -8,6 +8,12 @@ import { readFileSync } from "node:fs";
 import { transformSync } from "esbuild";
 
 const source = readFileSync("tools/rnd-worker/worker.ts", "utf8");
+const configCode = transformSync(source.slice(source.indexOf("const API_BASE"), source.indexOf("const WORKER_TOKEN")), { loader: "ts" }).code;
+const validateTarget = (env: Record<string, string>) => new Function("process", configCode + "\nreturn API_BASE;")({ env });
+assert.throws(() => validateTarget({}), /explicitly select/);
+assert.equal(validateTarget({ RND_API_BASE_URL: "https://draftmyhair-fixture-draftmyhair.vercel.app" }), "https://draftmyhair-fixture-draftmyhair.vercel.app");
+for (const value of ["https://draftmyhair.com", "https://draftmyhair.vercel.app", "https://fixture.invalid/path", "https://user:pass@fixture.invalid", "http://127.0.0.1:3000"]) assert.throws(() => validateTarget({ RND_API_BASE_URL: value }));
+assert.equal(validateTarget({ RND_API_BASE_URL: "http://127.0.0.1:3000", RND_ALLOW_LOCAL_API: "1" }), "http://127.0.0.1:3000");
 const start = source.indexOf("async function main() {");
 const end = source.indexOf("main().catch(", start);
 assert.ok(start >= 0 && end > start);

@@ -43,7 +43,7 @@ export async function requestResearchPlan(input: { objective: string; targetKey:
     const token = process.env.RND_PLANNER_TOKEN?.trim();
     const local = process.env.RND_PLANNER_ALLOW_LOOPBACK === "1" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
     if ((url.protocol !== "https:" && !(local && url.protocol === "http:")) || url.username || url.password || url.search || url.hash ||
-        url.pathname !== "/v1/plan" || !token || token.length < 32 || token === process.env.RND_WORKER_TOKEN || token === process.env.BLOB_READ_WRITE_TOKEN || token === process.env.RND_BLOB_READ_WRITE_TOKEN) return absent("INVALID_CONFIGURATION");
+        url.pathname !== "/v1/plan" || !token || token.length < 32 || ["RND_WORKER_TOKEN", "RND_PRODUCER_TOKEN", "PROMPT_PROMOTION_SECRET", "BLOB_READ_WRITE_TOKEN", "RND_BLOB_READ_WRITE_TOKEN", "HINDSIGHT_API_KEY", "GOOGLE_API_KEY"].some(name => process.env[name]?.trim() === token)) return absent("INVALID_CONFIGURATION");
     const signal = AbortSignal.timeout(5000);
     const response = await fetch(url, { method: "POST", redirect: "error", cache: "no-store", signal,
       headers: { "content-type": "application/json", authorization: "Bearer " + token },

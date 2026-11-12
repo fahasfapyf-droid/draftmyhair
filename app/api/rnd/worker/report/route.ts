@@ -1,6 +1,7 @@
 import { generationBudget, infrastructureRetryable, infrastructureBackoff, MAX_TARGETED_REFINEMENTS, MAX_INFRASTRUCTURE_RETRIES as MAX_RND_INFRASTRUCTURE_RETRIES } from "@/lib/rnd/retry-policy";
 import { chooseRndRefinement } from "@/lib/rnd/refinement-learning";
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
@@ -53,16 +54,19 @@ function scoreFromQaJson(value: unknown, key: string) {
   return typeof score === "number" ? score : typeof score === "string" ? Number(score) : null;
 }
 
-async function fetchPrivateArtifact(blobUrl: string, mimeType: string) {
+async function fetchPrivateArtifact(blobUrl: string, mimeType: string, checksum: string | null, fileSize: number) {
   const token = requireRndBlobToken();
   if (!token) throw new Error("Blob storage is not configured for R&D QA.");
   const response = await fetch(blobUrl, {
+    redirect: "error",
     headers: { Authorization: "Bearer " + token },
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error("R&D artifact could not be retrieved for QA.");
-  return { buffer: Buffer.from(await response.arrayBuffer()), mimeType };
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length !== fileSize || !/^[a-f0-9]{64}$/.test(checksum ?? "") || createHash("sha256").update(buffer).digest("hex") !== checksum) throw new Error("RND_QA_ARTIFACT_INTEGRITY_MISMATCH");
+  return { buffer, mimeType };
 }
 
 export async function POST(request: Request) {
@@ -219,7 +223,7 @@ export async function POST(request: Request) {
 
   const artifact = await prisma.rnDAsset.findUnique({
     where: { id: artifactId },
-    select: { id: true, kind: true, storageKey: true, blobUrl: true, mimeType: true },
+    select: { id: true, kind: true, storageKey: true, blobUrl: true, mimeType: true, checksum: true, fileSize: true },
   });
   if (!artifact) return NextResponse.json({ error: "Artifact not found" }, { status: 404 });
   if (artifact.kind !== "GENERATED" || !artifact.storageKey.startsWith(`rnd/attempts/${jobId}/${attemptNumber}-`)) {
@@ -246,7 +250,7 @@ export async function POST(request: Request) {
   try {
     const [source, generated] = await Promise.all([
       fetchRndSourceAsset(job.target.sourceAsset, request.url, request.headers.get("x-vercel-protection-bypass")),
-      fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType),
+      fetchPrivateArtifact(artifact.blobUrl, artifact.mimeType, artifact.checksum, artifact.fileSize),
     ]);
     imageIntegrity = await runRndImageIntegrityCheck(source.buffer, generated.buffer);
     qa = await Promise.race([

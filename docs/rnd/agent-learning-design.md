@@ -67,7 +67,7 @@ Python tests, TypeScript/lint and an external credential-free build snapshot.
 Do not deploy, run Gemini/Vertex/Hindsight providers, migrate, mutate jobs, merge
 or enable unattended execution. Open a review PR only if required tests pass.
 
-## Inherited boundary and release limitations
+## Starting-state limitations (superseded by final engineering review)
 
 The canonical R&D approval handler is ADMIN-only and imports DRAFT/TESTING only.
 The pre-existing Production `/api/internal/prompt-promote` route is deliberately
@@ -81,3 +81,9 @@ Migration execution, actual PostgreSQL races, live research providers and real
 Gemini execution are not validated here. A review PR is not runtime authorization.
 Before pushing this branch, establish that Git push/PR creation cannot trigger a
 Vercel auto-deployment; the user has prohibited deployment for this task.
+
+The follow-up engineering handoff explicitly authorized fixing the promotion
+boundary. See `agent-learning-final-review.md` for current code, real disposable
+PostgreSQL evidence, migration guards, protocol retirement and security results.
+The paragraphs above preserve the design chronology, not a current claim that
+the unsafe shared-secret promotion endpoint remains supported.

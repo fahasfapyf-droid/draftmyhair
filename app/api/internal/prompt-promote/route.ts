@@ -1,91 +1,33 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { lockPromptStyle, verifiedHumanApproval } from "@/lib/rnd/promotion-provenance";
 
 export const runtime = "nodejs";
 
-function authorized(request: Request) {
-  const expected = process.env.PROMPT_PROMOTION_SECRET;
-  const provided = request.headers.get("x-dmh-promotion-secret");
-  return Boolean(expected && provided && provided === expected);
-}
-
 export async function POST(request: Request) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  const session = await auth();
+  if (!session?.user?.id || session.user.role !== "ADMIN") return NextResponse.json({ code: "RND_PROMOTION_ADMIN_REQUIRED" }, { status: 401 });
   const body = await request.json().catch(() => null);
-  const promptKey = typeof body?.promptKey === "string" ? body.promptKey : null;
-  const prompt = typeof body?.prompt === "string" ? body.prompt : null;
-  const sourceAttemptId =
-    typeof body?.sourceAttemptId === "string" ? body.sourceAttemptId : null;
-  const sourceJobId =
-    typeof body?.sourceJobId === "string" ? body.sourceJobId : null;
-  const qaScore = typeof body?.qaScore === "number" ? body.qaScore : null;
-
-  if (!promptKey || !prompt || !sourceAttemptId || !sourceJobId) {
-    return NextResponse.json(
-      { error: "promptKey, prompt, sourceAttemptId and sourceJobId are required" },
-      { status: 400 },
-    );
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const hairstyle = await tx.hairstyle.findUnique({
-      where: { promptKey },
-      select: { id: true, name: true },
-    });
-
-    if (!hairstyle) return { kind: "missing_style" as const };
-
-    const marker = `R&D source attempt: ${sourceAttemptId}`;
-    const existing = await tx.promptVersion.findFirst({
-      where: { hairstyleId: hairstyle.id, notes: { contains: marker } },
-      select: { id: true, version: true, status: true },
-    });
-
-    if (existing) {
-      return { kind: "existing" as const, promptVersionId: existing.id, version: existing.version };
-    }
-
-    await tx.promptVersion.updateMany({
-      where: { hairstyleId: hairstyle.id, status: "ACTIVE" },
-      data: { status: "ARCHIVED" },
-    });
-
-    const latest = await tx.promptVersion.findFirst({
-      where: { hairstyleId: hairstyle.id },
-      orderBy: { version: "desc" },
-      select: { version: true },
-    });
-
-    const version = (latest?.version ?? 0) + 1;
-    const created = await tx.promptVersion.create({
-      data: {
-        hairstyleId: hairstyle.id,
-        version,
-        prompt,
-        status: "ACTIVE",
-        qaStatus: "PASSED",
-        notes: [
-          "Promoted automatically after explicit human approval in R&D Preview.",
-          marker,
-          `R&D source job: ${sourceJobId}`,
-          `Automated QA overall: ${qaScore == null ? "n/a" : qaScore}`,
-        ].join("\n"),
-      },
-      select: { id: true, version: true },
-    });
-
-    return { kind: "created" as const, promptVersionId: created.id, version: created.version, hairstyle: hairstyle.name };
+  if (typeof body?.promptKey !== "string" || typeof body?.sourceAttemptId !== "string") return NextResponse.json({ code: "RND_PROMOTION_INVALID_REQUEST" }, { status: 400 });
+  const result = await prisma.$transaction(async tx => {
+    const style = await tx.hairstyle.findUnique({ where: { promptKey: body.promptKey }, select: { id: true } });
+    if (!style || !await lockPromptStyle(tx, style.id)) return { code: "RND_PROMOTION_SOURCE_UNVERIFIED" };
+    const source = await tx.rnDAttempt.findUnique({ where: { id: body.sourceAttemptId }, include: {
+      artifact: true, job: { include: { target: true } }, promptVersion: true,
+    } });
+    // One authoritative local chain; foreign isolated-DB IDs fail closed.
+    // Caller flags and shared secrets cannot attest cross-environment review.
+    if (!source || source.verdict !== "APPROVED" || source.job.status !== "COMPLETED" || source.job.target.status !== "APPROVED" ||
+        source.job.target.hairstyleId !== style.id || !verifiedHumanApproval(source) ||
+        (body.sourceJobId !== undefined && body.sourceJobId !== source.jobId) || (body.prompt !== undefined && body.prompt !== source.prompt)) return { code: "RND_PROMOTION_SOURCE_UNVERIFIED" };
+    const candidate = source.promptVersion;
+    if (!candidate || candidate.sourceRnDAttemptId !== source.id || candidate.hairstyleId !== style.id || candidate.prompt !== source.prompt || candidate.qaStatus !== "PASSED" ||
+        !["DRAFT", "ACTIVE"].includes(candidate.status)) return { code: "RND_PROMOTION_CALIBRATION_REQUIRED" };
+    if (candidate.status === "ACTIVE") return { code: "OK", promptVersionId: candidate.id, idempotent: true };
+    await tx.promptVersion.updateMany({ where: { hairstyleId: style.id, status: "ACTIVE", id: { not: candidate.id } }, data: { status: "ARCHIVED" } });
+    await tx.promptVersion.update({ where: { id: candidate.id }, data: { status: "ACTIVE" } });
+    return { code: "OK", promptVersionId: candidate.id, idempotent: false };
   });
-
-  if (result.kind === "missing_style") {
-    return NextResponse.json(
-      { error: `Production hairstyle not found for promptKey: ${promptKey}` },
-      { status: 404 },
-    );
-  }
-
-  return NextResponse.json({ ok: true, ...result });
+  return NextResponse.json(result, { status: result.code === "OK" ? 200 : 409 });
 }
