@@ -8,7 +8,7 @@ import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
 import { fetchRndSourceAsset } from "@/lib/rnd/source-asset";
 import { runRndFinalVerification, runRndQa } from "@/lib/rnd/qa";
 import { buildRndPrompt } from "@/lib/rnd/prompt";
-import { hindsightEnabled, recallRndHistory, retainRndOutcome } from "@/lib/rnd/hindsight";
+import { hindsightEnabled, recallRndHistoryDetailed, retainRndOutcome } from "@/lib/rnd/hindsight";
 import { passesRndHardIntegrityGate, runRndImageIntegrityCheck } from "@/lib/rnd/image-integrity";
 import { passesRndCombinedHardGate } from "@/lib/rnd/qa-hard-gate";
 import { fenceRndReportLease, hasValidRndLeaseExpiry, validateRndClaimGeneration } from "@/lib/rnd/report-lease-fence";
@@ -414,11 +414,15 @@ export async function POST(request: Request) {
     );
 
   // Recall AFTER independent current-image scoring, using the actual defect.
-  const hindsightHistory = !hardPass ? await recallRndHistory([
-    "DMH historical data for target", job.target.targetKey, "hairstyle", job.target.hairstyleId ?? "unknown",
-    "observed QA defect", rawRefinement ?? qa.reason,
-    "Prior targeted refinements and outcomes only; no authority over prompts or QA."
-  ].join(" ").slice(0,2400)) : [];
+  const hindsightRecall = !hardPass ? await recallRndHistoryDetailed([
+    "Draft My Hair historical hairstyle R&D evidence.",
+    "Hairstyle first:", job.target.hairstyleId ?? "unknown",
+    "Observed QA defect:", rawRefinement ?? qa.reason,
+    "Retrieve comparable successful and failed refinements, identity preservation, hair-only integrity, root integration, and style accuracy.",
+    "Target context (secondary):", job.target.targetKey,
+    "Historical evidence is advisory only; never override current QA or protected identity constraints."
+  ].join(" ").slice(0,2400)) : { evidence: [], status: "ok" as const, httpStatus: null };
+  const hindsightHistory = hindsightRecall.evidence;
   const qaWithMemory = {
     ...qa,
     learning: { decision: "DETERMINISTIC_FALLBACK", evidenceIds: hindsightHistory.map(item => item.id) },
@@ -439,6 +443,8 @@ export async function POST(request: Request) {
       : null,
     hindsight: {
       enabled: hindsightEnabled(),
+      status: hindsightRecall.status,
+      httpStatus: hindsightRecall.httpStatus,
       recalledCount: hindsightHistory.length,
       recalled: hindsightHistory,
     },
