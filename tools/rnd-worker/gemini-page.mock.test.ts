@@ -141,7 +141,7 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
   return { outcome, order };
 }
 
-type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "failed-send" | "delayed-text" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong" | "responsive-srcset" | "responsive-picture";
+type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "still-processing" | "failed-send" | "delayed-text" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong" | "responsive-srcset" | "responsive-picture";
 
 async function mountConversation(page: Page, fixture: ConversationFixture) {
   const url = "https://gemini.google.com/app/old-fixture";
@@ -218,7 +218,7 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
         thread.append(group);
         if (fixture === "delayed-text") {
           setTimeout(() => { content.textContent = "Exact fixture answer"; response.removeAttribute("aria-busy"); }, 220);
-        } else if (fixture !== "idle-assistant") {
+        } else if (fixture !== "idle-assistant" && fixture !== "still-processing") {
           setTimeout(() => response.removeAttribute("aria-busy"), 20);
         }
         if (["valid", "stale-image", "responsive-srcset", "responsive-picture"].includes(fixture)) {
@@ -298,6 +298,11 @@ async function testConversation(page: Page) {
     "a response is returned only after the delayed text stream completes");
   assert.equal(await page.locator("user-query").count(), 1, "the prompt is dispatched exactly once");
   await Promise.all([delayed.user.dispose(), delayed.assistant.dispose()]);
+  await mountConversation(page, "still-processing");
+  const processingPath = await freshChat(page, 800);
+  await assert.rejects(submitPrompt(page, "Exact fixture prompt", processingPath, 350), /ASSISTANT_RESPONSE_INCOMPLETE/,
+    "timeout during active streaming must stay uncertain rather than accept an unfinished turn");
+  assert.equal(await page.locator("user-query").count(), 1, "active-stream timeout never dispatches a duplicate prompt");
   for (const fixture of ["stale-image", "valid", "responsive-srcset", "responsive-picture"] as const) {
     await mountConversation(page, fixture);
     const freshPath = await freshChat(page, 800);
