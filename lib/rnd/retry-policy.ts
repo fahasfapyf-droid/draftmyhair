@@ -1,6 +1,6 @@
-export const ABSOLUTE_GENERATION_CEILING = 5;
+export const ABSOLUTE_GENERATION_CEILING = 4;
 export const MAX_INFRASTRUCTURE_RETRIES = 3;
-export const MAX_TARGETED_REFINEMENTS = 1;
+export const MAX_TARGETED_REFINEMENTS = 3;
 export function configuredGenerationBudget() {
   const value = process.env.RND_MAX_GENERATION_ATTEMPTS;
   if (value === undefined || value === "") return ABSOLUTE_GENERATION_CEILING;
