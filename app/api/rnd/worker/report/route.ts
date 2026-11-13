@@ -420,7 +420,7 @@ export async function POST(request: Request) {
     "Observed QA defect:", rawRefinement ?? qa.reason,
     "Retrieve comparable successful and failed refinements, identity preservation, hair-only integrity, root integration, and style accuracy.",
     "Target context (secondary):", job.target.targetKey,
-    "Historical evidence is advisory only; never override current QA or protected identity constraints."
+    "Historical records are contextual references only. Current QA and all protected-region requirements remain authoritative."
   ].join(" ").slice(0,2400)) : { evidence: [], status: "ok" as const, httpStatus: null };
   const hindsightHistory = hindsightRecall.evidence;
   const qaWithMemory = {
