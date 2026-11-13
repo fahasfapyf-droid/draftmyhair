@@ -150,7 +150,7 @@ async function main() {
   const artifactSource = readFileSync("app/api/rnd/worker/artifacts/route.ts", "utf8");
   const heartbeatSource = readFileSync("app/api/rnd/worker/heartbeat/route.ts", "utf8");
   const earlyLeaseCheck = reportSource.indexOf("!hasValidRndLeaseExpiry(job.leaseExpiresAt, leaseValidationTime)");
-  const hindsightRecall = reportSource.indexOf("const hindsightHistory = !hardPass ? await recallRndHistory");
+  const hindsightRecall = reportSource.indexOf("const hindsightRecall = !hardPass ? await recallRndHistoryDetailed");
   assert.ok(earlyLeaseCheck >= 0, "report route must reject missing, invalid, and expired leases in its early validation");
   assert.ok(hindsightRecall > earlyLeaseCheck, "lease validation must happen before Hindsight recall and QA processing");
   assert.ok(artifactSource.includes("!hasValidRndLeaseExpiry(job.leaseExpiresAt, now)"), "worker artifact route must reject missing, invalid, and expired leases before upload");

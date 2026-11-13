@@ -161,9 +161,9 @@ async function main() {
       check(!passesRndHardIntegrityGate(value), "baseline BOTH integrity checks remain mandatory");
     }
     delete process.env.RND_MAX_GENERATION_ATTEMPTS;
-    check(policy.generationBudget() === 5 && policy.generationBudget(2) === 2, "default and persisted stricter budget");
+    check(policy.generationBudget() === 4 && policy.generationBudget(2) === 2, "four-attempt default and persisted stricter budget");
     process.env.RND_MAX_GENERATION_ATTEMPTS = "2";
-    check(policy.generationBudget(5) === 2, "configuration may only lower budget");
+    check(policy.generationBudget(4) === 2, "configuration may only lower budget");
     for (const value of ["0", "6", "bad", "1.5"]) { process.env.RND_MAX_GENERATION_ATTEMPTS = value; assert.throws(policy.configuredGenerationBudget); count++; }
     delete process.env.RND_MAX_GENERATION_ATTEMPTS;
     for (const text of ["429 quota", "HTTP 503", "timeout", "ECONNRESET"]) check(policy.infrastructureRetryable(new Error(text)), "retryable " + text);
