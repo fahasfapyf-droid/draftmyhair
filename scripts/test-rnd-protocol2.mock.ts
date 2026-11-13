@@ -18,17 +18,23 @@ async function main() {
   assert.ok(claim.includes('promptRevision: "reserved-v2"'));
   assert.ok(claim.includes('submittedAt: null'));
   assert.ok(claim.includes('RND_SUBMISSION_REQUIRES_RECONCILIATION'));
+  assert.ok(claim.includes('reservation.generationStartedAt || reservation.artifactId || reservation.errorCode'),
+    "a restarted worker cannot claim and blindly resubmit a dispatched generation");
   assert.ok(submission.includes('phase !== "begin" && phase !== "submitted"'));
   assert.ok(submission.includes('fenceRndReportLease(tx'));
   assert.ok(submission.includes('RND_SUBMISSION_UNCERTAIN'));
   assert.ok(submission.includes('RND_SUBMITTED'));
   assert.ok(artifacts.includes('attempt?.errorCode !== "RND_SUBMITTED"'));
+  assert.ok(artifacts.includes('where: { jobId_attemptNumber: { jobId, attemptNumber } }'), "artifact association is scoped to the claimed job and attempt");
+  assert.ok(artifacts.includes('jobId, workerId, claimStartedAt: claimGeneration'), "artifact commit is fenced to the current job lease");
   assert.ok(artifacts.includes('generationCompletedAt: new Date()'));
   assert.ok(report.includes('reservation.promptRevision !== "reserved-v2"'));
   assert.ok(report.includes('reservation.errorCode !== "RND_SUBMITTED"'));
   assert.ok(report.includes('generationCompletedAt = reservation.generationCompletedAt'));
   assert.ok(worker.includes('await recordSubmission(job, "begin")'));
   assert.ok(worker.includes('await recordSubmission(job, "submitted")'));
+  assert.match(await readFile("tools/rnd-worker/gemini-page.ts", "utf8"), /submitPrompt\(page: Page, prompt: string, freshPath: string, timeout = 300_000\)/,
+    "the response wait exceeds the historical 72 second successful generation");
   assert.ok(worker.includes('verifyRndWorkerHello(await api("/api/rnd/worker/hello"))'));
 
   console.log("PASS Protocol 2 handshake, legacy rejection, submission fencing, artifact gating, and worker call-order checks.");

@@ -141,7 +141,7 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
   return { outcome, order };
 }
 
-type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong" | "responsive-srcset" | "responsive-picture";
+type ConversationFixture = "missing" | "disabled" | "stays" | "no-user" | "wrong-user" | "wrong-assistant" | "idle-assistant" | "failed-send" | "delayed-text" | "stale-image" | "valid" | "gemini-query-markup" | "gemini-query-offscreen" | "gemini-query-wrong" | "responsive-srcset" | "responsive-picture";
 
 async function mountConversation(page: Page, fixture: ConversationFixture) {
   const url = "https://gemini.google.com/app/old-fixture";
@@ -199,12 +199,13 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           user.append(label);
           group.append(user);
         }
+        if (fixture === "failed-send") return;
         const response = document.createElement("model-response");
         response.style.display = "block";
         const content = document.createElement("message-content");
         if (fixture !== "idle-assistant") {
           response.setAttribute("aria-busy", "true");
-          content.textContent = "Processing fixture";
+          content.textContent = fixture === "delayed-text" ? "Partial" : "Processing fixture";
         }
         response.append(content);
         if (fixture === "wrong-assistant") {
@@ -215,6 +216,11 @@ async function mountConversation(page: Page, fixture: ConversationFixture) {
           group.append(response);
         }
         thread.append(group);
+        if (fixture === "delayed-text") {
+          setTimeout(() => { content.textContent = "Exact fixture answer"; response.removeAttribute("aria-busy"); }, 220);
+        } else if (fixture !== "idle-assistant") {
+          setTimeout(() => response.removeAttribute("aria-busy"), 20);
+        }
         if (["valid", "stale-image", "responsive-srcset", "responsive-picture"].includes(fixture)) {
           const canvas = document.createElement("canvas");
           canvas.width = 640; canvas.height = 768;
@@ -279,12 +285,19 @@ async function testConversation(page: Page) {
     await mountConversation(page, fixture);
     await assert.rejects(freshChat(page, 350), /new chat could not be verified/);
   }
-  for (const fixture of ["no-user", "wrong-user", "wrong-assistant", "idle-assistant"] as const) {
+  for (const fixture of ["no-user", "wrong-user", "wrong-assistant", "idle-assistant", "failed-send"] as const) {
     await mountConversation(page, fixture);
     const freshPath = await freshChat(page, 800);
     assert.equal(freshPath, "/app");
     await assert.rejects(submitPrompt(page, prompt, freshPath, 350), /did not verify/);
   }
+  await mountConversation(page, "delayed-text");
+  const delayedPath = await freshChat(page, 800);
+  const delayed = await submitPrompt(page, "Exact fixture prompt", delayedPath, 1_500);
+  assert.equal(await delayed.assistant.$eval("message-content", el => el.textContent), "Exact fixture answer",
+    "a response is returned only after the delayed text stream completes");
+  assert.equal(await page.locator("user-query").count(), 1, "the prompt is dispatched exactly once");
+  await Promise.all([delayed.user.dispose(), delayed.assistant.dispose()]);
   for (const fixture of ["stale-image", "valid", "responsive-srcset", "responsive-picture"] as const) {
     await mountConversation(page, fixture);
     const freshPath = await freshChat(page, 800);
@@ -308,7 +321,7 @@ async function testConversation(page: Page) {
       await Promise.all([turn.user.dispose(), turn.assistant.dispose()]);
     }
   }
-  console.log("PASS offline: missing/blocked/stale chat, absent user turn, wrong assistant, stale image, intrinsic capture and replaced response.");
+  console.log("PASS offline: verified text response, delayed streaming completion, failed/uncertain submission, exact turn association, missing/blocked/stale chat, image capture and replaced response.");
 }
 
 async function testNativeDownloads(browser: Browser) {

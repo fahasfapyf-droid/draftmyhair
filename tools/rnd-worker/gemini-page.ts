@@ -27,6 +27,54 @@ export async function openGemini(page: Page) {
   await page.waitForTimeout(1_800);
 }
 
+function safeRequestLocation(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    if (!/(?:^|\.)google\.com$|(?:^|\.)googleusercontent\.com$|(?:^|\.)google\.net$/.test(url.hostname)) return null;
+    return { host: url.hostname, path: url.pathname };
+  } catch { return null; }
+}
+
+function consoleErrorCategory(message: string) {
+  if (/quota|usage limit|rate limit/i.test(message)) return "quota";
+  if (/network|fetch|connection|timeout/i.test(message)) return "network";
+  if (/permission|auth|sign.?in|blocked/i.test(message)) return "access";
+  return "unclassified";
+}
+
+/** Logs Gemini transport lifecycle metadata without request bodies, headers, or query strings. */
+export function monitorGeminiPage(page: Page) {
+  const startedAt = new WeakMap<object, number>();
+  page.on("request", request => {
+    if (safeRequestLocation(request.url())) startedAt.set(request, Date.now());
+  });
+  page.on("response", response => {
+    const location = safeRequestLocation(response.url());
+    if (!location) return;
+    const request = response.request();
+    const started = startedAt.get(request) ?? Date.now();
+    console.log("Gemini network response", { ...location, status: response.status(), resourceType: request.resourceType(), durationMs: Date.now() - started });
+  });
+  page.on("requestfailed", request => {
+    const location = safeRequestLocation(request.url());
+    if (!location) return;
+    const started = startedAt.get(request) ?? Date.now();
+    console.error("Gemini network request failed", { ...location, resourceType: request.resourceType(), durationMs: Date.now() - started });
+  });
+  page.on("console", message => {
+    if (message.type() === "error") console.error("Gemini browser console error", { category: consoleErrorCategory(message.text()) });
+  });
+  page.on("pageerror", () => console.error("Gemini browser page error", { category: "unclassified" }));
+  page.on("framenavigated", frame => {
+    if (frame === page.mainFrame()) {
+      const location = safeRequestLocation(frame.url());
+      if (location) console.log("Gemini navigation", location);
+    }
+  });
+  page.on("close", () => console.error("Gemini browser page closed during worker session."));
+  page.on("crash", () => console.error("Gemini browser page crashed during worker session."));
+}
+
 export async function assertReady(page: Page) {
   const signIn = page.getByRole("link", { name: /sign in/i }).or(
     page.getByRole("button", { name: /sign in/i }),
@@ -382,10 +430,14 @@ async function inspectTurn(page: Page, turn?: Pick<VerifiedGeminiTurn, "user" | 
     const image = images.length === 1 ? images[0] : null;
     const src = image?.currentSrc;
     const responseText = assistant.querySelector("message-content")?.textContent?.trim();
+    const busy = Boolean(assistant.matches('[aria-busy="true"]') || assistant.querySelector('[aria-busy="true"]'));
+    const hasText = Boolean(responseText);
+    const started = busy || hasText || image;
     return {
       pathname: location.pathname,
       prompt: promptContent.textContent ?? "",
-      started: Boolean(assistant.matches('[aria-busy="true"]') || assistant.querySelector('[aria-busy="true"]') || responseText || image),
+      started,
+      complete: !busy && Boolean(hasText || image),
       image: image && src &&
         image.complete && image.naturalWidth >= 512 && image.naturalHeight >= 512 && image.getClientRects().length
         ? { src, width: image.naturalWidth, height: image.naturalHeight } : null,
@@ -402,8 +454,12 @@ export async function prepareGeminiSubmission(page: Page, freshPath: string) {
   }
 }
 
-export async function submitPrompt(page: Page, prompt: string, freshPath: string, timeout = 30_000): Promise<VerifiedGeminiTurn> {
+// Gemini can spend more than a minute preparing an image before it mounts the
+// model-response node. Keep the same submitted turn alive while it streams; a
+// timeout remains uncertain and must never trigger another dispatch.
+export async function submitPrompt(page: Page, prompt: string, freshPath: string, timeout = 300_000): Promise<VerifiedGeminiTurn> {
   let verification = "DISPATCH_UNCONFIRMED";
+  let responseWaitStartedAt = 0;
   try {
     await prepareGeminiSubmission(page, freshPath);
     const box = await composer(page);
@@ -413,6 +469,7 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
     ]).catch(() => null);
     if (button) await button.click({ timeout: 10_000 });
     else await box.press("Enter");
+    responseWaitStartedAt = Date.now();
     verification = "TURN_ASSOCIATION_UNVERIFIED";
 
     const deadline = Date.now() + timeout;
@@ -420,7 +477,7 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
       const current = await inspectTurn(page);
       if (current) {
         verification = renderedPrompt(current.prompt) !== renderedPrompt(prompt) ? "PROMPT_MISMATCH" :
-          !current.started ? "ASSISTANT_NOT_STARTED" : "CONVERSATION_UNVERIFIED";
+          !current.started ? "ASSISTANT_NOT_STARTED" : !current.complete ? "ASSISTANT_RESPONSE_INCOMPLETE" : "CONVERSATION_UNVERIFIED";
       }
       if (current && geminiPath(page.url()) === current.pathname && CONVERSATION_PATH.exec(current.pathname)?.[1] &&
           renderedPrompt(current.prompt) === renderedPrompt(prompt) && current.started) {
@@ -428,8 +485,11 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
         const assistant = await page.locator(ASSISTANT_TURN).elementHandle({ timeout: 1_000 });
         const turn = { path: current.pathname, user, assistant };
         const verified = await inspectTurn(page, turn);
-        if (verified?.pathname === turn.path && verified.started && renderedPrompt(verified.prompt) === renderedPrompt(prompt)) {
-          console.log("Gemini prompt and assistant turn verified", { conversation: turn.path, userTurn: 1, assistantTurnOrdinal: 1 });
+        if (verified?.pathname === turn.path && verified.started && verified.complete && renderedPrompt(verified.prompt) === renderedPrompt(prompt)) {
+          console.log("Gemini prompt and assistant turn verified", {
+            conversation: turn.path, userTurn: 1, assistantTurnOrdinal: 1,
+            responseKind: verified.image ? "image" : "text", responseWaitMs: Date.now() - responseWaitStartedAt,
+          });
           return turn;
         }
         await Promise.all([user.dispose(), assistant.dispose()]);
@@ -441,6 +501,9 @@ export async function submitPrompt(page: Page, prompt: string, freshPath: string
     if (error instanceof Error && error.message === GEMINI_QUOTA_ERROR) throw error;
     verification = page.isClosed() ? "BROWSER_CLOSED" : "DOM_INSPECTION_FAILED";
   }
+  if (responseWaitStartedAt) console.error("Gemini assistant response verification timed out", {
+    verification, responseWaitMs: Date.now() - responseWaitStartedAt,
+  });
   throw new GeminiConversationError(`Gemini did not verify the submitted prompt and its new assistant turn. [${verification}]`);
 }
 

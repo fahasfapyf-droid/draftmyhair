@@ -1,5 +1,5 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { assertReady, captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, openImageGenerationMode, openGemini, prepareGeminiSubmission, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
+import { assertReady, captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, monitorGeminiPage, openImageGenerationMode, openGemini, prepareGeminiSubmission, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -440,13 +440,14 @@ async function launchGeminiSession(profile: GeminiProfile) {
     for (const existingPage of context.pages()) {
       existingPage.on("close", () => console.error("DIAGNOSTIC: Existing Playwright page emitted close."));
       existingPage.on("crash", () => console.error("DIAGNOSTIC: Existing Playwright page crashed."));
-      existingPage.on("pageerror", (error) => console.error(`DIAGNOSTIC: Existing Playwright page error: ${error.message}`));
+      existingPage.on("pageerror", () => console.error("DIAGNOSTIC: Existing Playwright page error."));
     }
     console.log("Creating dedicated worker page...");
     const page = await context.newPage();
     page.on("close", () => console.error("DIAGNOSTIC: Worker Playwright page emitted close."));
     page.on("crash", () => console.error("DIAGNOSTIC: Worker Playwright page crashed."));
-    page.on("pageerror", (error) => console.error(`DIAGNOSTIC: Worker Playwright page error: ${error.message}`));
+    page.on("pageerror", () => console.error("DIAGNOSTIC: Worker Playwright page error."));
+    monitorGeminiPage(page);
     console.log(`Worker page ready on Gemini profile ${profile.id}.`);
     return { context, page };
   } catch (error) {
