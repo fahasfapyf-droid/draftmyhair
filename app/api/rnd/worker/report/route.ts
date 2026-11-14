@@ -421,7 +421,7 @@ export async function POST(request: Request) {
     "Retrieve comparable successful and failed refinements, identity preservation, hair-only integrity, root integration, and style accuracy.",
     "Target context (secondary):", job.target.targetKey,
     "Historical records are contextual references only. Current QA and all protected-region requirements remain authoritative."
-  ].join(" ").slice(0,2400)) : { evidence: [], status: "ok" as const, httpStatus: null };
+  ].join(" ").slice(0,2400)) : { evidence: [], status: "skipped_pass" as const, httpStatus: null };
   const hindsightHistory = hindsightRecall.evidence;
   const qaWithMemory = {
     ...qa,
@@ -587,32 +587,57 @@ export async function POST(request: Request) {
     where: { jobId_attemptNumber: { jobId, attemptNumber } },
     select: { id: true },
   });
+  const hindsightRetention = finalAttempt
+    ? await retainRndOutcome({
+        jobId,
+        attemptId: finalAttempt.id,
+        attemptNumber,
+        targetKey: job.target.targetKey,
+        hairstyleId: job.target.hairstyleId,
+        prompt,
+        verdict: finalResult.action === "HUMAN_APPROVAL" ? "HUMAN_APPROVAL" : finalResult.action,
+        overallScore: Number(qa.overall),
+        identityScore: Number(qa.identity),
+        styleAccuracy: Number(qa.styleAccuracy),
+        rootIntegration: Number(qa.rootIntegration),
+        lightingConsistency: Number(qa.lightingConsistency),
+        hairOnly: qa.hairOnly,
+        artifacts: qa.artifacts,
+        refinement: rawRefinement,
+        refinementApplied,
+        finalVerification: finalVerification ? {
+          verdict: finalVerification.verdict,
+          overall: finalVerification.overall,
+          identity: finalVerification.identity,
+          styleAccuracy: finalVerification.styleAccuracy,
+          rootIntegration: finalVerification.rootIntegration,
+          lightingConsistency: finalVerification.lightingConsistency,
+          hairOnly: finalVerification.hairOnly,
+          artifacts: finalVerification.artifacts,
+        } : null,
+        imageIntegrity: imageIntegrity ? {
+          canvasMatch: imageIntegrity.canvasMatch,
+          faceTexturePreservationPass: imageIntegrity.faceTexturePreservationPass,
+        } : null,
+      })
+    : null;
+  const qaWithRetention = {
+    ...qaWithMemory,
+    hindsight: { ...qaWithMemory.hindsight, retention: hindsightRetention },
+  };
   if (finalAttempt) {
-    await retainRndOutcome({
-      jobId,
-      attemptId: finalAttempt.id,
-      attemptNumber,
-      targetKey: job.target.targetKey,
-      hairstyleId: job.target.hairstyleId,
-      prompt,
-      verdict: finalResult.action === "HUMAN_APPROVAL" ? "HUMAN_APPROVAL" : finalResult.action,
-      overallScore: Number(qa.overall),
-      identityScore: Number(qa.identity),
-      styleAccuracy: Number(qa.styleAccuracy),
-      rootIntegration: Number(qa.rootIntegration),
-      lightingConsistency: Number(qa.lightingConsistency),
-      hairOnly: qa.hairOnly,
-      artifacts: qa.artifacts,
-      refinement: rawRefinement,
-      refinementApplied,
-    });
+    try {
+      await prisma.rnDAttempt.update({ where: { id: finalAttempt.id }, data: { qaJson: qaWithRetention } });
+    } catch (error) {
+      console.warn("Hindsight retention status could not be persisted to the R&D attempt.", error instanceof Error ? error.name : "UnknownError");
+    }
   }
 
   return NextResponse.json({
     ok: true,
     job: finalResult.job,
     action: finalResult.action,
-    qa: qaWithMemory,
+    qa: qaWithRetention,
     bestCandidate: bestAttempt
       ? {
           attemptId: bestAttempt.id,
