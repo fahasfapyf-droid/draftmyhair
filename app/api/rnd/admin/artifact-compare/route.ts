@@ -42,29 +42,59 @@ function unavailable() {
 async function readVerifiedAsset(
   storageKey: string,
   expected: typeof EXPECTED.source | typeof EXPECTED.output,
+  label: "source" | "output",
 ) {
-  const blob = await get(storageKey, {
-    access: "private",
-    token: requireRndBlobToken(),
-    useCache: false,
-  });
+  let blob;
+  try {
+    blob = await get(storageKey, {
+      access: "private",
+      token: requireRndBlobToken(),
+      useCache: false,
+    });
+  } catch (error) {
+    console.error("[rnd-artifact-compare] blob_get_failed", {
+      asset: label,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    throw new Error(label + "_BLOB_GET_FAILED");
+  }
+
+  if (!blob || blob.statusCode !== 200 || !blob.stream) {
+    console.error("[rnd-artifact-compare] blob_response_invalid", {
+      asset: label,
+      statusCode: blob?.statusCode ?? null,
+      hasStream: Boolean(blob?.stream),
+    });
+    throw new Error(label + "_BLOB_RESPONSE_INVALID");
+  }
 
   if (
-    !blob ||
-    blob.statusCode !== 200 ||
-    !blob.stream ||
     blob.blob.pathname !== storageKey ||
     blob.blob.size !== expected.size ||
     blob.blob.contentType !== expected.mimeType
   ) {
-    throw new Error("Private asset metadata verification failed");
+    console.error("[rnd-artifact-compare] blob_metadata_mismatch", {
+      asset: label,
+      pathnameMatch: blob.blob.pathname === storageKey,
+      actualSize: blob.blob.size ?? null,
+      expectedSize: expected.size,
+      actualContentType: blob.blob.contentType ?? null,
+      expectedContentType: expected.mimeType,
+    });
+    throw new Error(label + "_BLOB_METADATA_MISMATCH");
   }
 
   const bytes = Buffer.from(await new Response(blob.stream).arrayBuffer());
   const checksum = createHash("sha256").update(bytes).digest("hex");
 
   if (bytes.byteLength !== expected.size || checksum !== expected.checksum) {
-    throw new Error("Private asset checksum verification failed");
+    console.error("[rnd-artifact-compare] checksum_mismatch", {
+      asset: label,
+      actualSize: bytes.byteLength,
+      expectedSize: expected.size,
+      checksumMatch: checksum === expected.checksum,
+    });
+    throw new Error(label + "_CHECKSUM_MISMATCH");
   }
 
   return bytes;
@@ -138,8 +168,8 @@ export async function GET() {
 
   try {
     const [sourceBytes, outputBytes] = await Promise.all([
-      readVerifiedAsset(source.storageKey, EXPECTED.source),
-      readVerifiedAsset(output.storageKey, EXPECTED.output),
+      readVerifiedAsset(source.storageKey, EXPECTED.source, "source"),
+      readVerifiedAsset(output.storageKey, EXPECTED.output, "output"),
     ]);
 
     const sourceData = "data:" + EXPECTED.source.mimeType + ";base64," + sourceBytes.toString("base64");
@@ -168,10 +198,16 @@ export async function GET() {
         "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
       },
     });
-  } catch {
-    return new NextResponse("Private asset retrieval or integrity verification failed", {
-      status: 502,
-      headers: noStore,
-    });
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      /^(source|output)_(BLOB_GET_FAILED|BLOB_RESPONSE_INVALID|BLOB_METADATA_MISMATCH|CHECKSUM_MISMATCH)$/.test(error.message)
+        ? error.message
+        : "UNCLASSIFIED_ASSET_REVIEW_FAILURE";
+    console.error("[rnd-artifact-compare] request_failed", { code });
+    return NextResponse.json(
+      { error: "Private asset retrieval or integrity verification failed", code },
+      { status: 502, headers: noStore },
+    );
   }
 }
