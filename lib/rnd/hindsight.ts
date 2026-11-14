@@ -87,7 +87,7 @@ export async function retainRndOutcome(input: {
   const styleStart = input.prompt.lastIndexOf(marker);
   const styleEvidence = styleStart >= 0 ? input.prompt.slice(styleStart + marker.length).trim().slice(0, 3000) : "Not retained: no isolated style block.";
   const safe = (value: string | null | undefined, limit: number) => value && !unsafeResearchText(value) ? value.slice(0, limit) : "omitted";
-  if ([input.jobId, input.attemptId, input.targetKey, input.hairstyleId ?? ""].some(unsafeResearchText)) return false;
+  if ([input.jobId, input.attemptId, input.targetKey, input.hairstyleId ?? ""].some(unsafeResearchText)) return { status: "invalid_response", httpStatus: null, operationId: null, documentId: null };
   const encodedBank = encodeURIComponent(current.bankId);
   const content = [
     `DMH R&D outcome for target ${input.targetKey}.`, `Hairstyle: ${input.hairstyleId ?? "unknown"}.`,
