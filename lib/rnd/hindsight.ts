@@ -5,7 +5,9 @@ const REQUEST_TIMEOUT_MS = 5_000;
 type HindsightResult = { text?: unknown; type?: unknown; context?: unknown; metadata?: unknown; tags?: unknown; id?: unknown };
 type HindsightRecallResponse = { results?: HindsightResult[] };
 export type RndHindsightEvidence = { id: string | null; text: string; type: string | null; context: string | null };
-export type HindsightRecallStatus = "ok" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response" | "empty";
+export type HindsightRecallStatus = "ok" | "empty" | "skipped_pass" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response";
+export type HindsightRetainResult = { status: "queued" | "accepted" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response"; httpStatus: number | null; operationId: string | null; documentId: string | null };
+export type HindsightOutcomeInspection = { status: "found" | "not_found" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response"; documentId: string; memoryUnitCount: number | null; operationId: string | null; operationStatus: string | null; operationError: string | null };
 export type HindsightRecallResult = { evidence: RndHindsightEvidence[]; status: HindsightRecallStatus; httpStatus: number | null };
 
 function config() {
@@ -74,10 +76,13 @@ export async function retainRndOutcome(input: {
   jobId: string; attemptId: string; attemptNumber: number; targetKey: string; hairstyleId: string | null; prompt: string;
   verdict: string; overallScore: number | null; identityScore: number | null; styleAccuracy: number | null; rootIntegration: number | null;
   lightingConsistency: number | null; hairOnly: string | null; artifacts: string | null; refinement: string | null; refinementApplied: boolean;
+  finalVerification?: { verdict?: string | null; overall?: number | null; identity?: number | null; styleAccuracy?: number | null; rootIntegration?: number | null; lightingConsistency?: number | null; hairOnly?: string | null; artifacts?: string | null } | null;
+  imageIntegrity?: { canvasMatch?: boolean | null; faceTexturePreservationPass?: boolean | null } | null;
   failureCode?: string | null; failureMessage?: string | null;
-}) {
+}): Promise<HindsightRetainResult> {
   const current = config();
-  if (!current || !current.apiKey) return false;
+  if (!current) return { status: "disabled", httpStatus: null, operationId: null, documentId: null };
+  if (!current.apiKey) return { status: "missing_api_key", httpStatus: null, operationId: null, documentId: null };
   const marker = "# REQUESTED HAIRSTYLE";
   const styleStart = input.prompt.lastIndexOf(marker);
   const styleEvidence = styleStart >= 0 ? input.prompt.slice(styleStart + marker.length).trim().slice(0, 3000) : "Not retained: no isolated style block.";
@@ -89,18 +94,47 @@ export async function retainRndOutcome(input: {
     `Attempt: ${input.attemptNumber}; verdict: ${input.verdict}.`,
     `Scores: overall=${input.overallScore ?? "n/a"}, identity=${input.identityScore ?? "n/a"}, style=${input.styleAccuracy ?? "n/a"}, rootIntegration=${input.rootIntegration ?? "n/a"}, lighting=${input.lightingConsistency ?? "n/a"}.`,
     `Hair-only=${input.hairOnly ?? "n/a"}; artifacts=${input.artifacts ?? "n/a"}.`,
+    input.finalVerification ? `Independent final verification: verdict=${input.finalVerification.verdict ?? "n/a"}, overall=${input.finalVerification.overall ?? "n/a"}, identity=${input.finalVerification.identity ?? "n/a"}, style=${input.finalVerification.styleAccuracy ?? "n/a"}, roots=${input.finalVerification.rootIntegration ?? "n/a"}, lighting=${input.finalVerification.lightingConsistency ?? "n/a"}, hairOnly=${input.finalVerification.hairOnly ?? "n/a"}, artifacts=${input.finalVerification.artifacts ?? "n/a"}.` : "Independent final verification: not run.",
+    input.imageIntegrity ? `Image integrity: canvasMatch=${input.imageIntegrity.canvasMatch ?? "n/a"}, faceTexturePreservationPass=${input.imageIntegrity.faceTexturePreservationPass ?? "n/a"}.` : "",
     `Refinement applied=${input.refinementApplied}; refinement=${safe(input.refinement, 1000)}.`,
     `Style block used for this attempt:\n${safe(styleEvidence, 3000)}`,
     input.failureCode ? `Failure code: ${safe(input.failureCode, 100)}.` : "",
     "This is historical R&D evidence. It must not be treated as an authoritative production prompt.",
   ].filter(Boolean).join("\n");
-  const result = await requestJson<{ items_count?: number }>(`${current.baseUrl}/v1/default/banks/${encodedBank}/memories`, {
-    method: "POST", body: JSON.stringify({ async: true, items: [{ content, document_id: `rnd/${input.jobId}/attempt/${input.attemptNumber}`,
+  const documentId = `rnd/${input.jobId}/attempt/${input.attemptNumber}`;
+  const result = await requestJson<{ success?: boolean; items_count?: number; operation_id?: string; operation_ids?: string[]; status?: string }>(`${current.baseUrl}/v1/default/banks/${encodedBank}/memories`, {
+    method: "POST", body: JSON.stringify({ async: true, items: [{ content, document_id: documentId,
       context: "Draft My Hair R&D experiment outcome", metadata: { jobId: input.jobId, attemptId: input.attemptId,
         attemptNumber: String(input.attemptNumber), targetKey: input.targetKey, hairstyleId: input.hairstyleId ?? "", verdict: input.verdict },
       tags: ["dmh-rnd", `hairstyle:${input.hairstyleId ?? "unknown"}`, `target:${input.targetKey}`] }] }),
   });
-  return Boolean(result.data && !result.failed);
+  if (result.failed) return { status: "request_failed", httpStatus: result.status, operationId: null, documentId };
+  if (!result.data || result.data.success === false) return { status: "invalid_response", httpStatus: result.status, operationId: null, documentId };
+  const operationId = typeof result.data.operation_id === "string" ? result.data.operation_id :
+    Array.isArray(result.data.operation_ids) && typeof result.data.operation_ids[0] === "string" ? result.data.operation_ids[0] : null;
+  return { status: operationId ? "queued" : "accepted", httpStatus: result.status, operationId, documentId };
+}
+
+export async function inspectRndOutcome(jobId: string, attemptNumber: number): Promise<HindsightOutcomeInspection> {
+  const documentId = `rnd/${jobId}/attempt/${attemptNumber}`;
+  const current = config();
+  if (!current) return { status: "disabled", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  if (!current.apiKey) return { status: "missing_api_key", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  if (!jobId.trim() || !Number.isInteger(attemptNumber) || attemptNumber < 1 || unsafeResearchText(jobId)) return { status: "invalid_response", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  const bank = encodeURIComponent(current.bankId);
+  const docs = await requestJson<{ items?: Array<{ id?: unknown; memory_unit_count?: unknown }> }>(`${current.baseUrl}/v1/default/banks/${bank}/documents?q=${encodeURIComponent(documentId)}&limit=10`, { method: "GET" });
+  if (docs.failed) return { status: docs.status === 404 ? "not_found" : "request_failed", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  if (!docs.data || !Array.isArray(docs.data.items)) return { status: "invalid_response", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  const doc = docs.data.items.find(item => item && item.id === documentId);
+  if (!doc) return { status: "not_found", documentId, memoryUnitCount: null, operationId: null, operationStatus: null, operationError: null };
+  const memoryUnitCount = typeof doc.memory_unit_count === "number" ? doc.memory_unit_count : null;
+  const operations = await requestJson<{ operations?: Array<{ id?: unknown; operation_id?: unknown; document_id?: unknown; status?: unknown; error_message?: unknown }> }>(`${current.baseUrl}/v1/default/banks/${bank}/operations?type=retain&limit=100`, { method: "GET" });
+  if (operations.failed || !operations.data || !Array.isArray(operations.data.operations)) return { status: "found", documentId, memoryUnitCount, operationId: null, operationStatus: null, operationError: null };
+  const operation = operations.data.operations.find(item => item && item.document_id === documentId);
+  return { status: "found", documentId, memoryUnitCount,
+    operationId: typeof operation?.operation_id === "string" ? operation.operation_id : typeof operation?.id === "string" ? operation.id : null,
+    operationStatus: typeof operation?.status === "string" ? operation.status : null,
+    operationError: typeof operation?.error_message === "string" ? operation.error_message.slice(0, 300) : null };
 }
 
 export function formatRndPlanningEvidence(history: RndHindsightEvidence[]) {
