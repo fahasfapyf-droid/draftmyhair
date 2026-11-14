@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { hindsightConfigurationStatus, inspectRndOutcome, recallRndHistoryDetailed } from "@/lib/rnd/hindsight";
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (process.env.VERCEL_ENV !== "preview" || process.env.VERCEL_GIT_COMMIT_REF !== "rnd/agent-learning-deerflow-v1") {
+  if (process.env.VERCEL_ENV !== "preview" || !["rnd/agent-learning-deerflow-v1", "codex/hindsight-recall-diagnostics"].includes(process.env.VERCEL_GIT_COMMIT_REF ?? "")) {
     return NextResponse.json({ error: "Not found" }, { status: 404, headers: { "cache-control": "no-store" } });
   }
   const session = await auth();
