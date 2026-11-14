@@ -1,6 +1,7 @@
 import { BoundedJsonError, readBoundedJson, unsafeResearchText } from "@/lib/rnd/bounded-json";
 const DEFAULT_BANK_ID = "draftmyhair-rnd";
 const REQUEST_TIMEOUT_MS = 5_000;
+const MAX_RESPONSE_BYTES = 128 * 1024;
 
 type HindsightResult = { text?: unknown; type?: unknown; context?: unknown; metadata?: unknown; tags?: unknown; id?: unknown };
 type RndRecallScope = { targetKey?: string | null; hairstyleId?: string | null };
@@ -49,7 +50,7 @@ async function requestJson<T>(url: string, init: RequestInit, timeoutMs = REQUES
       return { data: null, status: response.status, failed: true, diagnostic: diagnostic("response", "http_error", `HTTP_${response.status}`) };
     }
     try {
-      const data = await readBoundedJson(response, 32_768, requestSignal) as T;
+      const data = await readBoundedJson(response, MAX_RESPONSE_BYTES, requestSignal) as T;
       return { data, status: response.status, failed: false, diagnostic: null };
     } catch (error) {
       if (error instanceof BoundedJsonError && error.code === "RND_RESPONSE_INVALID_JSON") {
@@ -73,9 +74,18 @@ export async function recallRndHistoryDetailed(query: string, scope?: RndRecallS
   if (!current.apiKey) return { evidence: [], status: "missing_api_key", httpStatus: null };
   if (!query.trim() || unsafeResearchText(query)) return { evidence: [], status: "invalid_response", httpStatus: null };
   const encodedBank = encodeURIComponent(current.bankId);
+  const scopeTags = [
+    scope?.targetKey?.trim() ? `target:${scope.targetKey.trim()}` : "",
+    scope?.hairstyleId?.trim() ? `hairstyle:${scope.hairstyleId.trim()}` : "",
+  ].filter(Boolean);
+  const tags = scopeTags.length ? scopeTags : ["dmh-rnd"];
   const response = await requestJson<HindsightRecallResponse>(`${current.baseUrl}/v1/default/banks/${encodedBank}/memories/recall`, {
     method: "POST",
-    body: JSON.stringify({ query: query.trim().slice(0, 2400), max_tokens: 1600, budget: "low", types: ["experience", "observation", "world"] }),
+    body: JSON.stringify({
+      query: query.trim().slice(0, 2400), max_tokens: 1600, budget: "low",
+      types: ["experience", "observation", "world"], tags, tags_match: "any_strict",
+      include: { entities: null },
+    }),
   }, 12_000);
   if (response.failed) return { evidence: [], status: "request_failed", httpStatus: response.status, diagnostic: response.diagnostic ?? undefined };
   if (!response.data || !Array.isArray(response.data.results)) return { evidence: [], status: "invalid_response", httpStatus: response.status };
