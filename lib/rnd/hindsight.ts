@@ -28,9 +28,9 @@ export function hindsightConfigurationStatus(): HindsightRecallStatus {
 function headers(apiKey: string) {
   return { "content-type": "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
 }
-async function requestJson<T>(url: string, init: RequestInit): Promise<{ data: T | null; status: number | null; failed: boolean }> {
+async function requestJson<T>(url: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<{ data: T | null; status: number | null; failed: boolean }> {
   try {
-    const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    const signal = AbortSignal.timeout(timeoutMs);
     const response = await fetch(url, { redirect: "error", ...init, headers: { ...headers(config()?.apiKey ?? ""), ...(init.headers ?? {}) }, cache: "no-store", signal });
     if (!response.ok) {
       console.warn("Hindsight request failed:", response.status);
@@ -52,7 +52,7 @@ export async function recallRndHistoryDetailed(query: string, scope?: RndRecallS
   const response = await requestJson<HindsightRecallResponse>(`${current.baseUrl}/v1/default/banks/${encodedBank}/memories/recall`, {
     method: "POST",
     body: JSON.stringify({ query: query.trim().slice(0, 2400), max_tokens: 1600, budget: "low", types: ["experience", "observation", "world"] }),
-  });
+  }, 12_000);
   if (response.failed) return { evidence: [], status: "request_failed", httpStatus: response.status };
   if (!response.data || !Array.isArray(response.data.results)) return { evidence: [], status: "invalid_response", httpStatus: response.status };
   const candidates: Array<{ evidence: RndHindsightEvidence; rank: number }> = [];
