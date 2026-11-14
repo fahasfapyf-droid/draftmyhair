@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { requireRndWorker } from "@/lib/rnd/worker-auth";
 import { hindsightConfigurationStatus, inspectRndOutcome, recallRndHistoryDetailed } from "@/lib/rnd/hindsight";
 
@@ -6,8 +7,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const authResponse = requireRndWorker(request.headers.get("authorization"));
-  if (authResponse) return authResponse;
+  if (process.env.VERCEL_ENV !== "preview" || process.env.VERCEL_GIT_COMMIT_REF !== "rnd/agent-learning-deerflow-v1") {
+    return NextResponse.json({ error: "Not found" }, { status: 404, headers: { "cache-control": "no-store" } });
+  }
+  const session = await auth();
+  const isAdmin = Boolean(session?.user?.id && session.user.role === "ADMIN");
+  if (!isAdmin) {
+    const authResponse = requireRndWorker(request.headers.get("authorization"));
+    if (authResponse) return authResponse;
+  }
   const url = new URL(request.url);
   const hairstyle = url.searchParams.get("hairstyle")?.trim().slice(0, 80) || "Italian Bob";
   const defect = url.searchParams.get("defect")?.trim().slice(0, 300) || "style accuracy and identity preservation";
