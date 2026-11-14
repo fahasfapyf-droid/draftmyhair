@@ -419,9 +419,12 @@ export async function POST(request: Request) {
     "Hairstyle first:", job.target.hairstyleId ?? "unknown",
     "Observed QA defect:", rawRefinement ?? qa.reason,
     "Retrieve comparable successful and failed refinements, identity preservation, hair-only integrity, root integration, and style accuracy.",
-    "Target context (secondary):", job.target.targetKey,
+    "Exact target key:", job.target.targetKey,
     "Historical records are contextual references only. Current QA and all protected-region requirements remain authoritative."
-  ].join(" ").slice(0,2400)) : { evidence: [], status: "skipped_pass" as const, httpStatus: null };
+  ].join(" ").slice(0,2400), {
+    targetKey: job.target.targetKey,
+    hairstyleId: job.target.hairstyleId,
+  }) : { evidence: [], status: "skipped_pass" as const, httpStatus: null };
   const hindsightHistory = hindsightRecall.evidence;
   const qaWithMemory = {
     ...qa,
