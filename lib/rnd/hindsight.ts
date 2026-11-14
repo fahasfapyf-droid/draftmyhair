@@ -60,7 +60,7 @@ export async function recallRndHistoryDetailed(query: string, scope?: RndRecallS
   const hairstyleId = scope?.hairstyleId?.trim() || "";
   for (const item of response.data.results.slice(0, 30)) {
     if (!item || typeof item !== "object" || typeof item.text !== "string" || !item.text.trim() || unsafeResearchText(item.text)) continue;
-    const text = item.text.replace(/\u0000/g, "").trim().slice(0, Math.min(1200, remaining));
+    const text = item.text.replace(/\u0000/g, "").trim().slice(0, 1200);
     if (!text) break;
     const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
       ? item.metadata as Record<string, unknown> : {};
