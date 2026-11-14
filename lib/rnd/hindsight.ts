@@ -3,6 +3,7 @@ const DEFAULT_BANK_ID = "draftmyhair-rnd";
 const REQUEST_TIMEOUT_MS = 5_000;
 
 type HindsightResult = { text?: unknown; type?: unknown; context?: unknown; metadata?: unknown; tags?: unknown; id?: unknown };
+type RndRecallScope = { targetKey?: string | null; hairstyleId?: string | null };
 type HindsightRecallResponse = { results?: HindsightResult[] };
 export type RndHindsightEvidence = { id: string | null; text: string; type: string | null; context: string | null };
 export type HindsightRecallStatus = "ok" | "empty" | "skipped_pass" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response";
@@ -42,7 +43,7 @@ async function requestJson<T>(url: string, init: RequestInit): Promise<{ data: T
   }
 }
 
-export async function recallRndHistoryDetailed(query: string): Promise<HindsightRecallResult> {
+export async function recallRndHistoryDetailed(query: string, scope?: RndRecallScope): Promise<HindsightRecallResult> {
   const current = config();
   if (!current) return { evidence: [], status: "disabled", httpStatus: null };
   if (!current.apiKey) return { evidence: [], status: "missing_api_key", httpStatus: null };
@@ -54,16 +55,42 @@ export async function recallRndHistoryDetailed(query: string): Promise<Hindsight
   });
   if (response.failed) return { evidence: [], status: "request_failed", httpStatus: response.status };
   if (!response.data || !Array.isArray(response.data.results)) return { evidence: [], status: "invalid_response", httpStatus: response.status };
-  const output: RndHindsightEvidence[] = [];
-  let remaining = 4800;
+  const candidates: Array<{ evidence: RndHindsightEvidence; rank: number }> = [];
+  const targetKey = scope?.targetKey?.trim() || "";
+  const hairstyleId = scope?.hairstyleId?.trim() || "";
   for (const item of response.data.results.slice(0, 30)) {
     if (!item || typeof item !== "object" || typeof item.text !== "string" || !item.text.trim() || unsafeResearchText(item.text)) continue;
     const text = item.text.replace(/\u0000/g, "").trim().slice(0, Math.min(1200, remaining));
     if (!text) break;
-    output.push({ id: typeof item.id === "string" && !unsafeResearchText(item.id) ? item.id.slice(0,128) : null, text,
+    const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+      ? item.metadata as Record<string, unknown> : {};
+    const tags = Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === "string") : [];
+    const targetMatch = Boolean(targetKey) && (
+      metadata.targetKey === targetKey || tags.includes(`target:${targetKey}`) || text.includes(targetKey)
+    );
+    const hairstyleMatch = Boolean(hairstyleId) && (
+      metadata.hairstyleId === hairstyleId || tags.includes(`hairstyle:${hairstyleId}`) ||
+      text.includes(`Hairstyle: ${hairstyleId}`)
+    );
+    // When a scope is supplied, reject memories that cannot be tied to this
+    // target or hairstyle. Exact-target evidence ranks ahead of same-hairstyle
+    // history; unrelated semantic neighbors never reach refinement selection.
+    if ((targetKey || hairstyleId) && !targetMatch && !hairstyleMatch) continue;
+    candidates.push({ evidence: {
+      id: typeof item.id === "string" && !unsafeResearchText(item.id) ? item.id.slice(0,128) : null, text,
       type: typeof item.type === "string" && !unsafeResearchText(item.type) ? item.type.slice(0,40) : null,
-      context: typeof item.context === "string" && !unsafeResearchText(item.context) ? item.context.slice(0,160) : null });
-    remaining -= text.length;
+      context: typeof item.context === "string" && !unsafeResearchText(item.context) ? item.context.slice(0,160) : null,
+    }, rank: targetMatch ? 0 : 1 });
+  }
+  candidates.sort((a, b) => a.rank - b.rank);
+  const output: RndHindsightEvidence[] = [];
+  let remaining = 4800;
+  for (const candidate of candidates) {
+    const evidence = candidate.evidence;
+    const boundedText = evidence.text.slice(0, Math.min(1200, remaining));
+    if (!boundedText) break;
+    output.push({ ...evidence, text: boundedText });
+    remaining -= boundedText.length;
     if (output.length === 4 || remaining === 0) break;
   }
   return { evidence: output, status: output.length ? "ok" : "empty", httpStatus: response.status };
