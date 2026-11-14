@@ -25,8 +25,11 @@ export async function GET(request: Request) {
   const outcome = jobId && Number.isInteger(attemptNumber) && attemptNumber > 0
     ? await inspectRndOutcome(jobId, attemptNumber)
     : null;
+  const targetKey = url.searchParams.get("targetKey")?.trim().slice(0, 160) || null;
+  const hairstyleId = url.searchParams.get("hairstyleId")?.trim().slice(0, 128) || null;
   const recall = await recallRndHistoryDetailed(
-    `Draft My Hair historical R&D evidence. Hairstyle: ${hairstyle}. Retrieve successful and failed generation experiments, observed defects, identity preservation, hair-only integrity, style accuracy and targeted refinements. Defect focus: ${defect}. Historical evidence is advisory only.`
+    `Draft My Hair historical R&D evidence. Hairstyle: ${hairstyle}. Hairstyle ID: ${hairstyleId ?? "unspecified"}. Target key: ${targetKey ?? "unspecified"}. Retrieve successful and failed generation experiments, observed defects, identity preservation, hair-only integrity, style accuracy and targeted refinements. Defect focus: ${defect}. Historical evidence is advisory only.`,
+    targetKey || hairstyleId ? { targetKey, hairstyleId } : undefined
   );
   return NextResponse.json({
     ok: (recall.status === "ok" || recall.status === "empty") && (!outcome || outcome.status === "found"),
