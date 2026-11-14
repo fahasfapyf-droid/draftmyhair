@@ -1,4 +1,4 @@
-import { readBoundedJson, unsafeResearchText } from "@/lib/rnd/bounded-json";
+import { BoundedJsonError, readBoundedJson, unsafeResearchText } from "@/lib/rnd/bounded-json";
 const DEFAULT_BANK_ID = "draftmyhair-rnd";
 const REQUEST_TIMEOUT_MS = 5_000;
 
@@ -9,7 +9,8 @@ export type RndHindsightEvidence = { id: string | null; text: string; type: stri
 export type HindsightRecallStatus = "ok" | "empty" | "skipped_pass" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response";
 export type HindsightRetainResult = { status: "queued" | "accepted" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response"; httpStatus: number | null; operationId: string | null; documentId: string | null };
 export type HindsightOutcomeInspection = { status: "found" | "not_found" | "disabled" | "missing_api_key" | "request_failed" | "invalid_response"; documentId: string; memoryUnitCount: number | null; operationId: string | null; operationStatus: string | null; operationError: string | null };
-export type HindsightRecallResult = { evidence: RndHindsightEvidence[]; status: HindsightRecallStatus; httpStatus: number | null };
+export type HindsightRequestDiagnostic = { stage: "fetch" | "response" | "body_read" | "json_parse"; category: "abort" | "redirect" | "network" | "http_error" | "body_read" | "invalid_json"; code: string; elapsedMs: number };
+export type HindsightRecallResult = { evidence: RndHindsightEvidence[]; status: HindsightRecallStatus; httpStatus: number | null; diagnostic?: HindsightRequestDiagnostic };
 
 function config() {
   const baseUrl = process.env.HINDSIGHT_API_URL?.trim().replace(/\/$/, "");
@@ -28,18 +29,41 @@ export function hindsightConfigurationStatus(): HindsightRecallStatus {
 function headers(apiKey: string) {
   return { "content-type": "application/json", ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) };
 }
-async function requestJson<T>(url: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<{ data: T | null; status: number | null; failed: boolean }> {
+async function requestJson<T>(url: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<{ data: T | null; status: number | null; failed: boolean; diagnostic: HindsightRequestDiagnostic | null }> {
+  const startedAt = Date.now();
+  const diagnostic = (stage: HindsightRequestDiagnostic["stage"], category: HindsightRequestDiagnostic["category"], code: string): HindsightRequestDiagnostic => ({
+    stage, category, code, elapsedMs: Math.max(0, Date.now() - startedAt),
+  });
+  let signal: AbortSignal | undefined;
   try {
-    const signal = AbortSignal.timeout(timeoutMs);
-    const response = await fetch(url, { redirect: "error", ...init, headers: { ...headers(config()?.apiKey ?? ""), ...(init.headers ?? {}) }, cache: "no-store", signal });
+    const requestSignal = AbortSignal.timeout(timeoutMs);
+    signal = requestSignal;
+    const response = await fetch(url, { ...init, redirect: "manual", headers: { ...headers(config()?.apiKey ?? ""), ...(init.headers ?? {}) }, cache: "no-store", signal: requestSignal });
+    if (response.status >= 300 && response.status < 400) {
+      const detail = diagnostic("response", "redirect", `HTTP_${response.status}`);
+      console.warn("Hindsight request failed:", detail.code);
+      return { data: null, status: response.status, failed: true, diagnostic: detail };
+    }
     if (!response.ok) {
       console.warn("Hindsight request failed:", response.status);
-      return { data: null, status: response.status, failed: true };
+      return { data: null, status: response.status, failed: true, diagnostic: diagnostic("response", "http_error", `HTTP_${response.status}`) };
     }
-    return { data: await readBoundedJson(response, 32_768, signal) as T, status: response.status, failed: false };
-  } catch {
-    console.warn("Hindsight request unavailable");
-    return { data: null, status: null, failed: true };
+    try {
+      const data = await readBoundedJson(response, 32_768, requestSignal) as T;
+      return { data, status: response.status, failed: false, diagnostic: null };
+    } catch (error) {
+      if (error instanceof BoundedJsonError && error.code === "RND_RESPONSE_INVALID_JSON") {
+        return { data: null, status: null, failed: true, diagnostic: diagnostic("json_parse", "invalid_json", error.code) };
+      }
+      const abort = signal.aborted || (error instanceof BoundedJsonError && error.code === "RND_RESPONSE_TIMEOUT");
+      const code = error instanceof BoundedJsonError ? error.code : "RND_RESPONSE_READ_FAILED";
+      return { data: null, status: null, failed: true, diagnostic: diagnostic("body_read", abort ? "abort" : "body_read", code) };
+    }
+  } catch (error) {
+    const abort = signal?.aborted || (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"));
+    const detail = diagnostic("fetch", abort ? "abort" : "network", abort ? "RND_REQUEST_TIMEOUT" : "RND_FETCH_FAILED");
+    console.warn("Hindsight request unavailable:", detail.code);
+    return { data: null, status: null, failed: true, diagnostic: detail };
   }
 }
 
@@ -53,7 +77,7 @@ export async function recallRndHistoryDetailed(query: string, scope?: RndRecallS
     method: "POST",
     body: JSON.stringify({ query: query.trim().slice(0, 2400), max_tokens: 1600, budget: "low", types: ["experience", "observation", "world"] }),
   }, 12_000);
-  if (response.failed) return { evidence: [], status: "request_failed", httpStatus: response.status };
+  if (response.failed) return { evidence: [], status: "request_failed", httpStatus: response.status, diagnostic: response.diagnostic ?? undefined };
   if (!response.data || !Array.isArray(response.data.results)) return { evidence: [], status: "invalid_response", httpStatus: response.status };
   const candidates: Array<{ evidence: RndHindsightEvidence; rank: number }> = [];
   const targetKey = scope?.targetKey?.trim() || "";

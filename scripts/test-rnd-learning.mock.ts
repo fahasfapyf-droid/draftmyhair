@@ -53,12 +53,44 @@ async function main() {
     const recalled = await memory.recallRndPlanningEvidence({ objective: "Italian Bob", targetKey: "bob", hairstyleId: "style", defect: "Bulky side silhouette" });
     check(recalled.length === 1 && recalled[0].id === "e1", "typed successful recall");
     check(query.includes("Italian Bob") && query.includes("Bulky side silhouette") && query.includes("bob"), "objective/target/defect retrieval context");
+    let scopedUrl = "";
+    globalThis.fetch = async (url, init) => {
+      scopedUrl = String(url);
+      const request = JSON.parse(String(init?.body));
+      check(init?.method === "POST" && request.types.join(",") === "experience,observation,world", "scoped recall keeps Hindsight request contract");
+      return response({ results: [
+        { id: "exact", text: "Prior targeted correction improved style accuracy.", metadata: { targetKey: "target-7" }, tags: ["hairstyle:style-7"] },
+        { id: "unrelated", text: "An unrelated target had similar hair." },
+      ] });
+    };
+    const scoped = await memory.recallRndHistoryDetailed("Italian Bob; target target-7; hairstyle style-7", { targetKey: "target-7", hairstyleId: "style-7" });
+    check(scopedUrl.endsWith("/memories/recall") && scoped.evidence.length === 1 && scoped.evidence[0].id === "exact", "scope is applied safely to returned Hindsight results");
     for (const payload of [null, {}, [], { results: null }, { results: {} }, { results: [null, 3, {}, { text: 7 }] }, { results: [] }]) {
       globalThis.fetch = async () => response(payload);
       check((await memory.recallRndHistory("Bob geometry")).length === 0, "malformed/empty memory safely falls back");
     }
-    globalThis.fetch = async () => { throw new DOMException("fixture timeout", "AbortError"); };
-    check((await memory.recallRndHistory("Bob geometry")).length === 0, "memory timeout/unavailable fallback");
+    globalThis.fetch = async () => { throw new DOMException("secret exception message must not escape", "AbortError"); };
+    const unavailable = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(unavailable.evidence.length === 0 && unavailable.status === "request_failed", "memory timeout/unavailable fallback");
+    check(unavailable.diagnostic?.stage === "fetch" && unavailable.diagnostic.category === "abort" && !JSON.stringify(unavailable.diagnostic).includes("secret"), "fetch abort diagnostics are classified and sanitized");
+    globalThis.fetch = async () => { throw new TypeError("private endpoint and credential detail"); };
+    const networkFailure = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(networkFailure.diagnostic?.stage === "fetch" && networkFailure.diagnostic.category === "network" && networkFailure.diagnostic.code === "RND_FETCH_FAILED", "network failure diagnostics use allowlisted codes");
+    globalThis.fetch = async () => response({}, "https://memory.invalid/private", 307);
+    const redirectFailure = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(redirectFailure.diagnostic?.stage === "response" && redirectFailure.diagnostic.category === "redirect" && redirectFailure.diagnostic.code === "HTTP_307", "redirect failure is identified without following it");
+    globalThis.fetch = async () => response({ error: "private response content" }, "https://memory.invalid/", 503);
+    const httpFailure = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(httpFailure.httpStatus === 503 && httpFailure.diagnostic?.stage === "response" && httpFailure.diagnostic.category === "http_error" && httpFailure.diagnostic.code === "HTTP_503", "HTTP errors retain status and omit response body");
+    globalThis.fetch = async () => new Response("not json");
+    const parseFailure = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(parseFailure.diagnostic?.stage === "json_parse" && parseFailure.diagnostic.category === "invalid_json", "invalid JSON response is distinguished");
+    globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) { controller.error(new Error("sensitive body stream message")); } }));
+    const bodyFailure = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(bodyFailure.diagnostic?.stage === "body_read" && bodyFailure.diagnostic.category === "body_read" && !JSON.stringify(bodyFailure.diagnostic).includes("sensitive"), "body read failures are classified and sanitized");
+    globalThis.fetch = async () => new Response(new ReadableStream({ start() {} }));
+    const bodyTimeout = await memory.recallRndHistoryDetailed("Bob geometry");
+    check(bodyTimeout.diagnostic?.stage === "body_read" && bodyTimeout.diagnostic.category === "abort" && bodyTimeout.diagnostic.code === "RND_RESPONSE_TIMEOUT", "stalled response bodies are classified as aborts");
     globalThis.fetch = async () => response({ results: Array.from({ length: 20 }, (_, i) => ({ id: "id" + i, text: "x".repeat(1500) })) });
     const bounded = await memory.recallRndHistory("Bob geometry");
     check(bounded.length === 4 && bounded.every(item => item.text.length <= 1200) && bounded.reduce((n, item) => n + item.text.length, 0) <= 4800, "bounded memory count and text");

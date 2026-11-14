@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     configuration: status,
     status: recall.status,
     httpStatus: recall.httpStatus,
+    diagnostic: recall.diagnostic ?? null,
     recalledCount: recall.evidence.length,
     evidence: recall.evidence.map(({ id, type, context, text }) => ({ id, type, context, text: text.slice(0, 700) })),
     outcome,

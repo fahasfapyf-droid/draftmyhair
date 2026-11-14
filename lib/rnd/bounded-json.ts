@@ -1,26 +1,43 @@
 /** Bound streamed bodies too: Content-Length is neither required nor trusted. */
+export type BoundedJsonFailureCode = "RND_EMPTY_RESPONSE" | "RND_RESPONSE_TIMEOUT" | "RND_RESPONSE_TOO_LARGE" | "RND_RESPONSE_READ_FAILED" | "RND_RESPONSE_INVALID_JSON";
+
+export class BoundedJsonError extends Error {
+  readonly code: BoundedJsonFailureCode;
+  constructor(code: BoundedJsonFailureCode) {
+    super(code);
+    this.name = "BoundedJsonError";
+    this.code = code;
+  }
+}
+
 export async function readBoundedJson(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
   const reader = response.body?.getReader();
-  if (!reader) throw new Error("RND_EMPTY_RESPONSE");
+  if (!reader) throw new BoundedJsonError("RND_EMPTY_RESPONSE");
   let size = 0;
   const chunks: Uint8Array[] = [];
   let rejectAbort!: (error: Error) => void;
   const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
-  const onAbort = () => rejectAbort(new Error("RND_RESPONSE_TIMEOUT"));
+  const onAbort = () => rejectAbort(new BoundedJsonError("RND_RESPONSE_TIMEOUT"));
   signal.addEventListener("abort", onAbort, { once: true });
   try {
-    if (signal.aborted) throw new Error("RND_RESPONSE_TIMEOUT");
+    if (signal.aborted) throw new BoundedJsonError("RND_RESPONSE_TIMEOUT");
     for (;;) {
-      const result = await Promise.race([reader.read(), aborted]);
+      let result: ReadableStreamReadResult<Uint8Array>;
+      try { result = await Promise.race([reader.read(), aborted]); }
+      catch (error) {
+        if (error instanceof BoundedJsonError) throw error;
+        throw new BoundedJsonError("RND_RESPONSE_READ_FAILED");
+      }
       if (result.done) break;
       size += result.value.byteLength;
-      if (size > maxBytes) throw new Error("RND_RESPONSE_TOO_LARGE");
+      if (size > maxBytes) throw new BoundedJsonError("RND_RESPONSE_TOO_LARGE");
       chunks.push(result.value);
     }
     const bytes = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+    catch { throw new BoundedJsonError("RND_RESPONSE_INVALID_JSON"); }
   } finally {
     signal.removeEventListener("abort", onAbort);
     void reader.cancel().catch(() => undefined);
