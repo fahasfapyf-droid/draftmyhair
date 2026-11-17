@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { del, get, put } from "@vercel/blob";
 import { requireRndBlobToken } from "@/lib/rnd/blob-storage";
@@ -10,30 +10,15 @@ const PREFIX = "rnd/validation/";
 const CONTENT_TYPE = "application/octet-stream";
 const APPROVED_BRANCH = "rnd/agent-learning-deerflow-v1";
 
-function authorized(request: Request): boolean {
-  const expected = process.env.RND_BLOB_VALIDATION_SECRET;
-  const supplied = request.headers.get("x-rnd-validation-secret");
-  if (!expected || !supplied) return false;
-  const expectedBytes = Buffer.from(expected, "utf8");
-  const suppliedBytes = Buffer.from(supplied, "utf8");
-  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
-}
-
 function previewBranchAllowed(): boolean {
   return process.env.VERCEL_ENV === "preview" &&
     process.env.VERCEL_GIT_COMMIT_REF === APPROVED_BRANCH;
 }
 
-export async function POST(request: Request) {
+export async function POST() {
   if (!previewBranchAllowed()) {
     return NextResponse.json({ code: "RND_VALIDATION_PREVIEW_ONLY" }, {
       status: 404,
-      headers: { "Cache-Control": "no-store" },
-    });
-  }
-  if (!authorized(request)) {
-    return NextResponse.json({ code: "UNAUTHORIZED" }, {
-      status: 401,
       headers: { "Cache-Control": "no-store" },
     });
   }
