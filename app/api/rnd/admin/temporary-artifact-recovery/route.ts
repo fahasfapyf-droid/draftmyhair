@@ -52,7 +52,6 @@ async function readVerifiedAsset(
     result = await get(expected.pathname, {
       access: "private",
       token: requireRndBlobToken(),
-      useCache: false,
     });
   } catch (error) {
     console.error("[rnd-temporary-artifact-recovery] blob_get_failed", {
