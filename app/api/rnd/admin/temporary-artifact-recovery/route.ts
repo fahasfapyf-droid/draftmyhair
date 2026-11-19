@@ -43,6 +43,18 @@ function unavailable() {
   return new NextResponse("Not found", { status: 404, headers: noStore });
 }
 
+function assetErrorCode(error: unknown, label: "source" | "output") {
+  const candidate = error instanceof Error ? error.message : "";
+  const suffix = candidate.startsWith(label + "_")
+    ? candidate.slice(label.length + 1)
+    : "";
+  return /^(BLOB_GET_FAILED|BLOB_NOT_FOUND|BLOB_RESPONSE_INVALID|BLOB_METADATA_MISMATCH|CHECKSUM_MISMATCH)$/.test(
+    suffix,
+  )
+    ? candidate
+    : label + "_UNCLASSIFIED_FAILURE";
+}
+
 async function readVerifiedAsset(
   expected: (typeof EXPECTED)["source"] | (typeof EXPECTED)["output"],
   label: "source" | "output",
@@ -138,10 +150,37 @@ export async function GET() {
     return unavailable();
   }
 
-  try {
-    const sourceBytes = await readVerifiedAsset(EXPECTED.source, "source");
-    const outputBytes = await readVerifiedAsset(EXPECTED.output, "output");
-    return new NextResponse(comparisonPage(sourceBytes, outputBytes), {
+  const [sourceResult, outputResult] = await Promise.allSettled([
+    readVerifiedAsset(EXPECTED.source, "source"),
+    readVerifiedAsset(EXPECTED.output, "output"),
+  ]);
+
+  if (sourceResult.status === "rejected" || outputResult.status === "rejected") {
+    const sourceCode =
+      sourceResult.status === "fulfilled"
+        ? "VERIFIED"
+        : assetErrorCode(sourceResult.reason, "source");
+    const outputCode =
+      outputResult.status === "fulfilled"
+        ? "VERIFIED"
+        : assetErrorCode(outputResult.reason, "output");
+    console.error("[rnd-temporary-artifact-recovery] request_failed", {
+      sourceCode,
+      outputCode,
+    });
+    return NextResponse.json(
+      {
+        error: "Private artifact retrieval or integrity verification failed",
+        source: sourceCode,
+        output: outputCode,
+      },
+      { status: 502, headers: noStore },
+    );
+  }
+
+  return new NextResponse(
+    comparisonPage(sourceResult.value, outputResult.value),
+    {
       status: 200,
       headers: {
         ...noStore,
@@ -149,19 +188,6 @@ export async function GET() {
         "Content-Security-Policy":
           "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
       },
-    });
-  } catch (error) {
-    const code =
-      error instanceof Error &&
-      /^(source|output)_(BLOB_GET_FAILED|BLOB_NOT_FOUND|BLOB_RESPONSE_INVALID|BLOB_METADATA_MISMATCH|CHECKSUM_MISMATCH)$/.test(
-        error.message,
-      )
-        ? error.message
-        : "UNCLASSIFIED_ASSET_RECOVERY_FAILURE";
-    console.error("[rnd-temporary-artifact-recovery] request_failed", { code });
-    return NextResponse.json(
-      { error: "Private artifact retrieval or integrity verification failed", code },
-      { status: 502, headers: noStore },
-    );
-  }
+    },
+  );
 }
