@@ -30,6 +30,18 @@ const LEASE_HEARTBEAT_MS = 40_000;
 const GENERATION_TIMEOUT_MS = 300_000;
 const STATUS_HEARTBEAT_MS = 15_000;
 const RUN_ONCE = /^(1|true|yes)$/i.test(process.env.RND_WORKER_ONCE ?? "");
+const ISOLATED_JOB_ID_RAW = process.env.RND_WORKER_ISOLATED_JOB_ID;
+const ISOLATED_JOB_ID = ISOLATED_JOB_ID_RAW === undefined ? null : ISOLATED_JOB_ID_RAW.trim();
+if (ISOLATED_JOB_ID_RAW !== undefined &&
+    (!ISOLATED_JOB_ID || ISOLATED_JOB_ID.length > 191 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(ISOLATED_JOB_ID))) {
+  throw new Error("RND_WORKER_ISOLATED_JOB_ID must be a valid, exact job ID when configured.");
+}
+if (RUN_ONCE && !ISOLATED_JOB_ID) {
+  throw new Error("RND_WORKER_ISOLATED_JOB_ID is required when RND_WORKER_ONCE=1; refusing an unrestricted one-shot claim.");
+}
+if (!RUN_ONCE && ISOLATED_JOB_ID) {
+  throw new Error("RND_WORKER_ISOLATED_JOB_ID may only be used with RND_WORKER_ONCE=1.");
+}
 const WORKER_VERSION = process.env.RND_WORKER_VERSION ?? "local-gemini-worker-v1";
 
 
@@ -124,7 +136,8 @@ async function workerId() {
 }
 
 async function assertServer() {
-  await verifyRndWorkerHello(await api("/api/rnd/worker/hello"));
+  const headers = ISOLATED_JOB_ID ? { "x-rnd-worker-job-id": ISOLATED_JOB_ID } : undefined;
+  await verifyRndWorkerHello(await api("/api/rnd/worker/hello", { headers }));
   console.log(`Connected to R&D worker API ${API_BASE}; protocol ${RND_WORKER_PROTOCOL_VERSION}.`);
 }
 
@@ -134,13 +147,17 @@ async function claim(): Promise<ClaimResponse> {
   const timeout = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
-    response = await api("/api/rnd/worker/claim", { method: "POST", signal: controller.signal,
-      headers: { "x-rnd-worker-protocol": RND_WORKER_PROTOCOL_VERSION } });
+    const headers = new Headers({ "x-rnd-worker-protocol": RND_WORKER_PROTOCOL_VERSION });
+    if (ISOLATED_JOB_ID) headers.set("x-rnd-worker-job-id", ISOLATED_JOB_ID);
+    response = await api("/api/rnd/worker/claim", { method: "POST", signal: controller.signal, headers });
   } finally {
     clearTimeout(timeout);
   }
   if (!response.ok) throw new Error(`Claim failed: HTTP ${response.status} ${await response.text()}`);
   const result = await response.json() as ClaimResponse;
+  if (result.job && ISOLATED_JOB_ID && result.job.id !== ISOLATED_JOB_ID) {
+    throw new Error("Claim endpoint returned a job outside the configured isolated one-shot allowlist.");
+  }
   if (result.job && !isClaimGeneration(result.job.claimGeneration)) {
     throw new Error("Claim response did not include a valid claim generation.");
   }

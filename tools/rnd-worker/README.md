@@ -51,6 +51,32 @@ RND_WORKER_ID_FILE=C:\path\to\.rnd-worker-id
 
 Do not commit `.env`, the worker ID file, `profiles.json`, `profile-state.json`, generated images, or any Chrome profile.
 
+## Isolated one-shot execution
+
+For a controlled R&D test, use the single-job allowlist rather than relying on
+RND_WORKER_ONCE=1 alone:
+
+1. Set RND_WORKER_ISOLATED_JOB_ID in the **Preview** deployment environment
+   to the exact ID of the newly created test job.
+2. Set the same exact ID in tools/rnd-worker/.env, and set
+   RND_WORKER_ONCE=1.
+3. Keep the worker stopped until the Preview deployment is ready and the
+   Preview database destination has been independently verified.
+
+The worker sends the ID during the authenticated hello and claim requests.
+The server requires an exact match with its own Preview environment setting.
+In isolated mode, the claim transaction:
+- considers only that ID while it is QUEUED and eligible;
+- requires attemptCount = 0 and infrastructureRetryCount = 0;
+- refuses the job if its first attempt already has a reservation;
+- skips the global over-limit failure sweep; and
+- never falls back to expired PROCESSING lease recovery.
+
+A missing or mismatched ID is rejected before the claim transaction. If the
+designated job is not fresh and eligible, the worker receives no job and exits
+without claiming a different one. One-shot mode without the ID fails before
+Chrome is launched. Do not configure this variable in Production.
+
 ## Run
 
 ```cmd
