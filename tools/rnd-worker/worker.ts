@@ -1,5 +1,5 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { assertReady, captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, monitorGeminiPage, openImageGenerationMode, openGemini, prepareGeminiSubmission, selectGemini31Pro, submitPrompt, uploadReference, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
+import { assertReady, captureGeneratedImage, freshChat, GeminiConversationError, GeminiModelSelectionError, monitorGeminiPage, openImageGenerationMode, openGemini, prepareGeminiSubmission, selectGemini4Neon, submitPrompt, uploadReference, verifyGemini4Neon, waitForGeneratedImage } from "./gemini-page.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -305,12 +305,12 @@ async function processJob(page: Page, job: ClaimedJob, profile: GeminiProfile): 
       throw new GeminiConversationError("RND_PRIOR_ARTIFACT_CHECKSUM_UNAVAILABLE: cannot verify a fresh capture for this job.");
     }
     const freshPath = await freshChat(page);
-    await selectGemini31Pro(page);
+    await selectGemini4Neon(page);
     await openImageGenerationMode(page);
     await uploadReference(page, sourcePath);
     if (!job.currentPrompt) throw new Error("Claimed job has no current prompt.");
     // Entering image mode or attaching a reference can replace the composer.
-    await verifyGemini31Pro(page);
+    await verifyGemini4Neon(page);
     await prepareGeminiSubmission(page, freshPath);
 
     console.log(`Job ${job.id}: submitting attempt ${attemptNumber} using Gemini profile ${profile.id}.`);
