@@ -150,21 +150,21 @@ async function openGeminiModePicker(page: Page) {
   try {
     await picker.click({ timeout: 10_000 });
   } catch {
-    throw new GeminiModelSelectionError("Could not open the Gemini mode picker to verify 3.1 Pro.");
+    throw new GeminiModelSelectionError("Could not open the Gemini mode picker to verify 4 Neon.");
   }
 
   const options = page.locator('[role="menuitem"], [role="menuitemradio"], [role="option"]').filter({ visible: true });
-  const exactName = /^3\.1 Pro$/;
+  const exactName = /^4 Neon$/;
   const named = page.getByRole("menuitem", { name: exactName })
     .or(page.getByRole("menuitemradio", { name: exactName }))
     .or(page.getByRole("option", { name: exactName }));
   // Some historical GEM-MENU-ITEM rows include a description in their accessible name.
-  const exactLabel = options.filter({ has: page.getByText("3.1 Pro", { exact: true }) });
+  const exactLabel = options.filter({ has: page.getByText("4 Neon", { exact: true }) });
   const option = options.and(named.or(exactLabel));
   try {
     await option.waitFor({ state: "visible", timeout: 5_000 });
   } catch {
-    throw new GeminiModelSelectionError("The Gemini mode picker did not expose one exact 3.1 Pro option.");
+    throw new GeminiModelSelectionError("The Gemini mode picker did not expose one exact 4 Neon option.");
   }
   return { option, options };
 }
@@ -184,15 +184,15 @@ async function closeGeminiModePicker(page: Page, option: Locator) {
   }
 }
 
-export async function verifyGemini31Pro(page: Page) {
+export async function verifyGemini4Neon(page: Page) {
   const controls = await openGeminiModePicker(page);
   if (!await hasExactGeminiSelection(page, controls)) {
-    throw new GeminiModelSelectionError("Gemini 3.1 Pro is unverified: the exact option does not have an unambiguous selected state.");
+    throw new GeminiModelSelectionError("Gemini 4 Neon is unverified: the exact option does not have an unambiguous selected state.");
   }
   await closeGeminiModePicker(page, controls.option);
 }
 
-export async function selectGemini31Pro(page: Page) {
+export async function selectGemini4Neon(page: Page) {
   const controls = await openGeminiModePicker(page);
   if (await hasExactGeminiSelection(page, controls)) {
     await closeGeminiModePicker(page, controls.option);
@@ -202,7 +202,7 @@ export async function selectGemini31Pro(page: Page) {
   try {
     await controls.option.click({ timeout: 10_000 });
   } catch {
-    throw new GeminiModelSelectionError("Could not select the exact Gemini 3.1 Pro option.");
+    throw new GeminiModelSelectionError("Could not select the exact Gemini 4 Neon option.");
   }
   // Clicking the option can close or rerender the menu. Reopen and obtain
   // fresh locators so the original click or a generic Pro label is never proof.
@@ -211,7 +211,7 @@ export async function selectGemini31Pro(page: Page) {
   } catch {
     await closeGeminiModePicker(page, controls.option);
   }
-  await verifyGemini31Pro(page);
+  await verifyGemini4Neon(page);
 }
 
 export async function openImageGenerationMode(page: Page) {
