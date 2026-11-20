@@ -7,10 +7,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { transformSync } from "esbuild";
 import { chromium, type Browser, type Download, type Page } from "playwright";
-import { captureGeneratedImage, freshChat, GeminiCaptureError, GeminiConversationError, GeminiModelSelectionError, selectGemini31Pro,
-  submitPrompt, verifyGemini31Pro, waitForGeneratedImage } from "./gemini-page.js";
+import { captureGeneratedImage, freshChat, GeminiCaptureError, GeminiConversationError, GeminiModelSelectionError, selectGemini4Neon,
+  submitPrompt, verifyGemini4Neon, waitForGeneratedImage } from "./gemini-page.js";
 
-type Model = "3.1 Pro" | "Flash";
+type Model = "3.1 Pro" | "4 Neon" | "Flash";
 type Fixture = {
   initial?: Model;
   clickOutcome?: Model;
@@ -36,7 +36,7 @@ async function mount(page: Page, fixture: Fixture = {}) {
       root.replaceChildren();
       if (config.noPicker) return;
       const picker = document.createElement("button");
-      picker.textContent = current === "3.1 Pro" ? "Pro" : "Flash";
+      picker.textContent = current === "Flash" ? "Flash" : "Pro";
       picker.setAttribute("aria-label", "Open mode picker, currently " + picker.textContent);
       picker.onclick = () => {
         open = !open;
@@ -48,7 +48,7 @@ async function mount(page: Page, fixture: Fixture = {}) {
 
       const menu = document.createElement("gem-menu");
       menu.setAttribute("role", "menu");
-      const names = config.missing ? ["Flash", "3.1 Pro Preview", "3x1 Pro"] : ["Flash", "3.1 Pro"];
+      const names = config.missing ? ["Flash", "3.1 Pro", "4 Neon Preview", "4 Ne0n"] : ["Flash", "3.1 Pro", "4 Neon"];
       for (const name of names) {
         const row = document.createElement("gem-menu-item");
         row.setAttribute("role", config.description ? "menuitem" : "menuitemradio");
@@ -63,7 +63,7 @@ async function mount(page: Page, fixture: Fixture = {}) {
         }
         row.onclick = () => {
           document.body.dataset.clicks = String(Number(document.body.dataset.clicks) + 1);
-          current = config.clickOutcome ?? "3.1 Pro";
+          current = config.clickOutcome ?? "4 Neon";
           open = config.keepOpen ?? false;
           render();
         };
@@ -109,14 +109,14 @@ async function processWithMocks(page: Page, { revokeAfterUpload = false, duplica
       if (chatFails) throw new GeminiConversationError("mock fresh chat failure");
       return "/app";
     },
-    selectGemini31Pro: async (p: Page) => { order.push("select"); await selectGemini31Pro(p); },
+    selectGemini4Neon: async (p: Page) => { order.push("select"); await selectGemini4Neon(p); },
     openImageGenerationMode: hit("image-mode"),
     uploadReference: async () => {
       order.push("upload");
       if (revokeAfterUpload) await page.evaluate(() => { document.body.dataset.revoke = "true"; });
     },
     prepareGeminiSubmission: hit("verify-empty-conversation"),
-    verifyGemini31Pro: async (p: Page) => { order.push("verify-before-dispatch"); await verifyGemini31Pro(p); },
+    verifyGemini4Neon: async (p: Page) => { order.push("verify-before-dispatch"); await verifyGemini4Neon(p); },
     markGenerationStarted: hit("quota-mark"), classifyProfileError: () => null,
     recordSubmission: (_job: unknown, phase: string) => { order.push(phase); },
     submitPrompt: (_page: Page, value: string) => {
@@ -462,33 +462,38 @@ async function main() {
     await context.route("**/*", (route) => route.abort());
     const page = await context.newPage();
     await mount(page, { description: true });
-    await selectGemini31Pro(page);
+    await selectGemini4Neon(page);
     assert.deepEqual(await counters(page), { clicks: 1, opens: 2, menuVisible: false });
 
-    await mount(page, { initial: "3.1 Pro" });
-    await selectGemini31Pro(page);
+    await mount(page, { initial: "4 Neon" });
+    await selectGemini4Neon(page);
     assert.deepEqual(await counters(page), { clicks: 0, opens: 1, menuVisible: false });
 
+    await mount(page, { initial: "3.1 Pro" });
+    await selectGemini4Neon(page);
+    assert.deepEqual(await counters(page), { clicks: 1, opens: 2, menuVisible: false },
+      "the obsolete 3.1 Pro selection must be switched to 4 Neon");
+
     await mount(page, { clickOutcome: "Flash" });
-    await assert.rejects(selectGemini31Pro(page), /unambiguous selected state/);
+    await assert.rejects(selectGemini4Neon(page), /unambiguous selected state/);
     assert.equal((await counters(page)).clicks, 1);
 
     await mount(page, { initial: "3.1 Pro", markSelected: false });
-    await assert.rejects(verifyGemini31Pro(page), /unambiguous selected state/);
+    await assert.rejects(verifyGemini4Neon(page), /unambiguous selected state/);
 
     await mount(page, { missing: true });
-    await assert.rejects(selectGemini31Pro(page), /one exact 3\.1 Pro option/);
+    await assert.rejects(selectGemini4Neon(page), /one exact 4 Neon option/);
     assert.equal((await counters(page)).clicks, 0);
 
     await mount(page, { noPicker: true });
-    await assert.rejects(selectGemini31Pro(page), /Could not open the Gemini mode picker/);
+    await assert.rejects(selectGemini4Neon(page), /Could not open the Gemini mode picker/);
 
     await mount(page, { keepOpen: true });
-    await selectGemini31Pro(page);
+    await selectGemini4Neon(page);
     assert.deepEqual(await counters(page), { clicks: 1, opens: 2, menuVisible: false });
 
     await mount(page, { conflicting: true });
-    await assert.rejects(selectGemini31Pro(page), /unambiguous selected state/);
+    await assert.rejects(selectGemini4Neon(page), /unambiguous selected state/);
 
     await mount(page);
     assert.deepEqual(await processWithMocks(page), { outcome: "CONTINUE", order: [
